@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 # Set bash to 'debug' mode, it will exit on :
 # -e 'error', -u 'undefined variable', -o ... 'error in pipeline', -x 'print commands',
@@ -64,6 +64,7 @@ dereverb_ref_num=1
 # Training data related
 use_dereverb_ref=false
 use_noise_ref=false
+extra_wav_list=         # Extra list of scp files for wav formatting
 
 # Pretrained model related
 # The number of --init_param must be same.
@@ -72,13 +73,14 @@ init_param=
 # Enhancement related
 inference_args="--normalize_output_wav true"
 inference_model=valid.si_snr.ave.pth
+rotate_channel=
 
 # Evaluation related
-scoring_protocol="STOI SDR SAR SIR"
+scoring_protocol="PESQ ESTOI STOI SI_SNR SDR SAR SIR"
 ref_channel=0
 score_with_asr=false
 asr_exp=""       # asr model for scoring WER
-lm_exp=""       # lm model for scoring WER
+lm_exp=""        # lm model for scoring WER
 
 # [Task dependent] Set the datadir name created by local/data.sh
 train_set=       # Name of training set.
@@ -135,6 +137,7 @@ Options:
                          for training a dereverberation model (default="${use_dereverb_ref}")
     --use_noise_ref    # Whether or not to use noise signal as an additional reference
                          for training a denoising model (default="${use_noise_ref}")
+    --extra_wav_list   # Extra list of scp files for wav formatting (default="${extra_wav_list}")
 
     # Pretrained model related
     --init_param    # pretrained model path and module name (default="${init_param}")
@@ -190,7 +193,7 @@ if [ -z "${enh_tag}" ]; then
     fi
     # Add overwritten arg's info
     if [ -n "${enh_args}" ]; then
-        enh_tag+="$(echo "${enh_args}" | sed -e "s/--/\_/g" -e "s/[ |=]//g")"
+        enh_tag+="$(echo "${enh_args}" | sed -e "s/--\|\//\_/g" -e "s/[ |=]//g")"
     fi
 fi
 
@@ -296,6 +299,17 @@ if ! "${skip_data_prep}"; then
                     "data/${dset}/${spk}.scp" "${data_feats}${_suf}/${dset}" \
                     "${data_feats}${_suf}/${dset}/logs/${spk}" "${data_feats}${_suf}/${dset}/data/${spk}"
 
+            done
+
+            for f in $extra_wav_list; do
+                if [ -e "data/${dset}/$f" ]; then
+                    # shellcheck disable=SC2086
+                    scripts/audio/format_wav_scp.sh --nj "${nj}" --cmd "${train_cmd}" \
+                        --out-filename "$f" \
+                        --audio-format "${audio_format}" --fs "${fs}" ${_opts} \
+                        "data/${dset}/$f" "${data_feats}/${dset}" \
+                        "${data_feats}/${dset}/logs/${f%.*}" "${data_feats}/${dset}/data/${f%.*}"
+                fi
             done
             echo "${feats_type}" > "${data_feats}${_suf}/${dset}/feats_type"
 
@@ -535,6 +549,7 @@ if ! "${skip_train}"; then
             --init_file_prefix "${enh_exp}"/.dist_init_ \
             --multiprocessing_distributed true -- \
             ${python} -m espnet2.bin.enh_train \
+                --use_preprocessor true \
                 ${_train_data_param} \
                 ${_valid_data_param} \
                 ${_train_shape_param} \
@@ -598,6 +613,7 @@ if ! "${skip_eval}"; then
                     --enh_train_config "${enh_exp}"/config.yaml \
                     --enh_model_file "${enh_exp}"/"${inference_model}" \
                     --output_dir "${_logdir}"/output.JOB \
+                    ${rotate_channel:+--rotate_channel $rotate_channel} \
                     ${_opts} ${inference_args}
 
 
@@ -674,10 +690,10 @@ if ! "${skip_eval}"; then
                 paste $(for j in $(seq ${spk_num}); do echo "${_dir}"/"${protocol}"_spk"${j}" ; done)  |
                 awk 'BEGIN{sum=0}
                     {n=0;score=0;for (i=2; i<=NF; i+=2){n+=1;score+=$i}; sum+=score/n}
-                    END{printf ("%.2f\n",sum/NR)}' > "${_dir}/result_${protocol,,}.txt"
+                    END{print sum/NR}' > "${_dir}/result_${protocol,,}.txt"
             done
         done
-        ./scripts/utils/show_enh_score.sh ${enh_exp} > "${enh_exp}/RESULTS.md"
+        ./scripts/utils/show_enh_score.sh ${enh_exp} > "${enh_exp}/RESULTS.TXT"
 
     fi
 else
@@ -866,7 +882,7 @@ if ! "${skip_upload}"; then
         ${python} -m espnet2.bin.pack enh \
             --train_config "${enh_exp}"/config.yaml \
             --model_file "${enh_exp}"/"${inference_model}" \
-            --option "${enh_exp}"/RESULTS.md \
+            --option "${enh_exp}"/RESULTS.TXT \
             --option "${enh_stats_dir}"/train/feats_stats.npz  \
             --option "${enh_exp}"/images \
             --outpath "${packed_model}"

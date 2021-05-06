@@ -75,7 +75,8 @@ def scoring(
             sdr, sir, sar, perm = bss_eval_sources(ref, inf, compute_permutation=True)
 
             for i in range(num_spk):
-                stoi_score = stoi(ref[i], inf[int(perm[i])], fs_sig=sample_rate)
+                stoi_score = stoi(ref[i], inf[int(perm[i])], fs_sig=sample_rate, extended=False)
+                estoi_score = stoi(ref[i], inf[int(perm[i])], fs_sig=sample_rate, extended=True)
                 si_snr_score = -float(
                     ESPnetEnhancementModel.si_snr_loss(
                         torch.from_numpy(ref[i][None, ...]),
@@ -83,6 +84,7 @@ def scoring(
                     )
                 )
                 writer[f"STOI_spk{i + 1}"][key] = str(stoi_score)
+                writer[f"ESTOI_spk{i + 1}"][key] = str(estoi_score)
                 writer[f"SI_SNR_spk{i + 1}"][key] = str(si_snr_score)
                 writer[f"SDR_spk{i + 1}"][key] = str(sdr[i])
                 writer[f"SAR_spk{i + 1}"][key] = str(sar[i])

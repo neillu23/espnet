@@ -12,15 +12,19 @@ from typeguard import check_argument_types
 from espnet2.enh.decoder.abs_decoder import AbsDecoder
 from espnet2.enh.encoder.abs_encoder import AbsEncoder
 from espnet2.enh.encoder.conv_encoder import ConvEncoder
+from espnet2.enh.encoder.stft_encoder import STFTEncoder
 from espnet2.enh.separator.abs_separator import AbsSeparator
 from espnet2.torch_utils.device_funcs import force_gatherable
 from espnet2.train.abs_espnet_model import AbsESPnetModel
 
 
 is_torch_1_3_plus = LooseVersion(torch.__version__) >= LooseVersion("1.3.0")
+is_torch_1_8_plus = LooseVersion(torch.__version__) >= LooseVersion("1.8.0")
 ALL_LOSS_TYPES = (
     # mse_loss(predicted_mask, target_label)
     "mask_mse",
+    # log_mse_loss(predicted_mask, target_label)
+    "mask_log_mse",
     # mse_loss(enhanced_magnitude_spectrum, target_magnitude_spectrum)
     "magnitude",
     # mse_loss(enhanced_complex_spectrum, target_complex_spectrum)
@@ -29,6 +33,8 @@ ALL_LOSS_TYPES = (
     "spectrum_log",
     # si_snr(enhanced_waveform, target_waveform)
     "si_snr",
+    # snr(enhanced_waveform, target_waveform)
+    "snr",
 )
 EPS = torch.finfo(torch.get_default_dtype()).eps
 
@@ -44,6 +50,11 @@ class ESPnetEnhancementModel(AbsESPnetModel):
         stft_consistency: bool = False,
         loss_type: str = "mask_mse",
         mask_type: Optional[str] = None,
+        ref_channel: int = 0,
+        add_tf_loss: bool = False,
+        tf_loss_weight: float = 1.0,
+        n_fft: int = 512,
+        hop_length: int = 128,
     ):
         assert check_argument_types()
 
@@ -55,7 +66,7 @@ class ESPnetEnhancementModel(AbsESPnetModel):
         self.num_spk = separator.num_spk
         self.num_noise_type = getattr(self.separator, "num_noise_type", 1)
 
-        if loss_type != "si_snr" and isinstance(encoder, ConvEncoder):
+        if loss_type not in ("si_snr", "snr") and isinstance(encoder, ConvEncoder):
             raise TypeError(f"{loss_type} is not supported with {type(ConvEncoder)}")
 
         # get mask type for TF-domain models (only used when loss_type="mask_*")
@@ -65,14 +76,24 @@ class ESPnetEnhancementModel(AbsESPnetModel):
         # whether to compute the TF-domain loss while enforcing STFT consistency
         self.stft_consistency = stft_consistency
 
-        if stft_consistency and loss_type in ["mask_mse", "si_snr"]:
+        if stft_consistency and loss_type in [
+            "mask_mse",
+            "mask_log_mse",
+            "snr",
+            "si_snr",
+        ]:
             raise ValueError(
                 f"stft_consistency will not work when '{loss_type}' loss is used"
             )
 
         assert self.loss_type in ALL_LOSS_TYPES, self.loss_type
         # for multi-channel signal
-        self.ref_channel = getattr(self.separator, "ref_channel", -1)
+        self.ref_channel = getattr(self.separator, "ref_channel", ref_channel)
+        # for time-domain loss types
+        self.add_tf_loss = add_tf_loss
+        self.tf_loss_weight = tf_loss_weight
+        if add_tf_loss:
+            self.tf_encoder = STFTEncoder(n_fft=n_fft, hop_length=hop_length)
 
     @staticmethod
     def _create_mask_label(mix_spec, ref_spec, mask_type="IAM"):
@@ -91,12 +112,29 @@ class ESPnetEnhancementModel(AbsESPnetModel):
             "IBM",
             "IRM",
             "IAM",
+            "IAM^2",
+            "VAD",
+            "VAD^2",
             "PSM",
             "NPSM",
             "PSM^2",
         ], f"mask type {mask_type} not supported"
+
+        def _power_spec(spec):
+            if isinstance(spec, ComplexTensor) or (
+                hasattr(spec, "real") and hasattr(spec, "imag")
+            ):
+                return spec.real ** 2 + spec.imag ** 2
+            else:
+                return spec ** 2
+
         mask_label = []
-        for r in ref_spec:
+        for i in range(len(ref_spec)):
+            r = (
+                ref_spec[i]
+                if ref_spec[i].dim() == mix_spec.dim()
+                else ref_spec[i].unsqueeze(-2)
+            )
             mask = None
             if mask_type == "IBM":
                 flags = [abs(r) >= abs(n) for n in ref_spec]
@@ -109,6 +147,24 @@ class ESPnetEnhancementModel(AbsESPnetModel):
             elif mask_type == "IAM":
                 mask = abs(r) / (abs(mix_spec) + EPS)
                 mask = mask.clamp(min=0, max=1)
+            elif mask_type == "IAM^2":
+                mask = _power_spec(r) / (_power_spec(mix_spec) + EPS)
+                mask = mask.clamp(min=0, max=1)
+            elif mask_type == "VAD":
+                mask = abs(r) / (abs(mix_spec) + EPS)
+                mask = (
+                    mask.clamp(min=0, max=1)
+                    .mean(dim=-1, keepdims=True)
+                    .expand(mask.shape)
+                )
+            elif mask_type == "VAD^2":
+                mask = _power_spec(r) / (_power_spec(mix_spec) + EPS)
+                mask = (
+                    mask.clamp(min=0, max=1)
+                    .mean(dim=-1, keepdims=True)
+                    .pow(2)
+                    .expand(mask.shape)
+                )
             elif mask_type == "PSM" or mask_type == "NPSM":
                 phase_r = r / (abs(r) + EPS)
                 phase_mix = mix_spec / (abs(mix_spec) + EPS)
@@ -123,14 +179,16 @@ class ESPnetEnhancementModel(AbsESPnetModel):
                     else mask.clamp(min=-1, max=1)
                 )
             elif mask_type == "PSM^2":
+                complex_eps = r.real.new_full((), EPS)
+                complex_eps = ComplexTensor(complex_eps, complex_eps)
                 # This is for training beamforming masks
-                phase_r = r / (abs(r) + EPS)
-                phase_mix = mix_spec / (abs(mix_spec) + EPS)
+                phase_r = r / abs(r + complex_eps)
+                phase_mix = mix_spec / abs(mix_spec + complex_eps)
                 # cos(a - b) = cos(a)*cos(b) + sin(a)*sin(b)
                 cos_theta = (
                     phase_r.real * phase_mix.real + phase_r.imag * phase_mix.imag
                 )
-                mask = (abs(r).pow(2) / (abs(mix_spec).pow(2) + EPS)) * cos_theta
+                mask = (_power_spec(r) / (_power_spec(mix_spec) + EPS)) * cos_theta
                 mask = mask.clamp(min=-1, max=1)
             assert mask is not None, f"mask type {mask_type} not supported"
             mask_label.append(mask)
@@ -194,7 +252,7 @@ class ESPnetEnhancementModel(AbsESPnetModel):
         speech_lengths = (
             speech_mix_lengths
             if speech_mix_lengths is not None
-            else torch.ones(batch_size).int().fill_(speech_mix.shape[1])
+            else torch.full((batch_size,), speech_mix.shape[1], dtype=torch.int)
         )
         assert speech_lengths.dim() == 1, speech_lengths.shape
         # Check that batch_size is unified
@@ -208,7 +266,7 @@ class ESPnetEnhancementModel(AbsESPnetModel):
         speech_ref = speech_ref[:, :, : speech_lengths.max()]
         speech_mix = speech_mix[:, : speech_lengths.max()]
 
-        loss, speech_pre, others, out_lengths, perm = self._compute_loss(
+        loss, speech_pre, others, out_lengths, perm, stats_ret = self._compute_loss(
             speech_mix,
             speech_lengths,
             speech_ref,
@@ -217,8 +275,10 @@ class ESPnetEnhancementModel(AbsESPnetModel):
         )
 
         # add stats for logging
-        if self.loss_type != "si_snr":
-            if self.training:
+        if self.loss_type not in ("si_snr", "snr"):
+            if "si_snr" in stats_ret:
+                si_snr = stats_ret["si_snr"]
+            elif self.training:
                 si_snr = None
             else:
                 speech_pre = [self.decoder(ps, speech_lengths)[0] for ps in speech_pre]
@@ -227,9 +287,10 @@ class ESPnetEnhancementModel(AbsESPnetModel):
                     # For si_snr loss, only select one channel as the reference
                     speech_ref = [sr[..., self.ref_channel] for sr in speech_ref]
                 # compute si-snr loss
-                si_snr_loss, perm = self._permutation_loss(
-                    speech_ref, speech_pre, self.si_snr_loss, perm=perm
-                )
+                with torch.no_grad():
+                    si_snr_loss, _ = self._permutation_loss(
+                        speech_ref, speech_pre, self.si_snr_loss, perm=perm
+                    )
                 si_snr = -si_snr_loss.detach()
 
             stats = dict(
@@ -237,8 +298,14 @@ class ESPnetEnhancementModel(AbsESPnetModel):
                 loss=loss.detach(),
             )
         else:
-            stats = dict(si_snr=-loss.detach(), loss=loss.detach())
+            if self.loss_type == "si_snr":
+                stats = dict(si_snr=-loss.detach(), loss=loss.detach())
+            if self.loss_type == "snr":
+                stats = dict(snr=-loss.detach(), loss=loss.detach())
+            else:
+                raise ValueError("Unsupported loss type: %s" % self.loss_type)
 
+        stats.update(stats_ret)
         # force_gatherable: to-device and to-tensor if scalar for DataParallel
         loss, stats, weight = force_gatherable((loss, stats, batch_size), loss.device)
         return loss, stats, weight
@@ -274,16 +341,18 @@ class ESPnetEnhancementModel(AbsESPnetModel):
                         enhanced speech or spectrum(s)
             others: (OrderedDict) estimated masks or None
             output_lengths: (Batch,)
-            perm: () best permutation
+            perm: (Batch, num_spk) best permutation
+            stats_ret: (dict) allow adding custom statistics in the log
         """
         feature_mix, flens = self.encoder(speech_mix, speech_lengths)
         feature_pre, flens, others = self.separator(feature_mix, flens)
 
-        if self.loss_type != "si_snr":
+        stats = {}
+        if self.loss_type not in ("si_snr", "snr"):
             spectrum_mix = feature_mix
             spectrum_pre = feature_pre
             # predict separated speech and masks
-            if self.stft_consistency:
+            if spectrum_pre is not None and self.stft_consistency:
                 # pseudo STFT -> time-domain -> STFT (compute loss)
                 tmp_t_domain = [
                     self.decoder(sp, speech_lengths)[0] for sp in spectrum_pre
@@ -291,23 +360,30 @@ class ESPnetEnhancementModel(AbsESPnetModel):
                 spectrum_pre = [
                     self.encoder(sp, speech_lengths)[0] for sp in tmp_t_domain
                 ]
-                pass
 
-            if spectrum_pre is not None and not isinstance(
-                spectrum_pre[0], ComplexTensor
-            ):
-                spectrum_pre = [
-                    ComplexTensor(*torch.unbind(sp, dim=-1)) for sp in spectrum_pre
-                ]
+            is_complex = isinstance(spectrum_pre[0], ComplexTensor) or (
+                is_torch_1_8_plus and torch.is_complex(spectrum_pre[0])
+            )
+            if not is_complex:
+                if is_torch_1_8_plus:
+                    spectrum_pre = [
+                        torch.complex(*torch.unbind(sp, dim=-1)) for sp in spectrum_pre
+                    ]
+                else:
+                    spectrum_pre = [
+                        ComplexTensor(*torch.unbind(sp, dim=-1)) for sp in spectrum_pre
+                    ]
 
             if not cal_loss:
                 loss, perm = None, None
-                return loss, spectrum_pre, others, flens, perm
+                return loss, spectrum_pre, others, flens, perm, stats
 
             # prepare reference speech and reference spectrum
-            speech_ref = torch.unbind(speech_ref, dim=1)
             # List[ComplexTensor(Batch, T, F)] or List[ComplexTensor(Batch, T, C, F)]
-            spectrum_ref = [self.encoder(sr, speech_lengths)[0] for sr in speech_ref]
+            spectrum_ref = [
+                self.encoder(sr, speech_lengths)[0]
+                for sr in torch.unbind(speech_ref, dim=1)
+            ]
 
             # compute TF masking loss
             if self.loss_type == "magnitude":
@@ -345,6 +421,8 @@ class ESPnetEnhancementModel(AbsESPnetModel):
             elif self.loss_type.startswith("mask"):
                 if self.loss_type == "mask_mse":
                     loss_func = self.tf_mse_loss
+                elif self.loss_type == "mask_log_mse":
+                    loss_func = self.tf_log_mse_loss
                 else:
                     raise ValueError("Unsupported loss type: %s" % self.loss_type)
 
@@ -418,13 +496,13 @@ class ESPnetEnhancementModel(AbsESPnetModel):
                 raise ValueError("Unsupported loss type: %s" % self.loss_type)
 
             loss = tf_loss
-            return loss, spectrum_pre, others, flens, perm
+            return loss, spectrum_pre, others, flens, perm, stats
 
         else:
             speech_pre = [self.decoder(ps, speech_lengths)[0] for ps in feature_pre]
             if not cal_loss:
                 loss, perm = None, None
-                return loss, speech_pre, None, speech_lengths, perm
+                return loss, speech_pre, None, speech_lengths, perm, stats
 
             # speech_pre: list[(batch, sample)]
             assert speech_pre[0].dim() == 2, speech_pre[0].dim()
@@ -432,16 +510,93 @@ class ESPnetEnhancementModel(AbsESPnetModel):
             if speech_ref.dim() == 4:
                 # For si_snr loss of multi-channel input,
                 # only select one channel as the reference
-                speech_ref = speech_ref[..., self.ref_channel]
-            speech_ref = torch.unbind(speech_ref, dim=1)
+                speech_ref2 = speech_ref[..., self.ref_channel]
+            else:
+                speech_ref2 = speech_ref.clone()
+            speech_ref2 = torch.unbind(speech_ref2, dim=1)
 
-            # compute si-snr loss
-            si_snr_loss, perm = self._permutation_loss(
-                speech_ref, speech_pre, self.si_snr_loss_zeromean
-            )
-            loss = si_snr_loss
+            if self.loss_type == "si_snr":
+                # compute si-snr loss
+                loss_func = self.si_snr_loss_zeromean
+                loss, perm = self._permutation_loss(speech_ref2, speech_pre, loss_func)
+                stats["si_snr"] = -loss.detach()
+            elif self.loss_type == "snr":
+                # compute snr loss
+                loss_func = self.snr_loss
+                loss, perm = self._permutation_loss(speech_ref2, speech_pre, loss_func)
+                stats["snr"] = -loss.detach()
+            else:
+                raise ValueError("Unsupported loss type: %s" % self.loss_type)
 
-            return loss, speech_pre, None, speech_lengths, perm
+            if self.add_tf_loss:
+                speech_mix_spectrum = self.tf_encoder(speech_mix, speech_lengths)[0]
+                speech_spectrum_ref = [
+                    self.tf_encoder(sr, speech_lengths)[0]
+                    for sr in torch.unbind(speech_ref, dim=1)
+                ]
+                speech_mask_ref = self._create_mask_label(
+                    speech_mix_spectrum, speech_spectrum_ref, mask_type=self.mask_type
+                )
+                speech_spectrum_pre = [
+                    self.tf_encoder(sp, speech_lengths)[0] for sp in speech_pre
+                ]
+                speech_mask_est = self._create_mask_label(
+                    speech_mix_spectrum, speech_spectrum_pre, mask_type=self.mask_type
+                )
+                tf_mask_loss, perm_m = self._permutation_loss(
+                    speech_mask_ref, speech_mask_est, self.tf_mse_loss
+                )
+                loss = loss + tf_mask_loss * self.tf_loss_weight
+                stats["speech_mask"] = tf_mask_loss.detach()
+
+            if "noise1" in others:
+                if noise_ref is None:
+                    raise ValueError(
+                        "No noise reference for training!\n"
+                        'Please specify "--use_noise_ref true" in run.sh'
+                    )
+
+                if noise_ref.dim() == 4:
+                    # For si_snr loss of multi-channel input,
+                    # only select one channel as the reference
+                    noise_ref = noise_ref[..., self.ref_channel]
+                noise_ref = torch.unbind(noise_ref, dim=1)
+
+                noise_pre = [
+                    self.decoder(others["noise{}".format(n + 1)], speech_lengths)[0]
+                    for n in range(self.num_noise_type)
+                ]
+                noise_loss, perm_n = self._permutation_loss(
+                    noise_ref, noise_pre, loss_func
+                )
+                loss = loss + noise_loss
+                stats["noise_recon"] = noise_loss.detach()
+            elif "mask_noise1" in others:
+                if noise_ref is None:
+                    raise ValueError(
+                        "No noise reference for training!\n"
+                        'Please specify "--use_noise_ref true" in run.sh'
+                    )
+
+                noise_ref = torch.unbind(noise_ref, dim=1)
+                noise_spectrum_ref = [
+                    self.encoder(nr, speech_lengths)[0] for nr in noise_ref
+                ]
+                noise_mask_ref = self._create_mask_label(
+                    feature_mix, noise_spectrum_ref, mask_type=self.mask_type
+                )
+
+                mask_noise_pre = [
+                    others["mask_noise{}".format(n + 1)]
+                    for n in range(self.num_noise_type)
+                ]
+                tf_noise_loss, perm_n = self._permutation_loss(
+                    noise_mask_ref, mask_noise_pre, self.tf_mse_loss
+                )
+                loss = loss + tf_noise_loss
+                stats["noise_mask"] = tf_noise_loss.detach()
+
+            return loss, speech_pre, None, speech_lengths, perm, stats
 
     @staticmethod
     def tf_mse_loss(ref, inf):
@@ -453,12 +608,14 @@ class ESPnetEnhancementModel(AbsESPnetModel):
         Returns:
             loss: (Batch,)
         """
-        assert ref.shape == inf.shape, (ref.shape, inf.shape)
+        assert ref.dim() == inf.dim(), (ref.shape, inf.shape)
         if not is_torch_1_3_plus:
             # in case of binary masks
             ref = ref.type(inf.dtype)
         diff = ref - inf
-        if isinstance(diff, ComplexTensor):
+        if isinstance(diff, ComplexTensor) or (
+            is_torch_1_8_plus and torch.is_complex(diff)
+        ):
             mseloss = diff.real ** 2 + diff.imag ** 2
         else:
             mseloss = diff ** 2
@@ -466,6 +623,8 @@ class ESPnetEnhancementModel(AbsESPnetModel):
             mseloss = mseloss.mean(dim=[1, 2])
         elif ref.dim() == 4:
             mseloss = mseloss.mean(dim=[1, 2, 3])
+        elif ref.dim() == 2:
+            mseloss = mseloss.mean(dim=1)
         else:
             raise ValueError(
                 "Invalid input shape: ref={}, inf={}".format(ref.shape, inf.shape)
@@ -488,7 +647,9 @@ class ESPnetEnhancementModel(AbsESPnetModel):
             # in case of binary masks
             ref = ref.type(inf.dtype)
         diff = ref - inf
-        if isinstance(diff, ComplexTensor):
+        if isinstance(diff, ComplexTensor) or (
+            is_torch_1_8_plus and torch.is_complex(diff)
+        ):
             log_mse_loss = diff.real ** 2 + diff.imag ** 2
         else:
             log_mse_loss = diff ** 2
@@ -517,7 +678,9 @@ class ESPnetEnhancementModel(AbsESPnetModel):
         if not is_torch_1_3_plus:
             # in case of binary masks
             ref = ref.type(inf.dtype)
-        if isinstance(inf, ComplexTensor):
+        if isinstance(inf, ComplexTensor) or (
+            is_torch_1_8_plus and torch.is_complex(inf)
+        ):
             l1loss = abs(ref - inf + EPS)
         else:
             l1loss = abs(ref - inf)
@@ -530,6 +693,24 @@ class ESPnetEnhancementModel(AbsESPnetModel):
                 "Invalid input shape: ref={}, inf={}".format(ref.shape, inf.shape)
             )
         return l1loss
+
+    @staticmethod
+    def snr_loss(ref, inf):
+        """SNR loss
+
+        Args:
+            ref: (Batch, samples)
+            inf: (Batch, samples)
+        Returns:
+            loss: (Batch,)
+        """
+        noise = inf - ref
+
+        snr = 20 * (
+            torch.log10(torch.norm(ref, p=2, dim=1).clamp(min=EPS))
+            - torch.log10(torch.norm(noise, p=2, dim=1).clamp(min=EPS))
+        )
+        return -snr
 
     @staticmethod
     def si_snr_loss(ref, inf):

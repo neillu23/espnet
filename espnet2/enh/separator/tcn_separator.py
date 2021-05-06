@@ -23,6 +23,7 @@ class TCNSeparator(AbsSeparator):
         causal: bool = False,
         norm_type: str = "gLN",
         nonlinear: str = "relu",
+        use_noise_mask: bool = False,
     ):
         """Temporal Convolution Separator
 
@@ -38,6 +39,7 @@ class TCNSeparator(AbsSeparator):
             norm_type: str, choose from 'BN', 'gLN', 'cLN'
             nonlinear: the nonlinear function for mask estimation,
                        select from 'relu', 'tanh', 'sigmoid'
+            use_noise_mask: bool, whether to estimate the noise mask
         """
         super().__init__()
 
@@ -46,6 +48,8 @@ class TCNSeparator(AbsSeparator):
         if nonlinear not in ("sigmoid", "relu", "tanh"):
             raise ValueError("Not supporting nonlinear={}".format(nonlinear))
 
+        self.use_noise_mask = use_noise_mask
+
         self.tcn = TemporalConvNet(
             N=input_dim,
             B=bottleneck_dim,
@@ -53,7 +57,7 @@ class TCNSeparator(AbsSeparator):
             P=kernel,
             X=layer,
             R=stack,
-            C=num_spk,
+            C=(num_spk + 1 if self.use_noise_mask else num_spk),
             norm_type=norm_type,
             causal=causal,
             mask_nonlinear=nonlinear,
@@ -94,8 +98,10 @@ class TCNSeparator(AbsSeparator):
         masked = [input * m for m in masks]
 
         others = OrderedDict(
-            zip(["mask_spk{}".format(i + 1) for i in range(len(masks))], masks)
+            zip(["mask_spk{}".format(i + 1) for i in range(self.num_spk)], masks)
         )
+        if self.use_noise_mask:
+            others["noise1"] = masked.pop(-1)
 
         return masked, ilens, others
 

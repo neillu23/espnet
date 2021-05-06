@@ -56,7 +56,15 @@ class NeuralBeamformer(AbsSeparator):
 
         self._num_spk = num_spk
         self.loss_type = loss_type
-        if loss_type not in ("mask_mse", "spectrum", "spectrum_log", "magnitude"):
+        if loss_type not in (
+            "mask_mse",
+            "mask_log_mse",
+            "spectrum",
+            "spectrum_log",
+            "magnitude",
+            "snr",
+            "si_snr",
+        ):
             raise ValueError("Unsupported loss type: %s" % loss_type)
 
         self.use_beamformer = use_beamformer
@@ -124,13 +132,14 @@ class NeuralBeamformer(AbsSeparator):
         self.shared_power = shared_power and use_wpe
 
     def forward(
-        self, input: ComplexTensor, ilens: torch.Tensor
+        self, input: ComplexTensor, ilens: torch.Tensor, full_pass: bool = False,
     ) -> Tuple[List[ComplexTensor], torch.Tensor, OrderedDict]:
         """Forward.
 
         Args:
             input (ComplexTensor): mixed speech [Batch, Frames, Channel, Freq]
             ilens (torch.Tensor): input lengths [Batch]
+            full_pass (bool): True to force a complete feed forward process
 
         Returns:
             enhanced speech (single-channel): List[ComplexTensor]
@@ -154,6 +163,7 @@ class NeuralBeamformer(AbsSeparator):
             self.training
             and self.loss_type is not None
             and self.loss_type.startswith("mask")
+            and not full_pass
         ):
             # Only estimating masks during training for saving memory
             if self.use_wpe:
@@ -240,9 +250,13 @@ class NeuralBeamformer(AbsSeparator):
                         )
                     else:
                         # output of multi-source WPE
-                        enhanced, ilens, others_b = self.beamformer(
-                            enhanced, ilens, powers=powers
-                        )
+                        (
+                            enhanced,
+                            ilens,
+                            others_b,
+                            prior_snrs,
+                            post_snrs,
+                        ) = self.beamformer(enhanced, ilens, powers=powers)
                     for spk in range(self.num_spk):
                         others["mask_spk{}".format(spk + 1)] = others_b[spk]
                     if len(others_b) > self.num_spk:

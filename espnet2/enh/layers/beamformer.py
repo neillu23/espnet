@@ -16,6 +16,12 @@ def complex_norm(c: ComplexTensor) -> torch.Tensor:
     return torch.sqrt((c.real ** 2 + c.imag ** 2).sum(dim=-1, keepdim=True) + EPS)
 
 
+def diagonal(c: ComplexTensor) -> ComplexTensor:
+    return ComplexTensor(
+        c.real.diagonal(dim1=-2, dim2=-1), c.imag.diagonal(dim1=-2, dim2=-1)
+    )
+
+
 def get_rtf(
     psd_speech: ComplexTensor,
     psd_noise: ComplexTensor,

@@ -288,6 +288,7 @@ def inference(
     show_progressbar: bool,
     ref_channel: Optional[int],
     normalize_output_wav: bool,
+    rotate_channel: int,
 ):
     assert check_argument_types()
     if batch_size > 1:
@@ -341,6 +342,7 @@ def inference(
 
     # 4. Start for-loop
     writers = []
+    output_dir = Path(output_dir).expanduser().resolve()
     for i in range(separate_speech.num_spk):
         writers.append(
             SoundScpWriter(f"{output_dir}/wavs/{i + 1}", f"{output_dir}/spk{i + 1}.scp")
@@ -352,6 +354,10 @@ def inference(
         _bs = len(next(iter(batch.values())))
         assert len(keys) == _bs, f"{len(keys)} != {_bs}"
         batch = {k: v for k, v in batch.items() if not k.endswith("_lengths")}
+        if rotate_channel > 0 and batch["speech_mix"].dim() > 2:
+            batch["speech_mix"] = torch.roll(
+                batch["speech_mix"], shifts=-rotate_channel, dims=-1
+            )
 
         waves = separate_speech(**batch)
         for (spk, w) in enumerate(waves):
@@ -463,6 +469,15 @@ def get_parser():
         default=None,
         help="If not None, this will overwrite the ref_channel defined in the "
         "separator module (for multi-channel speech processing)",
+    )
+
+    group = parser.add_argument_group("MC-TasNet related")
+    group.add_argument(
+        "--rotate_channel",
+        type=int,
+        default=0,
+        help="rotate the input multi-channel speech to make channel "
+        "`rotate_channel` be the first channel",
     )
 
     return parser

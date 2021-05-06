@@ -11,10 +11,12 @@ class ConvEncoder(AbsEncoder):
         channel: int,
         kernel_size: int,
         stride: int,
+        in_channel: int = 1,
     ):
         super().__init__()
+        self.in_channel = in_channel
         self.conv1d = torch.nn.Conv1d(
-            1, channel, kernel_size=kernel_size, stride=stride, bias=False
+            in_channel, channel, kernel_size=kernel_size, stride=stride, bias=False
         )
         self.stride = stride
         self.kernel_size = kernel_size
@@ -34,9 +36,14 @@ class ConvEncoder(AbsEncoder):
         Returns:
             feature (torch.Tensor): mixed feature after encoder [Batch, flens, channel]
         """
-        assert input.dim() == 2, "Currently only support single channle input"
+        if input.dim() == 3 and self.in_channel == 1:
+            input = input[..., 0]
+        # assert input.dim() == 2, "Currently only support single channle input"
 
-        input = torch.unsqueeze(input, 1)
+        if input.dim() == 2:
+            input = torch.unsqueeze(input, 1)
+        else:
+            input = input.transpose(-1, -2)
 
         feature = self.conv1d(input)
         feature = torch.nn.functional.relu(feature)
