@@ -12,6 +12,9 @@ import soundfile
 from typeguard import check_argument_types
 from typeguard import check_return_type
 
+from espnet2.asr.espnet_enh_asr_model import CLEAN_DATA
+from espnet2.asr.espnet_enh_asr_model import OTHER_DATA
+from espnet2.asr.espnet_enh_asr_model import REAL_DATA
 from espnet2.text.build_tokenizer import build_tokenizer
 from espnet2.text.cleaner import TextCleaner
 from espnet2.text.token_id_converter import TokenIDConverter
@@ -104,7 +107,7 @@ def detect_non_silence(
     # power: (C, T)
     power = (framed_w ** 2).mean(axis=-1)
     # mean_power: (C,)
-    mean_power = power.mean(axis=-1)
+    mean_power = power.mean(axis=-1, keepdims=True)
     if np.all(mean_power == 0):
         return np.full(x.shape, fill_value=True, dtype=np.bool)
     # detect_frames: (C, T)
@@ -137,8 +140,10 @@ class CommonPreprocessor(AbsPreprocessor):
         non_linguistic_symbols: Union[Path, str, Iterable[str]] = None,
         delimiter: str = None,
         rir_scp: str = None,
+        rir_max_channel: int = None,
         rir_apply_prob: float = 1.0,
         noise_scp: str = None,
+        noise_max_channel: int = None,
         noise_apply_prob: float = 1.0,
         noise_db_range: str = "3_10",
         speech_volume_normalize: float = None,
@@ -150,7 +155,9 @@ class CommonPreprocessor(AbsPreprocessor):
         self.speech_name = speech_name
         self.text_name = text_name
         self.speech_volume_normalize = speech_volume_normalize
+        self.rir_max_channel = rir_max_channel
         self.rir_apply_prob = rir_apply_prob
+        self.noise_max_channel = noise_max_channel
         self.noise_apply_prob = noise_apply_prob
 
         if token_type is not None:
@@ -235,7 +242,7 @@ class CommonPreprocessor(AbsPreprocessor):
                         )
 
                         # rir: (Nmic, Time)
-                        rir = rir.T
+                        rir = rir[:, : self.rir_max_channel].T
 
                         # speech: (Nmic, Time)
                         # Note that this operation doesn't change the signal length
@@ -249,7 +256,7 @@ class CommonPreprocessor(AbsPreprocessor):
                 # 2. Add Noise
                 if (
                     self.noises is not None
-                    and self.rir_apply_prob >= np.random.random()
+                    and self.noise_apply_prob >= np.random.random()
                 ):
                     noise_path = np.random.choice(self.noises)
                     if noise_path is not None:
@@ -279,7 +286,7 @@ class CommonPreprocessor(AbsPreprocessor):
                                 if len(noise) != nsamples:
                                     raise RuntimeError(f"Something wrong: {noise_path}")
                         # noise: (Nmic, Time)
-                        noise = noise.T
+                        noise = noise[:, : self.noise_max_channel].T
 
                         noise_power = (noise ** 2).mean()
                         scale = (
@@ -325,11 +332,13 @@ class CommonPreprocessor_multi(AbsPreprocessor):
         delimiter: str = None,
         speech_name: str = "speech",
         text_name: list = ["text"],
+        utt2category_name: str = "utt2category",
     ):
         super().__init__(train)
         self.train = train
         self.speech_name = speech_name
         self.text_name = text_name
+        self.utt2category_name = utt2category_name
 
         if token_type is not None:
             if token_list is None:
@@ -365,6 +374,15 @@ class CommonPreprocessor_multi(AbsPreprocessor):
             # - CMVN
             # - Data augmentation
             pass
+
+        if self.utt2category_name in data:
+            category = data[self.utt2category_name]
+            if "clean" in category:
+                data[self.utt2category_name] = np.array([CLEAN_DATA], dtype=np.int64)
+            elif "real" in category:
+                data[self.utt2category_name] = np.array([REAL_DATA], dtype=np.int64)
+            else:
+                data[self.utt2category_name] = np.array([OTHER_DATA], dtype=np.int64)
 
         for text_n in self.text_name:
             if text_n in data and self.tokenizer is not None:
