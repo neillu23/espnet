@@ -165,21 +165,20 @@ class E2E(ASRInterface, torch.nn.Module):
         self.init_like_chainer()
 
         # options for beam search
+        recog_args = {
+            "beam_size": args.beam_size,
+            "penalty": args.penalty,
+            "ctc_weight": args.ctc_weight,
+            "maxlenratio": args.maxlenratio,
+            "minlenratio": args.minlenratio,
+            "lm_weight": args.lm_weight,
+            "rnnlm": args.rnnlm,
+            "nbest": args.nbest,
+            "space": args.sym_space,
+            "blank": args.sym_blank,
+        }
+        self.recog_args = argparse.Namespace(**recog_args)
         if args.report_cer or args.report_wer:
-            recog_args = {
-                "beam_size": args.beam_size,
-                "penalty": args.penalty,
-                "ctc_weight": args.ctc_weight,
-                "maxlenratio": args.maxlenratio,
-                "minlenratio": args.minlenratio,
-                "lm_weight": args.lm_weight,
-                "rnnlm": args.rnnlm,
-                "nbest": args.nbest,
-                "space": args.sym_space,
-                "blank": args.sym_blank,
-            }
-
-            self.recog_args = argparse.Namespace(**recog_args)
             self.report_cer = args.report_cer
             self.report_wer = args.report_wer
         else:
@@ -209,7 +208,7 @@ class E2E(ASRInterface, torch.nn.Module):
         for i in six.moves.range(len(self.dec.decoder)):
             set_forget_bias_to_one(self.dec.decoder[i].bias_ih)
 
-    def forward(self, xs_pad, ilens, ys_pad):
+    def forward(self, xs_pad, ilens, ys_pad, xs_clean_pad=None, mimic_loss=False):
         """E2E forward.
 
         :param torch.Tensor xs_pad: batch of padded input sequences (B, Tmax, idim)
@@ -227,6 +226,21 @@ class E2E(ASRInterface, torch.nn.Module):
 
         # 1. Encoder
         hs_pad, hlens, _ = self.enc(hs_pad, hlens)
+
+
+        loss_mimic=0
+        if mimic_loss:
+            if self.frontend is not None:
+                hs_pad_clean, hlens, mask = self.frontend(to_torch_tensor(xs_clean_pad), ilens)
+                hs_pad_clean, hlens = self.feature_transform(hs_pad_clean, hlens)
+            else:
+                hs_pad_clean, hlens = xs_clean_pad, ilens
+            hs_pad_clean, hlens, _ = self.enc(hs_pad_clean, hlens)
+            loss_mimic = torch.nn.L1Loss()(hs_pad_clean,hs_pad)
+            return loss_mimic
+
+
+
 
         # 2. CTC loss
         if self.mtlalpha == 0:
@@ -310,6 +324,10 @@ class E2E(ASRInterface, torch.nn.Module):
                 char_eds.append(editdistance.eval(hyp_chars, ref_chars))
                 char_ref_lens.append(len(ref_chars))
 
+                if i==0:
+                    asr_cer=float('%.6f'%(sum(char_eds)/sum(char_ref_lens)))
+                    ref_chars=str(ref_chars)
+                    hyp_chars=str(hyp_chars)
             wer = (
                 0.0
                 if not self.report_wer
@@ -342,7 +360,11 @@ class E2E(ASRInterface, torch.nn.Module):
             )
         else:
             logging.warning("loss (=%f) is not correct", loss_data)
-        return self.loss
+        
+        if self.training or not (self.report_cer or self.report_wer):
+            return self.loss
+        else:
+            return self.loss, asr_cer
 
     def scorers(self):
         """Scorers."""

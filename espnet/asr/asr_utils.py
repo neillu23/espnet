@@ -728,8 +728,10 @@ def torch_save(path, model):
 
     """
     if hasattr(model, "module"):
+	    torch.save(model.module, path+'.entire')
         torch.save(model.module.state_dict(), path)
     else:
+        torch.save(model, path+'.entire')
         torch.save(model.state_dict(), path)
 
 
