@@ -27,6 +27,11 @@ asr_align.py
 
 .. code-block:: none
 
+    [nltk_data] Downloading package averaged_perceptron_tagger to
+    [nltk_data]     /home/runner/nltk_data...
+    [nltk_data]   Unzipping taggers/averaged_perceptron_tagger.zip.
+    [nltk_data] Downloading package cmudict to /home/runner/nltk_data...
+    [nltk_data]   Unzipping corpora/cmudict.zip.
     usage: asr_align.py [-h] [--config CONFIG]
                         [--log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}]
                         [--ngpu NGPU] [--dtype {float16,float32,float64}]
@@ -140,12 +145,13 @@ asr_inference.py
                             [--lm_file LM_FILE]
                             [--word_lm_train_config WORD_LM_TRAIN_CONFIG]
                             [--word_lm_file WORD_LM_FILE]
-                            [--batch_size BATCH_SIZE] [--nbest NBEST]
-                            [--beam_size BEAM_SIZE] [--penalty PENALTY]
-                            [--maxlenratio MAXLENRATIO]
+                            [--ngram_file NGRAM_FILE] [--batch_size BATCH_SIZE]
+                            [--nbest NBEST] [--beam_size BEAM_SIZE]
+                            [--penalty PENALTY] [--maxlenratio MAXLENRATIO]
                             [--minlenratio MINLENRATIO] [--ctc_weight CTC_WEIGHT]
-                            [--lm_weight LM_WEIGHT] [--streaming STREAMING]
-                            [--token_type {char,bpe,None}] [--bpemodel BPEMODEL]
+                            [--lm_weight LM_WEIGHT] [--ngram_weight NGRAM_WEIGHT]
+                            [--streaming STREAMING] [--token_type {char,bpe,None}]
+                            [--bpemodel BPEMODEL]
     
     ASR Decoding
     
@@ -173,6 +179,7 @@ asr_inference.py
       --lm_file LM_FILE
       --word_lm_train_config WORD_LM_TRAIN_CONFIG
       --word_lm_file WORD_LM_FILE
+      --ngram_file NGRAM_FILE
     
     Beam-search related:
       --batch_size BATCH_SIZE
@@ -193,6 +200,8 @@ asr_inference.py
                             CTC weight in joint decoding (default: 0.5)
       --lm_weight LM_WEIGHT
                             RNNLM weight (default: 1.0)
+      --ngram_weight NGRAM_WEIGHT
+                            ngram weight (default: 0.9)
       --streaming STREAMING
     
     Text converter related:
@@ -241,7 +250,10 @@ asr_train.py
                         [--use_amp USE_AMP] [--log_interval LOG_INTERVAL]
                         [--use_tensorboard USE_TENSORBOARD]
                         [--use_wandb USE_WANDB] [--wandb_project WANDB_PROJECT]
-                        [--wandb_id WANDB_ID] [--detect_anomaly DETECT_ANOMALY]
+                        [--wandb_id WANDB_ID] [--wandb_entity WANDB_ENTITY]
+                        [--wandb_name WANDB_NAME]
+                        [--wandb_model_log_interval WANDB_MODEL_LOG_INTERVAL]
+                        [--detect_anomaly DETECT_ANOMALY]
                         [--pretrain_path PRETRAIN_PATH]
                         [--init_param [INIT_PARAM [INIT_PARAM ...]]]
                         [--ignore_init_mismatch IGNORE_INIT_MISMATCH]
@@ -268,7 +280,7 @@ asr_train.py
                         [--max_cache_size MAX_CACHE_SIZE]
                         [--max_cache_fd MAX_CACHE_FD]
                         [--valid_max_cache_size VALID_MAX_CACHE_SIZE]
-                        [--optim {adam,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,adamw,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}]
+                        [--optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}]
                         [--optim_conf OPTIM_CONF]
                         [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
                         [--scheduler_conf SCHEDULER_CONF]
@@ -286,12 +298,12 @@ asr_train.py
                         [--noise_scp NOISE_SCP]
                         [--noise_apply_prob NOISE_APPLY_PROB]
                         [--noise_db_range NOISE_DB_RANGE]
-                        [--frontend {default,sliding_window}]
+                        [--frontend {default,sliding_window,s3prl}]
                         [--frontend_conf FRONTEND_CONF] [--specaug {specaug,None}]
                         [--specaug_conf SPECAUG_CONF]
                         [--normalize {global_mvn,utterance_mvn,None}]
                         [--normalize_conf NORMALIZE_CONF]
-                        [--preencoder {sinc,None}]
+                        [--preencoder {sinc,linear,None}]
                         [--preencoder_conf PREENCODER_CONF]
                         [--encoder {conformer,transformer,contextual_block_transformer,vgg_rnn,rnn,wav2vec2}]
                         [--encoder_conf ENCODER_CONF]
@@ -333,7 +345,7 @@ asr_train.py
       --num_workers NUM_WORKERS
                             The number of workers used for DataLoader (default: 1)
       --num_att_plot NUM_ATT_PLOT
-                            The number images to plot the outputs from attention. This option makes sense only when attention-based model (default: 3)
+                            The number images to plot the outputs from attention. This option makes sense only when attention-based model. We can also disable the attention plot by setting it 0 (default: 3)
     
     distributed training related:
       --dist_backend DIST_BACKEND
@@ -408,6 +420,12 @@ asr_train.py
       --wandb_project WANDB_PROJECT
                             Specify wandb project (default: None)
       --wandb_id WANDB_ID   Specify wandb id (default: None)
+      --wandb_entity WANDB_ENTITY
+                            Specify wandb entity (default: None)
+      --wandb_name WANDB_NAME
+                            Specify wandb run name (default: None)
+      --wandb_model_log_interval WANDB_MODEL_LOG_INTERVAL
+                            Set the model log period (default: -1)
       --detect_anomaly DETECT_ANOMALY
                             Set torch.autograd.set_detect_anomaly (default: False)
     
@@ -609,7 +627,7 @@ asr_train.py
                             The maximum cache size for validation data loader. e.g. 10MB, 20GB. If None, the 5 percent size of --max_cache_size (default: None)
     
     Optimizer related:
-      --optim {adam,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,adamw,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}
+      --optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}
                             The optimizer type (default: adadelta)
       --optim_conf OPTIM_CONF
                             The keyword arguments for optimizer (default: {})
@@ -626,7 +644,7 @@ asr_train.py
                             The initialization method (default: None)
       --input_size INPUT_SIZE
                             The number of input dimension of the feature (default: None)
-      --ctc_conf CTC_CONF   The keyword arguments for CTC class. (default: {'dropout_rate': 0.0, 'ctc_type': 'builtin', 'reduce': True, 'ignore_nan_grad': False})
+      --ctc_conf CTC_CONF   The keyword arguments for CTC class. (default: {'dropout_rate': 0.0, 'ctc_type': 'builtin', 'reduce': True, 'ignore_nan_grad': True})
       --model_conf MODEL_CONF
                             The keyword arguments for model class. (default: {'ctc_weight': 0.5, 'ignore_id': -1, 'lsm_weight': 0.0, 'length_normalized_loss': False, 'report_cer': True, 'report_wer': True, 'sym_space': '<space>', 'sym_blank': '<blank>'})
     
@@ -637,7 +655,7 @@ asr_train.py
       --token_type {bpe,char,word,phn}
                             The text will be tokenized in the specified level token (default: bpe)
       --bpemodel BPEMODEL   The model file of sentencepiece (default: None)
-      --frontend {default,sliding_window}
+      --frontend {default,sliding_window,s3prl}
                             The frontend type (default: default)
       --frontend_conf FRONTEND_CONF
                             The keyword arguments for frontend (default: {})
@@ -649,7 +667,7 @@ asr_train.py
                             The normalize type (default: utterance_mvn)
       --normalize_conf NORMALIZE_CONF
                             The keyword arguments for normalize (default: {})
-      --preencoder {sinc,None}
+      --preencoder {sinc,linear,None}
                             The preencoder type (default: None)
       --preencoder_conf PREENCODER_CONF
                             The keyword arguments for preencoder (default: {})
@@ -757,7 +775,10 @@ diar_train.py
                          [--use_amp USE_AMP] [--log_interval LOG_INTERVAL]
                          [--use_tensorboard USE_TENSORBOARD]
                          [--use_wandb USE_WANDB] [--wandb_project WANDB_PROJECT]
-                         [--wandb_id WANDB_ID] [--detect_anomaly DETECT_ANOMALY]
+                         [--wandb_id WANDB_ID] [--wandb_entity WANDB_ENTITY]
+                         [--wandb_name WANDB_NAME]
+                         [--wandb_model_log_interval WANDB_MODEL_LOG_INTERVAL]
+                         [--detect_anomaly DETECT_ANOMALY]
                          [--pretrain_path PRETRAIN_PATH]
                          [--init_param [INIT_PARAM [INIT_PARAM ...]]]
                          [--ignore_init_mismatch IGNORE_INIT_MISMATCH]
@@ -784,7 +805,7 @@ diar_train.py
                          [--max_cache_size MAX_CACHE_SIZE]
                          [--max_cache_fd MAX_CACHE_FD]
                          [--valid_max_cache_size VALID_MAX_CACHE_SIZE]
-                         [--optim {adam,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,adamw,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}]
+                         [--optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}]
                          [--optim_conf OPTIM_CONF]
                          [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
                          [--scheduler_conf SCHEDULER_CONF] [--num_spk NUM_SPK]
@@ -819,7 +840,7 @@ diar_train.py
       --num_workers NUM_WORKERS
                             The number of workers used for DataLoader (default: 1)
       --num_att_plot NUM_ATT_PLOT
-                            The number images to plot the outputs from attention. This option makes sense only when attention-based model (default: 3)
+                            The number images to plot the outputs from attention. This option makes sense only when attention-based model. We can also disable the attention plot by setting it 0 (default: 3)
     
     distributed training related:
       --dist_backend DIST_BACKEND
@@ -894,6 +915,12 @@ diar_train.py
       --wandb_project WANDB_PROJECT
                             Specify wandb project (default: None)
       --wandb_id WANDB_ID   Specify wandb id (default: None)
+      --wandb_entity WANDB_ENTITY
+                            Specify wandb entity (default: None)
+      --wandb_name WANDB_NAME
+                            Specify wandb run name (default: None)
+      --wandb_model_log_interval WANDB_MODEL_LOG_INTERVAL
+                            Set the model log period (default: -1)
       --detect_anomaly DETECT_ANOMALY
                             Set torch.autograd.set_detect_anomaly (default: False)
     
@@ -1095,7 +1122,7 @@ diar_train.py
                             The maximum cache size for validation data loader. e.g. 10MB, 20GB. If None, the 5 percent size of --max_cache_size (default: None)
     
     Optimizer related:
-      --optim {adam,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,adamw,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}
+      --optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}
                             The optimizer type (default: adadelta)
       --optim_conf OPTIM_CONF
                             The keyword arguments for optimizer (default: {})
@@ -1279,7 +1306,10 @@ enh_train.py
                         [--use_amp USE_AMP] [--log_interval LOG_INTERVAL]
                         [--use_tensorboard USE_TENSORBOARD]
                         [--use_wandb USE_WANDB] [--wandb_project WANDB_PROJECT]
-                        [--wandb_id WANDB_ID] [--detect_anomaly DETECT_ANOMALY]
+                        [--wandb_id WANDB_ID] [--wandb_entity WANDB_ENTITY]
+                        [--wandb_name WANDB_NAME]
+                        [--wandb_model_log_interval WANDB_MODEL_LOG_INTERVAL]
+                        [--detect_anomaly DETECT_ANOMALY]
                         [--pretrain_path PRETRAIN_PATH]
                         [--init_param [INIT_PARAM [INIT_PARAM ...]]]
                         [--ignore_init_mismatch IGNORE_INIT_MISMATCH]
@@ -1306,7 +1336,7 @@ enh_train.py
                         [--max_cache_size MAX_CACHE_SIZE]
                         [--max_cache_fd MAX_CACHE_FD]
                         [--valid_max_cache_size VALID_MAX_CACHE_SIZE]
-                        [--optim {adam,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,adamw,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}]
+                        [--optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}]
                         [--optim_conf OPTIM_CONF]
                         [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
                         [--scheduler_conf SCHEDULER_CONF]
@@ -1336,7 +1366,7 @@ enh_train.py
       --num_workers NUM_WORKERS
                             The number of workers used for DataLoader (default: 1)
       --num_att_plot NUM_ATT_PLOT
-                            The number images to plot the outputs from attention. This option makes sense only when attention-based model (default: 3)
+                            The number images to plot the outputs from attention. This option makes sense only when attention-based model. We can also disable the attention plot by setting it 0 (default: 3)
     
     distributed training related:
       --dist_backend DIST_BACKEND
@@ -1411,6 +1441,12 @@ enh_train.py
       --wandb_project WANDB_PROJECT
                             Specify wandb project (default: None)
       --wandb_id WANDB_ID   Specify wandb id (default: None)
+      --wandb_entity WANDB_ENTITY
+                            Specify wandb entity (default: None)
+      --wandb_name WANDB_NAME
+                            Specify wandb run name (default: None)
+      --wandb_model_log_interval WANDB_MODEL_LOG_INTERVAL
+                            Set the model log period (default: -1)
       --detect_anomaly DETECT_ANOMALY
                             Set torch.autograd.set_detect_anomaly (default: False)
     
@@ -1612,7 +1648,7 @@ enh_train.py
                             The maximum cache size for validation data loader. e.g. 10MB, 20GB. If None, the 5 percent size of --max_cache_size (default: None)
     
     Optimizer related:
-      --optim {adam,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,adamw,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}
+      --optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}
                             The optimizer type (default: adadelta)
       --optim_conf OPTIM_CONF
                             The keyword arguments for optimizer (default: {})
@@ -1782,6 +1818,8 @@ lm_train.py
                        [--use_amp USE_AMP] [--log_interval LOG_INTERVAL]
                        [--use_tensorboard USE_TENSORBOARD] [--use_wandb USE_WANDB]
                        [--wandb_project WANDB_PROJECT] [--wandb_id WANDB_ID]
+                       [--wandb_entity WANDB_ENTITY] [--wandb_name WANDB_NAME]
+                       [--wandb_model_log_interval WANDB_MODEL_LOG_INTERVAL]
                        [--detect_anomaly DETECT_ANOMALY]
                        [--pretrain_path PRETRAIN_PATH]
                        [--init_param [INIT_PARAM [INIT_PARAM ...]]]
@@ -1809,7 +1847,7 @@ lm_train.py
                        [--max_cache_size MAX_CACHE_SIZE]
                        [--max_cache_fd MAX_CACHE_FD]
                        [--valid_max_cache_size VALID_MAX_CACHE_SIZE]
-                       [--optim {adam,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,adamw,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}]
+                       [--optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}]
                        [--optim_conf OPTIM_CONF]
                        [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
                        [--scheduler_conf SCHEDULER_CONF] [--token_list TOKEN_LIST]
@@ -1846,7 +1884,7 @@ lm_train.py
       --num_workers NUM_WORKERS
                             The number of workers used for DataLoader (default: 1)
       --num_att_plot NUM_ATT_PLOT
-                            The number images to plot the outputs from attention. This option makes sense only when attention-based model (default: 3)
+                            The number images to plot the outputs from attention. This option makes sense only when attention-based model. We can also disable the attention plot by setting it 0 (default: 3)
     
     distributed training related:
       --dist_backend DIST_BACKEND
@@ -1921,6 +1959,12 @@ lm_train.py
       --wandb_project WANDB_PROJECT
                             Specify wandb project (default: None)
       --wandb_id WANDB_ID   Specify wandb id (default: None)
+      --wandb_entity WANDB_ENTITY
+                            Specify wandb entity (default: None)
+      --wandb_name WANDB_NAME
+                            Specify wandb run name (default: None)
+      --wandb_model_log_interval WANDB_MODEL_LOG_INTERVAL
+                            Set the model log period (default: -1)
       --detect_anomaly DETECT_ANOMALY
                             Set torch.autograd.set_detect_anomaly (default: False)
     
@@ -2122,7 +2166,7 @@ lm_train.py
                             The maximum cache size for validation data loader. e.g. 10MB, 20GB. If None, the 5 percent size of --max_cache_size (default: None)
     
     Optimizer related:
-      --optim {adam,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,adamw,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}
+      --optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}
                             The optimizer type (default: adadelta)
       --optim_conf OPTIM_CONF
                             The keyword arguments for optimizer (default: {})
@@ -2370,7 +2414,10 @@ tts_train.py
                         [--use_amp USE_AMP] [--log_interval LOG_INTERVAL]
                         [--use_tensorboard USE_TENSORBOARD]
                         [--use_wandb USE_WANDB] [--wandb_project WANDB_PROJECT]
-                        [--wandb_id WANDB_ID] [--detect_anomaly DETECT_ANOMALY]
+                        [--wandb_id WANDB_ID] [--wandb_entity WANDB_ENTITY]
+                        [--wandb_name WANDB_NAME]
+                        [--wandb_model_log_interval WANDB_MODEL_LOG_INTERVAL]
+                        [--detect_anomaly DETECT_ANOMALY]
                         [--pretrain_path PRETRAIN_PATH]
                         [--init_param [INIT_PARAM [INIT_PARAM ...]]]
                         [--ignore_init_mismatch IGNORE_INIT_MISMATCH]
@@ -2397,7 +2444,7 @@ tts_train.py
                         [--max_cache_size MAX_CACHE_SIZE]
                         [--max_cache_fd MAX_CACHE_FD]
                         [--valid_max_cache_size VALID_MAX_CACHE_SIZE]
-                        [--optim {adam,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,adamw,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}]
+                        [--optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}]
                         [--optim_conf OPTIM_CONF]
                         [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
                         [--scheduler_conf SCHEDULER_CONF]
@@ -2446,7 +2493,7 @@ tts_train.py
       --num_workers NUM_WORKERS
                             The number of workers used for DataLoader (default: 1)
       --num_att_plot NUM_ATT_PLOT
-                            The number images to plot the outputs from attention. This option makes sense only when attention-based model (default: 3)
+                            The number images to plot the outputs from attention. This option makes sense only when attention-based model. We can also disable the attention plot by setting it 0 (default: 3)
     
     distributed training related:
       --dist_backend DIST_BACKEND
@@ -2521,6 +2568,12 @@ tts_train.py
       --wandb_project WANDB_PROJECT
                             Specify wandb project (default: None)
       --wandb_id WANDB_ID   Specify wandb id (default: None)
+      --wandb_entity WANDB_ENTITY
+                            Specify wandb entity (default: None)
+      --wandb_name WANDB_NAME
+                            Specify wandb run name (default: None)
+      --wandb_model_log_interval WANDB_MODEL_LOG_INTERVAL
+                            Set the model log period (default: -1)
       --detect_anomaly DETECT_ANOMALY
                             Set torch.autograd.set_detect_anomaly (default: False)
     
@@ -2722,7 +2775,7 @@ tts_train.py
                             The maximum cache size for validation data loader. e.g. 10MB, 20GB. If None, the 5 percent size of --max_cache_size (default: None)
     
     Optimizer related:
-      --optim {adam,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,adamw,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}
+      --optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}
                             The optimizer type (default: adadelta)
       --optim_conf OPTIM_CONF
                             The keyword arguments for optimizer (default: {})
