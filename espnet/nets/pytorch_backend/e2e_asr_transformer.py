@@ -142,17 +142,14 @@ class E2E(ASRInterface, torch.nn.Module):
             )
         else:
             self.ctc = None
-
-        if args.report_cer or args.report_wer:
-            self.error_calculator = ErrorCalculator(
-                args.char_list,
-                args.sym_space,
-                args.sym_blank,
-                args.report_cer,
-                args.report_wer,
-            )
-        else:
-            self.error_calculator = None
+        self.report_cer = False
+        self.error_calculator = ErrorCalculator(
+            args.char_list,
+            args.sym_space,
+            args.sym_blank,
+            args.report_cer,
+            args.report_wer,
+        )
         self.rnnlm = None
 
     def reset_parameters(self, args):
@@ -160,7 +157,7 @@ class E2E(ASRInterface, torch.nn.Module):
         # initialize parameters
         initialize(self, args.transformer_init)
 
-    def forward(self, xs_pad, ilens, ys_pad):
+    def forward(self, xs_pad, ilens, ys_pad, xs_clean_pad=None, mimic_loss=False):
         """E2E forward.
 
         :param torch.Tensor xs_pad: batch of padded source sequences (B, Tmax, idim)
@@ -178,6 +175,17 @@ class E2E(ASRInterface, torch.nn.Module):
         src_mask = make_non_pad_mask(ilens.tolist()).to(xs_pad.device).unsqueeze(-2)
         hs_pad, hs_mask = self.encoder(xs_pad, src_mask)
         self.hs_pad = hs_pad
+        
+        loss_mimic=0
+        if mimic_loss:
+            if self.frontend is not None:
+                hs_pad_clean, hlens, mask = self.frontend(to_torch_tensor(xs_clean_pad), ilens)
+                hs_pad_clean, hlens = self.feature_transform(hs_pad_clean, hlens)
+            else:
+                hs_pad_clean, hlens = xs_clean_pad, ilens
+            hs_pad_clean, hlens, _ = self.enc(hs_pad_clean, hlens)
+            loss_mimic = torch.nn.L1Loss()(hs_pad_clean,hs_pad)
+            return loss_mimic
 
         # 2. forward decoder
         if self.decoder is not None:
@@ -206,7 +214,7 @@ class E2E(ASRInterface, torch.nn.Module):
             batch_size = xs_pad.size(0)
             hs_len = hs_mask.view(batch_size, -1).sum(1)
             loss_ctc = self.ctc(hs_pad.view(batch_size, -1, self.adim), hs_len, ys_pad)
-            if not self.training and self.error_calculator is not None:
+            if not self.training and self.report_cer: # error_calculator is not None:
                 ys_hat = self.ctc.argmax(hs_pad.view(batch_size, -1, self.adim)).data
                 cer_ctc = self.error_calculator(ys_hat.cpu(), ys_pad.cpu(), is_ctc=True)
             # for visualization
@@ -214,7 +222,7 @@ class E2E(ASRInterface, torch.nn.Module):
                 self.ctc.softmax(hs_pad)
 
         # 5. compute cer/wer
-        if self.training or self.error_calculator is None or self.decoder is None:
+        if self.training or not self.report_cer or self.decoder is None: # self.error_calculator is None or self.decoder is None:
             cer, wer = None, None
         else:
             ys_hat = pred_pad.argmax(dim=-1)
@@ -242,7 +250,10 @@ class E2E(ASRInterface, torch.nn.Module):
             )
         else:
             logging.warning("loss (=%f) is not correct", loss_data)
-        return self.loss
+        if self.training or not (self.report_cer): # or self.report_wer):
+            return self.loss
+        else:
+            return self.loss, cer, wer
 
     def scorers(self):
         """Scorers."""
