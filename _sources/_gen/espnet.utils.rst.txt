@@ -4,45 +4,12 @@ espnet.utils package
 Initialize sub package.
 
 
-.. _espnet.utils.deterministic_utils:
+.. _espnet.utils.cli_readers:
 
-espnet.utils.deterministic_utils
---------------------------------
+espnet.utils.cli_readers
+------------------------
 
-.. automodule:: espnet.utils.deterministic_utils
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-
-.. _espnet.utils.fill_missing_args:
-
-espnet.utils.fill_missing_args
-------------------------------
-
-.. automodule:: espnet.utils.fill_missing_args
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-
-.. _espnet.utils.cli_utils:
-
-espnet.utils.cli_utils
-----------------------
-
-.. automodule:: espnet.utils.cli_utils
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-
-.. _espnet.utils.dataset:
-
-espnet.utils.dataset
---------------------
-
-.. automodule:: espnet.utils.dataset
+.. automodule:: espnet.utils.cli_readers
     :members:
     :undoc-members:
     :show-inheritance:
@@ -59,45 +26,23 @@ espnet.utils.__init__
     :show-inheritance:
 
 
-.. _espnet.utils.cli_writers:
+.. _espnet.utils.cli_utils:
 
-espnet.utils.cli_writers
-------------------------
+espnet.utils.cli_utils
+----------------------
 
-.. automodule:: espnet.utils.cli_writers
+.. automodule:: espnet.utils.cli_utils
     :members:
     :undoc-members:
     :show-inheritance:
 
 
-.. _espnet.utils.check_kwargs:
+.. _espnet.utils.fill_missing_args:
 
-espnet.utils.check_kwargs
--------------------------
+espnet.utils.fill_missing_args
+------------------------------
 
-.. automodule:: espnet.utils.check_kwargs
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-
-.. _espnet.utils.spec_augment:
-
-espnet.utils.spec_augment
--------------------------
-
-.. automodule:: espnet.utils.spec_augment
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-
-.. _espnet.utils.cli_readers:
-
-espnet.utils.cli_readers
-------------------------
-
-.. automodule:: espnet.utils.cli_readers
+.. automodule:: espnet.utils.fill_missing_args
     :members:
     :undoc-members:
     :show-inheritance:
@@ -125,12 +70,56 @@ espnet.utils.io_utils
     :show-inheritance:
 
 
-.. _espnet.utils.training.batchfy:
+.. _espnet.utils.deterministic_utils:
 
-espnet.utils.training.batchfy
------------------------------
+espnet.utils.deterministic_utils
+--------------------------------
 
-.. automodule:: espnet.utils.training.batchfy
+.. automodule:: espnet.utils.deterministic_utils
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+
+.. _espnet.utils.cli_writers:
+
+espnet.utils.cli_writers
+------------------------
+
+.. automodule:: espnet.utils.cli_writers
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+
+.. _espnet.utils.dataset:
+
+espnet.utils.dataset
+--------------------
+
+.. automodule:: espnet.utils.dataset
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+
+.. _espnet.utils.check_kwargs:
+
+espnet.utils.check_kwargs
+-------------------------
+
+.. automodule:: espnet.utils.check_kwargs
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+
+.. _espnet.utils.spec_augment:
+
+espnet.utils.spec_augment
+-------------------------
+
+.. automodule:: espnet.utils.spec_augment
     :members:
     :undoc-members:
     :show-inheritance:
@@ -158,17 +147,6 @@ espnet.utils.training.train_utils
     :show-inheritance:
 
 
-.. _espnet.utils.training.iterators:
-
-espnet.utils.training.iterators
--------------------------------
-
-.. automodule:: espnet.utils.training.iterators
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-
 .. _espnet.utils.training.tensorboard_logger:
 
 espnet.utils.training.tensorboard_logger
@@ -180,12 +158,34 @@ espnet.utils.training.tensorboard_logger
     :show-inheritance:
 
 
+.. _espnet.utils.training.iterators:
+
+espnet.utils.training.iterators
+-------------------------------
+
+.. automodule:: espnet.utils.training.iterators
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+
 .. _espnet.utils.training.evaluator:
 
 espnet.utils.training.evaluator
 -------------------------------
 
 .. automodule:: espnet.utils.training.evaluator
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+
+.. _espnet.utils.training.batchfy:
+
+espnet.utils.training.batchfy
+-----------------------------
+
+.. automodule:: espnet.utils.training.batchfy
     :members:
     :undoc-members:
     :show-inheritance:
