@@ -5,14 +5,17 @@ from typing import Dict
 from typing import Optional
 from typing import Tuple
 
+import ci_sdr
 import torch
 from torch_complex.tensor import ComplexTensor
 from typeguard import check_argument_types
 
 from espnet2.enh.decoder.abs_decoder import AbsDecoder
+from espnet2.enh.decoder.stft_decoder import STFTDecoder
 from espnet2.enh.encoder.abs_encoder import AbsEncoder
 from espnet2.enh.encoder.conv_encoder import ConvEncoder
 from espnet2.enh.encoder.stft_encoder import STFTEncoder
+from espnet2.enh.layers.dnn_beamformer import DNN_Beamformer
 from espnet2.enh.separator.abs_separator import AbsSeparator
 from espnet2.torch_utils.device_funcs import force_gatherable
 from espnet2.train.abs_espnet_model import AbsESPnetModel
@@ -31,6 +34,8 @@ ALL_LOSS_TYPES = (
     "spectrum",
     # log_mse_loss(enhanced_complex_spectrum, target_complex_spectrum)
     "spectrum_log",
+    # ci_sdr(enhanced_waveform, target_waveform)
+    "ci_sdr",
     # si_snr(enhanced_waveform, target_waveform)
     "si_snr",
     # snr(enhanced_waveform, target_waveform)
@@ -47,6 +52,7 @@ class ESPnetEnhancementModel(AbsESPnetModel):
         encoder: AbsEncoder,
         separator: AbsSeparator,
         decoder: AbsDecoder,
+        post_beamforming: Optional[str] = None,
         stft_consistency: bool = False,
         loss_type: str = "mask_mse",
         mask_type: Optional[str] = None,
@@ -66,7 +72,9 @@ class ESPnetEnhancementModel(AbsESPnetModel):
         self.num_spk = separator.num_spk
         self.num_noise_type = getattr(self.separator, "num_noise_type", 1)
 
-        if loss_type not in ("si_snr", "snr") and isinstance(encoder, ConvEncoder):
+        if loss_type not in ("ci_sdr", "si_snr", "snr") and isinstance(
+            encoder, ConvEncoder
+        ):
             raise TypeError(f"{loss_type} is not supported with {type(ConvEncoder)}")
 
         # get mask type for TF-domain models (only used when loss_type="mask_*")
@@ -81,6 +89,7 @@ class ESPnetEnhancementModel(AbsESPnetModel):
             "mask_log_mse",
             "snr",
             "si_snr",
+            "ci_sdr",
         ]:
             raise ValueError(
                 f"stft_consistency will not work when '{loss_type}' loss is used"
@@ -89,10 +98,25 @@ class ESPnetEnhancementModel(AbsESPnetModel):
         assert self.loss_type in ALL_LOSS_TYPES, self.loss_type
         # for multi-channel signal
         self.ref_channel = getattr(self.separator, "ref_channel", ref_channel)
+        # for multi-channel input
+        self.post_beamforming = post_beamforming
+        if post_beamforming is not None and loss_type in ("ci_sdr", "si_snr", "snr"):
+            self.post_beamformer = DNN_Beamformer(
+                n_fft // 2 + 1,
+                num_spk=self.num_spk,
+                use_nn=False,
+                use_noise_mask=False,
+                ref_channel=ref_channel,
+                beamformer_type=post_beamforming,
+            )
+            self.tf_decoder = STFTDecoder(n_fft=n_fft, hop_length=hop_length)
+        else:
+            self.post_beamformer = None
+
         # for time-domain loss types
         self.add_tf_loss = add_tf_loss
         self.tf_loss_weight = tf_loss_weight
-        if add_tf_loss:
+        if add_tf_loss or post_beamforming is not None:
             self.tf_encoder = STFTEncoder(n_fft=n_fft, hop_length=hop_length)
 
     @staticmethod
@@ -275,32 +299,43 @@ class ESPnetEnhancementModel(AbsESPnetModel):
         )
 
         # add stats for logging
-        if self.loss_type not in ("si_snr", "snr"):
-            if "si_snr" in stats_ret:
-                si_snr = stats_ret["si_snr"]
-            elif self.training:
-                si_snr = None
+        if self.loss_type not in ("ci_sdr", "si_snr", "snr"):
+            if "ci_sdr" in stats_ret:
+                ci_sdr = stats_ret["ci_sdr"]
+                stats = dict(
+                    ci_sdr=ci_sdr,
+                    loss=loss.detach(),
+                )
             else:
-                speech_pre = [self.decoder(ps, speech_lengths)[0] for ps in speech_pre]
-                speech_ref = torch.unbind(speech_ref, dim=1)
-                if speech_ref[0].dim() == 3:
-                    # For si_snr loss, only select one channel as the reference
-                    speech_ref = [sr[..., self.ref_channel] for sr in speech_ref]
-                # compute si-snr loss
-                with torch.no_grad():
-                    si_snr_loss, _ = self._permutation_loss(
-                        speech_ref, speech_pre, self.si_snr_loss, perm=perm
-                    )
-                si_snr = -si_snr_loss.detach()
+                if "si_snr" in stats_ret:
+                    si_snr = stats_ret["si_snr"]
+                elif self.training:
+                    si_snr = None
+                else:
+                    speech_pre = [
+                        self.decoder(ps, speech_lengths)[0] for ps in speech_pre
+                    ]
+                    speech_ref = torch.unbind(speech_ref, dim=1)
+                    if speech_ref[0].dim() == 3:
+                        # For si_snr loss, only select one channel as the reference
+                        speech_ref = [sr[..., self.ref_channel] for sr in speech_ref]
+                    # compute si-snr loss
+                    with torch.no_grad():
+                        si_snr_loss, _ = self._permutation_loss(
+                            speech_ref, speech_pre, self.si_snr_loss, perm=perm
+                        )
+                    si_snr = -si_snr_loss.detach()
 
-            stats = dict(
-                si_snr=si_snr,
-                loss=loss.detach(),
-            )
+                stats = dict(
+                    si_snr=si_snr,
+                    loss=loss.detach(),
+                )
         else:
-            if self.loss_type == "si_snr":
+            if self.loss_type == "ci_sdr":
+                stats = dict(ci_sdr=-loss.detach(), loss=loss.detach())
+            elif self.loss_type == "si_snr":
                 stats = dict(si_snr=-loss.detach(), loss=loss.detach())
-            if self.loss_type == "snr":
+            elif self.loss_type == "snr":
                 stats = dict(snr=-loss.detach(), loss=loss.detach())
             else:
                 raise ValueError("Unsupported loss type: %s" % self.loss_type)
@@ -348,7 +383,7 @@ class ESPnetEnhancementModel(AbsESPnetModel):
         feature_pre, flens, others = self.separator(feature_mix, flens)
 
         stats = {}
-        if self.loss_type not in ("si_snr", "snr"):
+        if self.loss_type not in ("ci_sdr", "si_snr", "snr"):
             spectrum_mix = feature_mix
             spectrum_pre = feature_pre
             # predict separated speech and masks
@@ -500,6 +535,30 @@ class ESPnetEnhancementModel(AbsESPnetModel):
 
         else:
             speech_pre = [self.decoder(ps, speech_lengths)[0] for ps in feature_pre]
+            if self.post_beamformer is not None:
+                assert speech_pre[0].dim() == 2, speech_pre[0].shape  # single-channel
+                spectrum_mix, flens = self.tf_encoder(speech_mix, speech_lengths)
+                spec_pre = [self.tf_encoder(sp, speech_lengths)[0] for sp in speech_pre]
+                spec_pre = [sp.unsqueeze(2) for sp in spec_pre]
+                mask_pre = [
+                    m.permute(0, 3, 2, 1)
+                    for m in self._create_mask_label(
+                        spectrum_mix[:, :, self.ref_channel : self.ref_channel + 1],
+                        spec_pre,
+                        mask_type=self.mask_type,
+                    )
+                ]
+                spec_pre, flens, others, *_ = self.post_beamformer(
+                    spectrum_mix,
+                    flens,
+                    snr_selection=False,
+                    speech_masks=mask_pre,
+                    mask_fusion=False,
+                )
+                if self.num_spk == 1:
+                    speech_pre = [self.tf_decoder(spec_pre, speech_lengths)[0]]
+                else:
+                    speech_pre = [self.tf_decoder(sp, speech_lengths)[0] for sp in spec_pre]
             if not cal_loss:
                 loss, perm = None, None
                 return loss, speech_pre, None, speech_lengths, perm, stats
@@ -515,7 +574,12 @@ class ESPnetEnhancementModel(AbsESPnetModel):
                 speech_ref2 = speech_ref.clone()
             speech_ref2 = torch.unbind(speech_ref2, dim=1)
 
-            if self.loss_type == "si_snr":
+            if self.loss_type == "ci_sdr":
+                # compute ci-sdr loss
+                loss_func = self.ci_sdr_loss
+                loss, perm = self._permutation_loss(speech_ref2, speech_pre, loss_func)
+                stats["ci_sdr"] = -loss.detach()
+            elif self.loss_type == "si_snr":
                 # compute si-snr loss
                 loss_func = self.si_snr_loss_zeromean
                 loss, perm = self._permutation_loss(speech_ref2, speech_pre, loss_func)
@@ -693,6 +757,23 @@ class ESPnetEnhancementModel(AbsESPnetModel):
                 "Invalid input shape: ref={}, inf={}".format(ref.shape, inf.shape)
             )
         return l1loss
+
+    @staticmethod
+    def ci_sdr_loss(ref, inf):
+        """CI-SDR loss
+        Reference:
+            Convolutive Transfer Function Invariant SDR Training
+            Criteria for Multi-Channel Reverberant Speech Separation;
+            C. Boeddeker et al., 2021;
+            https://arxiv.org/abs/2011.15003
+        Args:
+            ref: (Batch, samples)
+            inf: (Batch, samples)
+        Returns:
+            loss: (Batch,)
+        """
+        assert ref.shape == inf.shape, (ref.shape, inf.shape)
+        return ci_sdr.pt.ci_sdr_loss(inf, ref, compute_permutation=False)
 
     @staticmethod
     def snr_loss(ref, inf):

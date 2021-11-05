@@ -60,6 +60,7 @@ class DNN_Beamformer(torch.nn.Module):
         bunits: int = 300,
         bprojs: int = 320,
         num_spk: int = 1,
+        use_nn: bool = True,
         use_noise_mask: bool = True,
         nonlinear: str = "sigmoid",
         dropout_rate: float = 0.0,
@@ -79,16 +80,19 @@ class DNN_Beamformer(torch.nn.Module):
     ):
         super().__init__()
         bnmask = num_spk + 1 if use_noise_mask else num_spk
-        self.mask = MaskEstimator(
-            btype,
-            bidim,
-            blayers,
-            bunits,
-            bprojs,
-            dropout_rate,
-            nmask=bnmask,
-            nonlinear=nonlinear,
-        )
+        if use_nn:
+            self.mask = MaskEstimator(
+                btype,
+                bidim,
+                blayers,
+                bunits,
+                bprojs,
+                dropout_rate,
+                nmask=bnmask,
+                nonlinear=nonlinear,
+            )
+        else:
+            self.mask = None
         self.ref = AttentionReference(bidim, badim) if ref_channel < 0 else None
         self.ref_channel = ref_channel
 
