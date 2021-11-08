@@ -152,6 +152,8 @@
 <span class="sd">        positionwise_activation_type: Positionwise activation type.</span>
 <span class="sd">        conv_mod_activation_type: Convolutional module activation type.</span>
 <span class="sd">        aux_enc_output_layers: Layer IDs for auxiliary encoder output sequences.</span>
+<span class="sd">        input_layer_dropout_rate: Dropout rate for input layer.</span>
+<span class="sd">        input_layer_pos_enc_dropout_rate: Dropout rate for input layer pos. enc.</span>
 <span class="sd">        padding_idx: Padding symbol ID for embedding layer.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -161,13 +163,15 @@
         <span class="n">idim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">enc_arch</span><span class="p">:</span> <span class="n">List</span><span class="p">,</span>
         <span class="n">input_layer</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;linear&quot;</span><span class="p">,</span>
-        <span class="n">repeat_block</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">repeat_block</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">self_attn_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;selfattn&quot;</span><span class="p">,</span>
         <span class="n">positional_encoding_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;abs_pos&quot;</span><span class="p">,</span>
         <span class="n">positionwise_layer_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;linear&quot;</span><span class="p">,</span>
         <span class="n">positionwise_activation_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;relu&quot;</span><span class="p">,</span>
         <span class="n">conv_mod_activation_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;relu&quot;</span><span class="p">,</span>
         <span class="n">aux_enc_output_layers</span><span class="p">:</span> <span class="n">List</span> <span class="o">=</span> <span class="p">[],</span>
+        <span class="n">input_layer_dropout_rate</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">input_layer_pos_enc_dropout_rate</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
         <span class="n">padding_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Construct an CustomEncoder object.&quot;&quot;&quot;</span>
@@ -189,6 +193,8 @@
             <span class="n">positionwise_layer_type</span><span class="o">=</span><span class="n">positionwise_layer_type</span><span class="p">,</span>
             <span class="n">positionwise_activation_type</span><span class="o">=</span><span class="n">positionwise_activation_type</span><span class="p">,</span>
             <span class="n">conv_mod_activation_type</span><span class="o">=</span><span class="n">conv_mod_activation_type</span><span class="p">,</span>
+            <span class="n">input_layer_dropout_rate</span><span class="o">=</span><span class="n">input_layer_dropout_rate</span><span class="p">,</span>
+            <span class="n">input_layer_pos_enc_dropout_rate</span><span class="o">=</span><span class="n">input_layer_pos_enc_dropout_rate</span><span class="p">,</span>
             <span class="n">padding_idx</span><span class="o">=</span><span class="n">padding_idx</span><span class="p">,</span>
         <span class="p">)</span>
 

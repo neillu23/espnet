@@ -1181,17 +1181,6 @@ espnet.nets.pytorch_backend.transducer.arguments
     :show-inheritance:
 
 
-.. _espnet.nets.pytorch_backend.transducer.causal_conv1d:
-
-espnet.nets.pytorch_backend.transducer.causal_conv1d
-----------------------------------------------------
-
-.. automodule:: espnet.nets.pytorch_backend.transducer.causal_conv1d
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-
 .. _espnet.nets.pytorch_backend.transducer.rnn_decoder:
 
 espnet.nets.pytorch_backend.transducer.rnn_decoder
@@ -1225,23 +1214,23 @@ espnet.nets.pytorch_backend.transducer.transformer_decoder_layer
     :show-inheritance:
 
 
+.. _espnet.nets.pytorch_backend.transducer.conv1d_nets:
+
+espnet.nets.pytorch_backend.transducer.conv1d_nets
+--------------------------------------------------
+
+.. automodule:: espnet.nets.pytorch_backend.transducer.conv1d_nets
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+
 .. _espnet.nets.pytorch_backend.transducer.custom_decoder:
 
 espnet.nets.pytorch_backend.transducer.custom_decoder
 -----------------------------------------------------
 
 .. automodule:: espnet.nets.pytorch_backend.transducer.custom_decoder
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-
-.. _espnet.nets.pytorch_backend.transducer.tdnn:
-
-espnet.nets.pytorch_backend.transducer.tdnn
--------------------------------------------
-
-.. automodule:: espnet.nets.pytorch_backend.transducer.tdnn
     :members:
     :undoc-members:
     :show-inheritance:

@@ -368,20 +368,23 @@
             <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">enc_block_arch</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="s2">&quot;When specifying custom encoder type, --enc-block-arch&quot;</span>
-                    <span class="s2">&quot;should also be specified in training config. See&quot;</span>
-                    <span class="s2">&quot;egs/vivos/asr1/conf/transducer/train_*.yaml for more info.&quot;</span>
+                    <span class="s2">&quot;should be set in training config.&quot;</span>
                 <span class="p">)</span>
 
             <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span> <span class="o">=</span> <span class="n">CustomEncoder</span><span class="p">(</span>
                 <span class="n">idim</span><span class="p">,</span>
                 <span class="n">args</span><span class="o">.</span><span class="n">enc_block_arch</span><span class="p">,</span>
-                <span class="n">input_layer</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">custom_enc_input_layer</span><span class="p">,</span>
+                <span class="n">args</span><span class="o">.</span><span class="n">custom_enc_input_layer</span><span class="p">,</span>
                 <span class="n">repeat_block</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">enc_block_repeat</span><span class="p">,</span>
                 <span class="n">self_attn_type</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">custom_enc_self_attn_type</span><span class="p">,</span>
                 <span class="n">positional_encoding_type</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">custom_enc_positional_encoding_type</span><span class="p">,</span>
                 <span class="n">positionwise_activation_type</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">custom_enc_pw_activation_type</span><span class="p">,</span>
                 <span class="n">conv_mod_activation_type</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">custom_enc_conv_mod_activation_type</span><span class="p">,</span>
                 <span class="n">aux_enc_output_layers</span><span class="o">=</span><span class="n">aux_enc_output_layers</span><span class="p">,</span>
+                <span class="n">input_layer_dropout_rate</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">custom_enc_input_dropout_rate</span><span class="p">,</span>
+                <span class="n">input_layer_pos_enc_dropout_rate</span><span class="o">=</span><span class="p">(</span>
+                    <span class="n">args</span><span class="o">.</span><span class="n">custom_enc_input_pos_enc_dropout_rate</span>
+                <span class="p">),</span>
             <span class="p">)</span>
             <span class="n">encoder_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="o">.</span><span class="n">enc_out</span>
         <span class="k">else</span><span class="p">:</span>
@@ -397,17 +400,16 @@
             <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">dec_block_arch</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="s2">&quot;When specifying custom decoder type, --dec-block-arch&quot;</span>
-                    <span class="s2">&quot;should also be specified in training config. See&quot;</span>
-                    <span class="s2">&quot;egs/vivos/asr1/conf/transducer/train_*.yaml for more info.&quot;</span>
+                    <span class="s2">&quot;should be set in training config.&quot;</span>
                 <span class="p">)</span>
 
             <span class="bp">self</span><span class="o">.</span><span class="n">decoder</span> <span class="o">=</span> <span class="n">CustomDecoder</span><span class="p">(</span>
                 <span class="n">odim</span><span class="p">,</span>
                 <span class="n">args</span><span class="o">.</span><span class="n">dec_block_arch</span><span class="p">,</span>
-                <span class="n">input_layer</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">custom_dec_input_layer</span><span class="p">,</span>
+                <span class="n">args</span><span class="o">.</span><span class="n">custom_dec_input_layer</span><span class="p">,</span>
                 <span class="n">repeat_block</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">dec_block_repeat</span><span class="p">,</span>
                 <span class="n">positionwise_activation_type</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">custom_dec_pw_activation_type</span><span class="p">,</span>
-                <span class="n">dropout_rate_embed</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">dropout_rate_embed_decoder</span><span class="p">,</span>
+                <span class="n">input_layer_dropout_rate</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">dropout_rate_embed_decoder</span><span class="p">,</span>
                 <span class="n">blank_id</span><span class="o">=</span><span class="n">blank_id</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="n">decoder_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">decoder</span><span class="o">.</span><span class="n">dunits</span>

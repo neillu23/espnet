@@ -179,12 +179,11 @@
 <li class="toctree-l2"><a class="reference internal" href="#espnet-nets-pytorch-backend-transducer-custom-encoder">espnet.nets.pytorch_backend.transducer.custom_encoder</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#espnet-nets-pytorch-backend-transducer-init">espnet.nets.pytorch_backend.transducer.__init__</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#espnet-nets-pytorch-backend-transducer-arguments">espnet.nets.pytorch_backend.transducer.arguments</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#espnet-nets-pytorch-backend-transducer-causal-conv1d">espnet.nets.pytorch_backend.transducer.causal_conv1d</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#espnet-nets-pytorch-backend-transducer-rnn-decoder">espnet.nets.pytorch_backend.transducer.rnn_decoder</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#espnet-nets-pytorch-backend-transducer-blocks">espnet.nets.pytorch_backend.transducer.blocks</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#espnet-nets-pytorch-backend-transducer-transformer-decoder-layer">espnet.nets.pytorch_backend.transducer.transformer_decoder_layer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#espnet-nets-pytorch-backend-transducer-conv1d-nets">espnet.nets.pytorch_backend.transducer.conv1d_nets</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#espnet-nets-pytorch-backend-transducer-custom-decoder">espnet.nets.pytorch_backend.transducer.custom_decoder</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#espnet-nets-pytorch-backend-transducer-tdnn">espnet.nets.pytorch_backend.transducer.tdnn</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#espnet-nets-pytorch-backend-transducer-utils">espnet.nets.pytorch_backend.transducer.utils</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#espnet-nets-pytorch-backend-rnn-argument">espnet.nets.pytorch_backend.rnn.argument</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#espnet-nets-pytorch-backend-rnn-init">espnet.nets.pytorch_backend.rnn.__init__</a></li>
@@ -11018,7 +11017,7 @@ This is just for compatibility with self-attention layer (attention.py)</p>
 <span class="target" id="module-espnet.nets.pytorch_backend.transducer.transducer_tasks"></span><p>Module implementing Transducer main and auxiliary tasks.</p>
 <dl class="class">
 <dt id="espnet.nets.pytorch_backend.transducer.transducer_tasks.TransducerTasks">
-<em class="property">class </em><code class="sig-prename descclassname">espnet.nets.pytorch_backend.transducer.transducer_tasks.</code><code class="sig-name descname">TransducerTasks</code><span class="sig-paren">(</span><em class="sig-param">encoder_dim: int</em>, <em class="sig-param">decoder_dim: int</em>, <em class="sig-param">joint_dim: int</em>, <em class="sig-param">output_dim: int</em>, <em class="sig-param">joint_activation_type: str = 'tanh'</em>, <em class="sig-param">transducer_loss_weight: float = 1.0</em>, <em class="sig-param">ctc_loss: bool = False</em>, <em class="sig-param">ctc_loss_weight: float = 0.5</em>, <em class="sig-param">ctc_loss_dropout_rate: float = 0.0</em>, <em class="sig-param">lm_loss: bool = False</em>, <em class="sig-param">lm_loss_weight: float = 1.0</em>, <em class="sig-param">lm_loss_smoothing_rate: float = 0.0</em>, <em class="sig-param">aux_transducer_loss: bool = False</em>, <em class="sig-param">aux_transducer_loss_weight: float = 0.2</em>, <em class="sig-param">aux_transducer_loss_mlp_dim: int = 320</em>, <em class="sig-param">aux_trans_loss_mlp_dropout_rate: float = 0.0</em>, <em class="sig-param">symm_kl_div_loss: bool = False</em>, <em class="sig-param">symm_kl_div_loss_weight: float = 0.2</em>, <em class="sig-param">fastemit_lambda: float = 0.0</em>, <em class="sig-param">blank_id: int = 0</em>, <em class="sig-param">ignore_id: int = -1</em>, <em class="sig-param">training: bool = False</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/transducer_tasks.html#TransducerTasks"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.transducer_tasks.TransducerTasks" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="sig-prename descclassname">espnet.nets.pytorch_backend.transducer.transducer_tasks.</code><code class="sig-name descname">TransducerTasks</code><span class="sig-paren">(</span><em class="sig-param">encoder_dim: int</em>, <em class="sig-param">decoder_dim: int</em>, <em class="sig-param">joint_dim: int</em>, <em class="sig-param">output_dim: int</em>, <em class="sig-param">joint_activation_type: str = 'tanh'</em>, <em class="sig-param">transducer_loss_weight: float = 1.0</em>, <em class="sig-param">ctc_loss: bool = False</em>, <em class="sig-param">ctc_loss_weight: float = 0.5</em>, <em class="sig-param">ctc_loss_dropout_rate: float = 0.0</em>, <em class="sig-param">lm_loss: bool = False</em>, <em class="sig-param">lm_loss_weight: float = 0.5</em>, <em class="sig-param">lm_loss_smoothing_rate: float = 0.0</em>, <em class="sig-param">aux_transducer_loss: bool = False</em>, <em class="sig-param">aux_transducer_loss_weight: float = 0.2</em>, <em class="sig-param">aux_transducer_loss_mlp_dim: int = 320</em>, <em class="sig-param">aux_trans_loss_mlp_dropout_rate: float = 0.0</em>, <em class="sig-param">symm_kl_div_loss: bool = False</em>, <em class="sig-param">symm_kl_div_loss_weight: float = 0.2</em>, <em class="sig-param">fastemit_lambda: float = 0.0</em>, <em class="sig-param">blank_id: int = 0</em>, <em class="sig-param">ignore_id: int = -1</em>, <em class="sig-param">training: bool = False</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/transducer_tasks.html#TransducerTasks"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.transducer_tasks.TransducerTasks" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
 <p>Transducer tasks module.</p>
 <p>Initialize module for Transducer tasks.</p>
@@ -11570,7 +11569,7 @@ vgg_out_len: VGG2L output sequences lengths. (B,)</p>
 <span class="target" id="module-espnet.nets.pytorch_backend.transducer.custom_encoder"></span><p>Cutom encoder definition for transducer models.</p>
 <dl class="class">
 <dt id="espnet.nets.pytorch_backend.transducer.custom_encoder.CustomEncoder">
-<em class="property">class </em><code class="sig-prename descclassname">espnet.nets.pytorch_backend.transducer.custom_encoder.</code><code class="sig-name descname">CustomEncoder</code><span class="sig-paren">(</span><em class="sig-param">idim: int</em>, <em class="sig-param">enc_arch: List</em>, <em class="sig-param">input_layer: str = 'linear'</em>, <em class="sig-param">repeat_block: int = 0</em>, <em class="sig-param">self_attn_type: str = 'selfattn'</em>, <em class="sig-param">positional_encoding_type: str = 'abs_pos'</em>, <em class="sig-param">positionwise_layer_type: str = 'linear'</em>, <em class="sig-param">positionwise_activation_type: str = 'relu'</em>, <em class="sig-param">conv_mod_activation_type: str = 'relu'</em>, <em class="sig-param">aux_enc_output_layers: List = []</em>, <em class="sig-param">padding_idx: int = -1</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/custom_encoder.html#CustomEncoder"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.custom_encoder.CustomEncoder" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="sig-prename descclassname">espnet.nets.pytorch_backend.transducer.custom_encoder.</code><code class="sig-name descname">CustomEncoder</code><span class="sig-paren">(</span><em class="sig-param">idim: int</em>, <em class="sig-param">enc_arch: List</em>, <em class="sig-param">input_layer: str = 'linear'</em>, <em class="sig-param">repeat_block: int = 1</em>, <em class="sig-param">self_attn_type: str = 'selfattn'</em>, <em class="sig-param">positional_encoding_type: str = 'abs_pos'</em>, <em class="sig-param">positionwise_layer_type: str = 'linear'</em>, <em class="sig-param">positionwise_activation_type: str = 'relu'</em>, <em class="sig-param">conv_mod_activation_type: str = 'relu'</em>, <em class="sig-param">aux_enc_output_layers: List = []</em>, <em class="sig-param">input_layer_dropout_rate: float = 0.0</em>, <em class="sig-param">input_layer_pos_enc_dropout_rate: float = 0.0</em>, <em class="sig-param">padding_idx: int = -1</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/custom_encoder.html#CustomEncoder"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.custom_encoder.CustomEncoder" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
 <p>Custom encoder module for transducer models.</p>
 <dl class="field-list simple">
@@ -11586,6 +11585,8 @@ vgg_out_len: VGG2L output sequences lengths. (B,)</p>
 <li><p><strong>positionwise_activation_type</strong> – Positionwise activation type.</p></li>
 <li><p><strong>conv_mod_activation_type</strong> – Convolutional module activation type.</p></li>
 <li><p><strong>aux_enc_output_layers</strong> – Layer IDs for auxiliary encoder output sequences.</p></li>
+<li><p><strong>input_layer_dropout_rate</strong> – Dropout rate for input layer.</p></li>
+<li><p><strong>input_layer_pos_enc_dropout_rate</strong> – Dropout rate for input layer pos. enc.</p></li>
 <li><p><strong>padding_idx</strong> – Padding symbol ID for embedding layer.</p></li>
 </ul>
 </dd>
@@ -11682,54 +11683,8 @@ vgg_out_len: VGG2L output sequences lengths. (B,)</p>
 </dd></dl>
 
 </section>
-<section id="espnet-nets-pytorch-backend-transducer-causal-conv1d">
-<span id="id116"></span><h2>espnet.nets.pytorch_backend.transducer.causal_conv1d<a class="headerlink" href="#espnet-nets-pytorch-backend-transducer-causal-conv1d" title="Permalink to this headline">¶</a></h2>
-<span class="target" id="module-espnet.nets.pytorch_backend.transducer.causal_conv1d"></span><p>CausalConv1d module definition for custom decoder.</p>
-<dl class="class">
-<dt id="espnet.nets.pytorch_backend.transducer.causal_conv1d.CausalConv1d">
-<em class="property">class </em><code class="sig-prename descclassname">espnet.nets.pytorch_backend.transducer.causal_conv1d.</code><code class="sig-name descname">CausalConv1d</code><span class="sig-paren">(</span><em class="sig-param">idim: int</em>, <em class="sig-param">odim: int</em>, <em class="sig-param">kernel_size: int</em>, <em class="sig-param">stride: int = 1</em>, <em class="sig-param">dilation: int = 1</em>, <em class="sig-param">groups: int = 1</em>, <em class="sig-param">bias: bool = True</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/causal_conv1d.html#CausalConv1d"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.causal_conv1d.CausalConv1d" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
-<p>CausalConv1d module for custom decoder.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>idim</strong> – Input dimension.</p></li>
-<li><p><strong>odim</strong> – Output dimension.</p></li>
-<li><p><strong>kernel_size</strong> – Size of the convolving kernel.</p></li>
-<li><p><strong>stride</strong> – Stride of the convolution.</p></li>
-<li><p><strong>dilation</strong> – Spacing between the kernel points.</p></li>
-<li><p><strong>groups</strong> – Number of blocked connections from input channels to output channels.</p></li>
-<li><p><strong>bias</strong> – Whether to add a learnable bias to the output.</p></li>
-</ul>
-</dd>
-</dl>
-<p>Construct a CausalConv1d object.</p>
-<dl class="method">
-<dt id="espnet.nets.pytorch_backend.transducer.causal_conv1d.CausalConv1d.forward">
-<code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param">sequence: torch.Tensor</em>, <em class="sig-param">mask: torch.Tensor</em>, <em class="sig-param">cache: Optional[torch.Tensor] = None</em><span class="sig-paren">)</span> &#x2192; Tuple[torch.Tensor, torch.Tensor]<a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/causal_conv1d.html#CausalConv1d.forward"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.causal_conv1d.CausalConv1d.forward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Forward CausalConv1d for custom decoder.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>sequence</strong> – CausalConv1d input sequences. (B, U, D_in)</p></li>
-<li><p><strong>mask</strong> – Mask of CausalConv1d input sequences. (B, 1, U)</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>CausalConv1d output sequences. (B, sub(U), D_out)
-mask: Mask of CausalConv1d output sequences. (B, 1, sub(U))</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>sequence</p>
-</dd>
-</dl>
-</dd></dl>
-
-</dd></dl>
-
-</section>
 <section id="espnet-nets-pytorch-backend-transducer-rnn-decoder">
-<span id="id117"></span><h2>espnet.nets.pytorch_backend.transducer.rnn_decoder<a class="headerlink" href="#espnet-nets-pytorch-backend-transducer-rnn-decoder" title="Permalink to this headline">¶</a></h2>
+<span id="id116"></span><h2>espnet.nets.pytorch_backend.transducer.rnn_decoder<a class="headerlink" href="#espnet-nets-pytorch-backend-transducer-rnn-decoder" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.pytorch_backend.transducer.rnn_decoder"></span><p>RNN decoder definition for Transducer model.</p>
 <dl class="class">
 <dt id="espnet.nets.pytorch_backend.transducer.rnn_decoder.RNNDecoder">
@@ -11905,31 +11860,32 @@ label: Label ID for LM. (1,)</p>
 
 </section>
 <section id="espnet-nets-pytorch-backend-transducer-blocks">
-<span id="id118"></span><h2>espnet.nets.pytorch_backend.transducer.blocks<a class="headerlink" href="#espnet-nets-pytorch-backend-transducer-blocks" title="Permalink to this headline">¶</a></h2>
+<span id="id117"></span><h2>espnet.nets.pytorch_backend.transducer.blocks<a class="headerlink" href="#espnet-nets-pytorch-backend-transducer-blocks" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.pytorch_backend.transducer.blocks"></span><p>Set of methods to create custom architecture.</p>
 <dl class="function">
 <dt id="espnet.nets.pytorch_backend.transducer.blocks.build_blocks">
-<code class="sig-prename descclassname">espnet.nets.pytorch_backend.transducer.blocks.</code><code class="sig-name descname">build_blocks</code><span class="sig-paren">(</span><em class="sig-param">net_part: str</em>, <em class="sig-param">idim: int</em>, <em class="sig-param">input_layer_type: str</em>, <em class="sig-param">blocks_arch: List</em>, <em class="sig-param">repeat_block: int = 0</em>, <em class="sig-param">self_attn_type: str = 'self_attn'</em>, <em class="sig-param">positional_encoding_type: str = 'abs_pos'</em>, <em class="sig-param">positionwise_layer_type: str = 'linear'</em>, <em class="sig-param">positionwise_activation_type: str = 'relu'</em>, <em class="sig-param">conv_mod_activation_type: str = 'relu'</em>, <em class="sig-param">dropout_rate_embed: float = 0.0</em>, <em class="sig-param">padding_idx: int = -1</em><span class="sig-paren">)</span> &#x2192; Tuple[Union[espnet.nets.pytorch_backend.transformer.subsampling.Conv2dSubsampling, espnet.nets.pytorch_backend.transducer.vgg2l.VGG2L, torch.nn.modules.container.Sequential], espnet.nets.pytorch_backend.transformer.repeat.MultiSequential, int, int]<a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/blocks.html#build_blocks"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.blocks.build_blocks" title="Permalink to this definition">¶</a></dt>
-<dd><p>Build block for customizable architecture.</p>
+<code class="sig-prename descclassname">espnet.nets.pytorch_backend.transducer.blocks.</code><code class="sig-name descname">build_blocks</code><span class="sig-paren">(</span><em class="sig-param">net_part: str, idim: int, input_layer_type: str, blocks: List[Dict[str, Any]], repeat_block: int = 0, self_attn_type: str = 'self_attn', positional_encoding_type: str = 'abs_pos', positionwise_layer_type: str = 'linear', positionwise_activation_type: str = 'relu', conv_mod_activation_type: str = 'relu', input_layer_dropout_rate: float = 0.0, input_layer_pos_enc_dropout_rate: float = 0.0, padding_idx: int = -1</em><span class="sig-paren">)</span> &#x2192; Tuple[Union[espnet.nets.pytorch_backend.transformer.subsampling.Conv2dSubsampling, espnet.nets.pytorch_backend.transducer.vgg2l.VGG2L, torch.nn.modules.container.Sequential], espnet.nets.pytorch_backend.transformer.repeat.MultiSequential, int, int]<a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/blocks.html#build_blocks"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.blocks.build_blocks" title="Permalink to this definition">¶</a></dt>
+<dd><p>Build custom model blocks.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>net_part</strong> – Network part, either ‘encoder’ or ‘decoder’.</p></li>
 <li><p><strong>idim</strong> – Input dimension.</p></li>
 <li><p><strong>input_layer</strong> – Input layer type.</p></li>
-<li><p><strong>blocks_arch</strong> – Block architecture (types and parameters) for network part.</p></li>
-<li><p><strong>repeat_block</strong> – Number of times blocks_arch is repeated.</p></li>
+<li><p><strong>blocks</strong> – Blocks parameters for network part.</p></li>
+<li><p><strong>repeat_block</strong> – Number of times provided blocks are repeated.</p></li>
 <li><p><strong>positional_encoding_type</strong> – Positional encoding layer type.</p></li>
 <li><p><strong>positionwise_layer_type</strong> – Positionwise layer type.</p></li>
 <li><p><strong>positionwise_activation_type</strong> – Positionwise activation type.</p></li>
 <li><p><strong>conv_mod_activation_type</strong> – Convolutional module activation type.</p></li>
-<li><p><strong>dropout_rate_embed</strong> – Dropout rate for embedding layer.</p></li>
+<li><p><strong>input_layer_dropout_rate</strong> – Dropout rate for input layer.</p></li>
+<li><p><strong>input_layer_pos_enc_dropout_rate</strong> – Dropout rate for input layer pos. enc.</p></li>
 <li><p><strong>padding_idx</strong> – Padding symbol ID for embedding layer.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
 <dd class="field-even"><p>Input layer
-all_blocks: (Encoder or Decoder) network.
+all_blocks: Encoder/Decoder network.
 out_dim: Network output dimension.
 conv_subsampling_factor: Subsampling factor in frontend CNN.</p>
 </dd>
@@ -11940,27 +11896,13 @@ conv_subsampling_factor: Subsampling factor in frontend CNN.</p>
 </dd></dl>
 
 <dl class="function">
-<dt id="espnet.nets.pytorch_backend.transducer.blocks.build_causal_conv1d_block">
-<code class="sig-prename descclassname">espnet.nets.pytorch_backend.transducer.blocks.</code><code class="sig-name descname">build_causal_conv1d_block</code><span class="sig-paren">(</span><em class="sig-param">block_arch: Dict</em><span class="sig-paren">)</span> &#x2192; espnet.nets.pytorch_backend.transducer.causal_conv1d.CausalConv1d<a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/blocks.html#build_causal_conv1d_block"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.blocks.build_causal_conv1d_block" title="Permalink to this definition">¶</a></dt>
-<dd><p>Build function for causal conv1d block.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>block_arch</strong> – Causal conv1D block parameters.</p>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>Function to create causal conv1d (decoder) block.</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="function">
 <dt id="espnet.nets.pytorch_backend.transducer.blocks.build_conformer_block">
-<code class="sig-prename descclassname">espnet.nets.pytorch_backend.transducer.blocks.</code><code class="sig-name descname">build_conformer_block</code><span class="sig-paren">(</span><em class="sig-param">block_arch: Dict</em>, <em class="sig-param">self_attn_class: str</em>, <em class="sig-param">pw_layer_type: str</em>, <em class="sig-param">pw_activation_type: str</em>, <em class="sig-param">conv_mod_activation_type: str</em><span class="sig-paren">)</span> &#x2192; espnet.nets.pytorch_backend.conformer.encoder_layer.EncoderLayer<a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/blocks.html#build_conformer_block"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.blocks.build_conformer_block" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">espnet.nets.pytorch_backend.transducer.blocks.</code><code class="sig-name descname">build_conformer_block</code><span class="sig-paren">(</span><em class="sig-param">block: Dict[str, Any], self_attn_class: str, pw_layer_type: str, pw_activation_type: str, conv_mod_activation_type: str</em><span class="sig-paren">)</span> &#x2192; espnet.nets.pytorch_backend.conformer.encoder_layer.EncoderLayer<a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/blocks.html#build_conformer_block"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.blocks.build_conformer_block" title="Permalink to this definition">¶</a></dt>
 <dd><p>Build function for conformer block.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>block_arch</strong> – Conformer block parameters.</p></li>
+<li><p><strong>block</strong> – Conformer block parameters.</p></li>
 <li><p><strong>self_attn_type</strong> – Self-attention module type.</p></li>
 <li><p><strong>pw_layer_type</strong> – Positionwise layer type.</p></li>
 <li><p><strong>pw_activation_type</strong> – Positionwise activation type.</p></li>
@@ -11974,83 +11916,53 @@ conv_subsampling_factor: Subsampling factor in frontend CNN.</p>
 </dd></dl>
 
 <dl class="function">
-<dt id="espnet.nets.pytorch_backend.transducer.blocks.build_input_layer">
-<code class="sig-prename descclassname">espnet.nets.pytorch_backend.transducer.blocks.</code><code class="sig-name descname">build_input_layer</code><span class="sig-paren">(</span><em class="sig-param">input_layer: str</em>, <em class="sig-param">idim: int</em>, <em class="sig-param">odim: int</em>, <em class="sig-param">pos_enc_class: torch.nn.modules.module.Module</em>, <em class="sig-param">dropout_rate_embed: float</em>, <em class="sig-param">dropout_rate: float</em>, <em class="sig-param">pos_dropout_rate: float</em>, <em class="sig-param">padding_idx: int</em><span class="sig-paren">)</span> &#x2192; Tuple[Union[espnet.nets.pytorch_backend.transformer.subsampling.Conv2dSubsampling, espnet.nets.pytorch_backend.transducer.vgg2l.VGG2L, torch.nn.modules.container.Sequential], int]<a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/blocks.html#build_input_layer"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.blocks.build_input_layer" title="Permalink to this definition">¶</a></dt>
-<dd><p>Build input layer.</p>
+<dt id="espnet.nets.pytorch_backend.transducer.blocks.build_conv1d_block">
+<code class="sig-prename descclassname">espnet.nets.pytorch_backend.transducer.blocks.</code><code class="sig-name descname">build_conv1d_block</code><span class="sig-paren">(</span><em class="sig-param">block: Dict[str, Any], block_type: str</em><span class="sig-paren">)</span> &#x2192; espnet.nets.pytorch_backend.transducer.conv1d_nets.CausalConv1d<a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/blocks.html#build_conv1d_block"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.blocks.build_conv1d_block" title="Permalink to this definition">¶</a></dt>
+<dd><p>Build function for causal conv1d block.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>input_layer</strong> – Input layer type.</p></li>
-<li><p><strong>idim</strong> – Input dimension.</p></li>
-<li><p><strong>odim</strong> – Output dimension.</p></li>
-<li><p><strong>pos_enc_class</strong> – Positional encoding class.</p></li>
-<li><p><strong>dropout_rate_embed</strong> – Dropout rate for embedding layer.</p></li>
-<li><p><strong>dropout_rate</strong> – Dropout rate for input layer.</p></li>
-<li><p><strong>pos_dropout_rate</strong> – Dropout rate for positional encoding.</p></li>
-<li><p><strong>padding_idx</strong> – Padding symbol ID for embedding layer.</p></li>
-</ul>
+<dd class="field-odd"><p><strong>block</strong> – CausalConv1d or Conv1D block parameters.</p>
 </dd>
 <dt class="field-even">Returns</dt>
-<dd class="field-even"><p>Input layer module.
-subsampling_factor: subsampling factor.</p>
+<dd class="field-even"><p>Function to create conv1d (encoder) or causal conv1d (decoder) block.</p>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="function">
-<dt id="espnet.nets.pytorch_backend.transducer.blocks.build_tdnn_block">
-<code class="sig-prename descclassname">espnet.nets.pytorch_backend.transducer.blocks.</code><code class="sig-name descname">build_tdnn_block</code><span class="sig-paren">(</span><em class="sig-param">block_arch: Dict</em><span class="sig-paren">)</span> &#x2192; espnet.nets.pytorch_backend.transducer.tdnn.TDNN<a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/blocks.html#build_tdnn_block"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.blocks.build_tdnn_block" title="Permalink to this definition">¶</a></dt>
-<dd><p>Build function for tdnn block.</p>
+<dt id="espnet.nets.pytorch_backend.transducer.blocks.build_input_layer">
+<code class="sig-prename descclassname">espnet.nets.pytorch_backend.transducer.blocks.</code><code class="sig-name descname">build_input_layer</code><span class="sig-paren">(</span><em class="sig-param">block: Dict[str, Any], pos_enc_class: torch.nn.modules.module.Module, padding_idx: int</em><span class="sig-paren">)</span> &#x2192; Tuple[Union[espnet.nets.pytorch_backend.transformer.subsampling.Conv2dSubsampling, espnet.nets.pytorch_backend.transducer.vgg2l.VGG2L, torch.nn.modules.container.Sequential], int]<a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/blocks.html#build_input_layer"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.blocks.build_input_layer" title="Permalink to this definition">¶</a></dt>
+<dd><p>Build input layer.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>block_arch</strong> – TDNN block parameters.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>block</strong> – Architecture definition of input layer.</p></li>
+<li><p><strong>pos_enc_class</strong> – Positional encoding class.</p></li>
+<li><p><strong>padding_idx</strong> – Padding symbol ID for embedding layer (if provided).</p></li>
+</ul>
 </dd>
 <dt class="field-even">Returns</dt>
-<dd class="field-even"><p>function to create tdnn (encoder) block.</p>
+<dd class="field-even"><p>Input layer module.
+subsampling_factor: Subsampling factor.</p>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="function">
 <dt id="espnet.nets.pytorch_backend.transducer.blocks.build_transformer_block">
-<code class="sig-prename descclassname">espnet.nets.pytorch_backend.transducer.blocks.</code><code class="sig-name descname">build_transformer_block</code><span class="sig-paren">(</span><em class="sig-param">net_part: str</em>, <em class="sig-param">block_arch: Dict</em>, <em class="sig-param">pw_layer_type: str</em>, <em class="sig-param">pw_activation_type: str</em><span class="sig-paren">)</span> &#x2192; Union[espnet.nets.pytorch_backend.transformer.encoder_layer.EncoderLayer, espnet.nets.pytorch_backend.transducer.transformer_decoder_layer.TransformerDecoderLayer]<a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/blocks.html#build_transformer_block"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.blocks.build_transformer_block" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">espnet.nets.pytorch_backend.transducer.blocks.</code><code class="sig-name descname">build_transformer_block</code><span class="sig-paren">(</span><em class="sig-param">net_part: str, block: Dict[str, Any], pw_layer_type: str, pw_activation_type: str</em><span class="sig-paren">)</span> &#x2192; Union[espnet.nets.pytorch_backend.transformer.encoder_layer.EncoderLayer, espnet.nets.pytorch_backend.transducer.transformer_decoder_layer.TransformerDecoderLayer]<a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/blocks.html#build_transformer_block"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.blocks.build_transformer_block" title="Permalink to this definition">¶</a></dt>
 <dd><p>Build function for transformer block.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>net_part</strong> – Network part, either ‘encoder’ or ‘decoder’.</p></li>
-<li><p><strong>block_arch</strong> – Transformer block parameters.</p></li>
+<li><p><strong>block</strong> – Transformer block parameters.</p></li>
 <li><p><strong>pw_layer_type</strong> – Positionwise layer type.</p></li>
 <li><p><strong>pw_activation_type</strong> – Positionwise activation type.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
 <dd class="field-even"><p>Function to create transformer (encoder or decoder) block.</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="function">
-<dt id="espnet.nets.pytorch_backend.transducer.blocks.check_and_prepare">
-<code class="sig-prename descclassname">espnet.nets.pytorch_backend.transducer.blocks.</code><code class="sig-name descname">check_and_prepare</code><span class="sig-paren">(</span><em class="sig-param">net_part: str</em>, <em class="sig-param">blocks_arch: List</em>, <em class="sig-param">input_layer_type: str</em><span class="sig-paren">)</span> &#x2192; Tuple[str, int, float, float, int]<a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/blocks.html#check_and_prepare"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.blocks.check_and_prepare" title="Permalink to this definition">¶</a></dt>
-<dd><p>Check consecutive block shapes match and prepare input parameters.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>net_part</strong> – Network part, either ‘encoder’ or ‘decoder’.</p></li>
-<li><p><strong>blocks_arch</strong> – Block architecture (types and parameters) for network part.</p></li>
-<li><p><strong>input_layer_type</strong> – Input layer type.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>Input layer type.
-input_layer_odim: Input layer output dimension.
-input_dropout_rate: Dropout rate for input layer.
-input_pos_dropout_rate: Dropout rate for input layer positional encoding.
-net_out_dim: Network output dimension.</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>input_layer_type</p>
 </dd>
 </dl>
 </dd></dl>
@@ -12077,9 +11989,70 @@ self_attn_class: Self-attention class.</p>
 </dl>
 </dd></dl>
 
+<dl class="function">
+<dt id="espnet.nets.pytorch_backend.transducer.blocks.prepare_body_model">
+<code class="sig-prename descclassname">espnet.nets.pytorch_backend.transducer.blocks.</code><code class="sig-name descname">prepare_body_model</code><span class="sig-paren">(</span><em class="sig-param">net_part: str, blocks: List[Dict[str, Any]]</em><span class="sig-paren">)</span> &#x2192; Tuple[int]<a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/blocks.html#prepare_body_model"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.blocks.prepare_body_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Prepare model body blocks.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>net_part</strong> – Network part, either ‘encoder’ or ‘decoder’.</p></li>
+<li><p><strong>blocks</strong> – Blocks parameters for network part.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Network output dimension.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="espnet.nets.pytorch_backend.transducer.blocks.prepare_input_layer">
+<code class="sig-prename descclassname">espnet.nets.pytorch_backend.transducer.blocks.</code><code class="sig-name descname">prepare_input_layer</code><span class="sig-paren">(</span><em class="sig-param">input_layer_type: str, feats_dim: int, blocks: List[Dict[str, Any]], dropout_rate: float, pos_enc_dropout_rate: float</em><span class="sig-paren">)</span> &#x2192; Dict[str, Any]<a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/blocks.html#prepare_input_layer"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.blocks.prepare_input_layer" title="Permalink to this definition">¶</a></dt>
+<dd><p>Prepare input layer arguments.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_layer_type</strong> – Input layer type.</p></li>
+<li><p><strong>feats_dim</strong> – Dimension of input features.</p></li>
+<li><p><strong>blocks</strong> – Blocks parameters for network part.</p></li>
+<li><p><strong>dropout_rate</strong> – Dropout rate for input layer.</p></li>
+<li><p><strong>pos_enc_dropout_rate</strong> – Dropout rate for input layer pos. enc.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Input block parameters.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>input_block</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="espnet.nets.pytorch_backend.transducer.blocks.verify_block_arguments">
+<code class="sig-prename descclassname">espnet.nets.pytorch_backend.transducer.blocks.</code><code class="sig-name descname">verify_block_arguments</code><span class="sig-paren">(</span><em class="sig-param">net_part: str, block: Dict[str, Any], num_block: int</em><span class="sig-paren">)</span> &#x2192; Tuple[int, int]<a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/blocks.html#verify_block_arguments"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.blocks.verify_block_arguments" title="Permalink to this definition">¶</a></dt>
+<dd><p>Verify block arguments are valid.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>net_part</strong> – Network part, either ‘encoder’ or ‘decoder’.</p></li>
+<li><p><strong>block</strong> – Block parameters.</p></li>
+<li><p><strong>num_block</strong> – Block ID.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Input and output dimension of the block.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>block_io</p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
 <section id="espnet-nets-pytorch-backend-transducer-transformer-decoder-layer">
-<span id="id119"></span><h2>espnet.nets.pytorch_backend.transducer.transformer_decoder_layer<a class="headerlink" href="#espnet-nets-pytorch-backend-transducer-transformer-decoder-layer" title="Permalink to this headline">¶</a></h2>
+<span id="id118"></span><h2>espnet.nets.pytorch_backend.transducer.transformer_decoder_layer<a class="headerlink" href="#espnet-nets-pytorch-backend-transducer-transformer-decoder-layer" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.pytorch_backend.transducer.transformer_decoder_layer"></span><p>Transformer decoder layer definition for custom Transducer model.</p>
 <dl class="class">
 <dt id="espnet.nets.pytorch_backend.transducer.transformer_decoder_layer.TransformerDecoderLayer">
@@ -12122,12 +12095,157 @@ mask: Transformer output mask sequences. (B, U)</p>
 </dd></dl>
 
 </section>
+<section id="espnet-nets-pytorch-backend-transducer-conv1d-nets">
+<span id="id119"></span><h2>espnet.nets.pytorch_backend.transducer.conv1d_nets<a class="headerlink" href="#espnet-nets-pytorch-backend-transducer-conv1d-nets" title="Permalink to this headline">¶</a></h2>
+<span class="target" id="module-espnet.nets.pytorch_backend.transducer.conv1d_nets"></span><p>Convolution networks definition for custom archictecture.</p>
+<dl class="class">
+<dt id="espnet.nets.pytorch_backend.transducer.conv1d_nets.CausalConv1d">
+<em class="property">class </em><code class="sig-prename descclassname">espnet.nets.pytorch_backend.transducer.conv1d_nets.</code><code class="sig-name descname">CausalConv1d</code><span class="sig-paren">(</span><em class="sig-param">idim: int</em>, <em class="sig-param">odim: int</em>, <em class="sig-param">kernel_size: int</em>, <em class="sig-param">stride: int = 1</em>, <em class="sig-param">dilation: int = 1</em>, <em class="sig-param">groups: int = 1</em>, <em class="sig-param">bias: bool = True</em>, <em class="sig-param">batch_norm: bool = False</em>, <em class="sig-param">relu: bool = True</em>, <em class="sig-param">dropout_rate: float = 0.0</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/conv1d_nets.html#CausalConv1d"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.conv1d_nets.CausalConv1d" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
+<p>1D causal convolution module for custom decoder.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>idim</strong> – Input dimension.</p></li>
+<li><p><strong>odim</strong> – Output dimension.</p></li>
+<li><p><strong>kernel_size</strong> – Size of the convolving kernel.</p></li>
+<li><p><strong>stride</strong> – Stride of the convolution.</p></li>
+<li><p><strong>dilation</strong> – Spacing between the kernel points.</p></li>
+<li><p><strong>groups</strong> – Number of blocked connections from input channels to output channels.</p></li>
+<li><p><strong>bias</strong> – Whether to add a learnable bias to the output.</p></li>
+<li><p><strong>batch_norm</strong> – Whether to apply batch normalization.</p></li>
+<li><p><strong>relu</strong> – Whether to pass final output through ReLU activation.</p></li>
+<li><p><strong>dropout_rate</strong> – Dropout rate.</p></li>
+</ul>
+</dd>
+</dl>
+<p>Construct a CausalConv1d object.</p>
+<dl class="method">
+<dt id="espnet.nets.pytorch_backend.transducer.conv1d_nets.CausalConv1d.forward">
+<code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param">sequence: torch.Tensor</em>, <em class="sig-param">mask: torch.Tensor</em>, <em class="sig-param">cache: Optional[torch.Tensor] = None</em><span class="sig-paren">)</span> &#x2192; Tuple[torch.Tensor, torch.Tensor]<a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/conv1d_nets.html#CausalConv1d.forward"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.conv1d_nets.CausalConv1d.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Forward CausalConv1d for custom decoder.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sequence</strong> – CausalConv1d input sequences. (B, U, D_in)</p></li>
+<li><p><strong>mask</strong> – Mask of CausalConv1d input sequences. (B, 1, U)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>CausalConv1d output sequences. (B, sub(U), D_out)
+mask: Mask of CausalConv1d output sequences. (B, 1, sub(U))</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>sequence</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="espnet.nets.pytorch_backend.transducer.conv1d_nets.Conv1d">
+<em class="property">class </em><code class="sig-prename descclassname">espnet.nets.pytorch_backend.transducer.conv1d_nets.</code><code class="sig-name descname">Conv1d</code><span class="sig-paren">(</span><em class="sig-param">idim: int, odim: int, kernel_size: Union[int, Tuple], stride: Union[int, Tuple] = 1, dilation: Union[int, Tuple] = 1, groups: Union[int, Tuple] = 1, bias: bool = True, batch_norm: bool = False, relu: bool = True, dropout_rate: float = 0.0</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/conv1d_nets.html#Conv1d"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.conv1d_nets.Conv1d" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
+<p>1D convolution module for custom encoder.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>idim</strong> – Input dimension.</p></li>
+<li><p><strong>odim</strong> – Output dimension.</p></li>
+<li><p><strong>kernel_size</strong> – Size of the convolving kernel.</p></li>
+<li><p><strong>stride</strong> – Stride of the convolution.</p></li>
+<li><p><strong>dilation</strong> – Spacing between the kernel points.</p></li>
+<li><p><strong>groups</strong> – Number of blocked connections from input channels to output channels.</p></li>
+<li><p><strong>bias</strong> – Whether to add a learnable bias to the output.</p></li>
+<li><p><strong>batch_norm</strong> – Whether to use batch normalization after convolution.</p></li>
+<li><p><strong>relu</strong> – Whether to use a ReLU activation after convolution.</p></li>
+<li><p><strong>dropout_rate</strong> – Dropout rate.</p></li>
+</ul>
+</dd>
+</dl>
+<p>Construct a Conv1d module object.</p>
+<dl class="method">
+<dt id="espnet.nets.pytorch_backend.transducer.conv1d_nets.Conv1d.create_new_mask">
+<code class="sig-name descname">create_new_mask</code><span class="sig-paren">(</span><em class="sig-param">mask: torch.Tensor</em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/conv1d_nets.html#Conv1d.create_new_mask"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.conv1d_nets.Conv1d.create_new_mask" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create new mask.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>mask</strong> – Mask of input sequences. (B, 1, T)</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Mask of output sequences. (B, 1, sub(T))</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>mask</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="espnet.nets.pytorch_backend.transducer.conv1d_nets.Conv1d.create_new_pos_embed">
+<code class="sig-name descname">create_new_pos_embed</code><span class="sig-paren">(</span><em class="sig-param">pos_embed: torch.Tensor</em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/conv1d_nets.html#Conv1d.create_new_pos_embed"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.conv1d_nets.Conv1d.create_new_pos_embed" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create new positional embedding vector.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>pos_embed</strong> – Input sequences positional embedding.
+(B, 2 * (T - 1), D_att)</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>Output sequences positional embedding.</dt><dd><p>(B, 2 * (sub(T) - 1), D_att)</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>pos_embed</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="espnet.nets.pytorch_backend.transducer.conv1d_nets.Conv1d.forward">
+<code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param">sequence: Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]], mask: torch.Tensor</em><span class="sig-paren">)</span> &#x2192; Tuple[Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]], torch.Tensor]<a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/conv1d_nets.html#Conv1d.forward"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.conv1d_nets.Conv1d.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Forward ConvEncoderLayer module object.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sequence</strong> – <p>Input sequences.
+(B, T, D_in)</p>
+<blockquote>
+<div><p>or (B, T, D_in),  (B, 2 * (T - 1), D_att)</p>
+</div></blockquote>
+</p></li>
+<li><p><strong>mask</strong> – Mask of input sequences. (B, 1, T)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>Output sequences.</dt><dd><dl class="simple">
+<dt>(B, sub(T), D_out)</dt><dd><p>or (B, sub(T), D_out),  (B, 2 * (sub(T) - 1), D_att)</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>mask: Mask of output sequences. (B, 1, sub(T))</p>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>sequence</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
 <section id="espnet-nets-pytorch-backend-transducer-custom-decoder">
 <span id="id120"></span><h2>espnet.nets.pytorch_backend.transducer.custom_decoder<a class="headerlink" href="#espnet-nets-pytorch-backend-transducer-custom-decoder" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.pytorch_backend.transducer.custom_decoder"></span><p>Custom decoder definition for Transducer model.</p>
 <dl class="class">
 <dt id="espnet.nets.pytorch_backend.transducer.custom_decoder.CustomDecoder">
-<em class="property">class </em><code class="sig-prename descclassname">espnet.nets.pytorch_backend.transducer.custom_decoder.</code><code class="sig-name descname">CustomDecoder</code><span class="sig-paren">(</span><em class="sig-param">odim: int</em>, <em class="sig-param">dec_arch: List</em>, <em class="sig-param">input_layer: str = 'embed'</em>, <em class="sig-param">repeat_block: int = 0</em>, <em class="sig-param">joint_activation_type: str = 'tanh'</em>, <em class="sig-param">positional_encoding_type: str = 'abs_pos'</em>, <em class="sig-param">positionwise_layer_type: str = 'linear'</em>, <em class="sig-param">positionwise_activation_type: str = 'relu'</em>, <em class="sig-param">dropout_rate_embed: float = 0.0</em>, <em class="sig-param">blank_id: int = 0</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/custom_decoder.html#CustomDecoder"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.custom_decoder.CustomDecoder" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="sig-prename descclassname">espnet.nets.pytorch_backend.transducer.custom_decoder.</code><code class="sig-name descname">CustomDecoder</code><span class="sig-paren">(</span><em class="sig-param">odim: int</em>, <em class="sig-param">dec_arch: List</em>, <em class="sig-param">input_layer: str = 'embed'</em>, <em class="sig-param">repeat_block: int = 0</em>, <em class="sig-param">joint_activation_type: str = 'tanh'</em>, <em class="sig-param">positional_encoding_type: str = 'abs_pos'</em>, <em class="sig-param">positionwise_layer_type: str = 'linear'</em>, <em class="sig-param">positionwise_activation_type: str = 'relu'</em>, <em class="sig-param">input_layer_dropout_rate: float = 0.0</em>, <em class="sig-param">blank_id: int = 0</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/custom_decoder.html#CustomDecoder"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.custom_decoder.CustomDecoder" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#espnet.nets.transducer_decoder_interface.TransducerDecoderInterface" title="espnet.nets.transducer_decoder_interface.TransducerDecoderInterface"><code class="xref py py-class docutils literal notranslate"><span class="pre">espnet.nets.transducer_decoder_interface.TransducerDecoderInterface</span></code></a>, <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
 <p>Custom decoder module for Transducer model.</p>
 <dl class="field-list simple">
@@ -12141,7 +12259,7 @@ mask: Transformer output mask sequences. (B, U)</p>
 <li><p><strong>positional_encoding_type</strong> – Positional encoding type.</p></li>
 <li><p><strong>positionwise_layer_type</strong> – Positionwise layer type.</p></li>
 <li><p><strong>positionwise_activation_type</strong> – Positionwise activation type.</p></li>
-<li><p><strong>dropout_rate_embed</strong> – Dropout rate for embedding layer.</p></li>
+<li><p><strong>input_layer_dropout_rate</strong> – Dropout rate for input layer.</p></li>
 <li><p><strong>blank_id</strong> – Blank symbol ID.</p></li>
 </ul>
 </dd>
@@ -12286,96 +12404,8 @@ lm_label: Label ID for LM. (1,)</p>
 </dd></dl>
 
 </section>
-<section id="espnet-nets-pytorch-backend-transducer-tdnn">
-<span id="id121"></span><h2>espnet.nets.pytorch_backend.transducer.tdnn<a class="headerlink" href="#espnet-nets-pytorch-backend-transducer-tdnn" title="Permalink to this headline">¶</a></h2>
-<span class="target" id="module-espnet.nets.pytorch_backend.transducer.tdnn"></span><p>TDNN modules definition for custom encoder.</p>
-<dl class="class">
-<dt id="espnet.nets.pytorch_backend.transducer.tdnn.TDNN">
-<em class="property">class </em><code class="sig-prename descclassname">espnet.nets.pytorch_backend.transducer.tdnn.</code><code class="sig-name descname">TDNN</code><span class="sig-paren">(</span><em class="sig-param">idim: int</em>, <em class="sig-param">odim: int</em>, <em class="sig-param">ctx_size: int = 5</em>, <em class="sig-param">dilation: int = 1</em>, <em class="sig-param">stride: int = 1</em>, <em class="sig-param">batch_norm: bool = False</em>, <em class="sig-param">relu: bool = True</em>, <em class="sig-param">dropout_rate: float = 0.0</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/tdnn.html#TDNN"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.tdnn.TDNN" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
-<p>TDNN module with symmetric context.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>idim</strong> – Input dimension.</p></li>
-<li><p><strong>odim</strong> – Output dimension.</p></li>
-<li><p><strong>ctx_size</strong> – Size of the context window.</p></li>
-<li><p><strong>stride</strong> – Stride of the sliding blocks.</p></li>
-<li><p><strong>dilation</strong> – Control the stride of elements within the neighborhood.</p></li>
-<li><p><strong>batch_norm</strong> – Whether to apply batch normalization.</p></li>
-<li><p><strong>relu</strong> – Whether to use a final non-linearity layer (ReLU).</p></li>
-</ul>
-</dd>
-</dl>
-<p>Construct a TDNN object.</p>
-<dl class="method">
-<dt id="espnet.nets.pytorch_backend.transducer.tdnn.TDNN.create_outputs">
-<code class="sig-name descname">create_outputs</code><span class="sig-paren">(</span><em class="sig-param">sequence: torch.Tensor</em>, <em class="sig-param">pos_emb: torch.Tensor</em>, <em class="sig-param">mask: torch.Tensor</em>, <em class="sig-param">bidir_pos_emb: bool</em><span class="sig-paren">)</span> &#x2192; Tuple[Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]], torch.Tensor]<a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/tdnn.html#TDNN.create_outputs"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.tdnn.TDNN.create_outputs" title="Permalink to this definition">¶</a></dt>
-<dd><p>Create outputs with subsampled version of pos_emb and masks.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>sequence</strong> – TDNN output sequences. (B, sub(T), D_out)</p></li>
-<li><p><strong>pos_emb</strong> – Input positional embedding.
-(B, T, att_dim) or (B, 2 * (T - 1), D_att)</p></li>
-<li><p><strong>mask</strong> – Mask of TDNN input sequences. (B, 1, T)</p></li>
-<li><p><strong>bidir_pos_emb</strong> – Whether to use bidirectional positional embedding.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p><p>TDNN output sequences. (B, sub(T), D_out)
-pos_emb: Output positional embedding.</p>
-<blockquote>
-<div><p>(B, sub(T), D_att) or (B, 2 * (sub(T) - 1), D_att)</p>
-</div></blockquote>
-<p>mask: Mask of TDNN output sequences. (B, 1, sub(T))</p>
-</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>sequence</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="method">
-<dt id="espnet.nets.pytorch_backend.transducer.tdnn.TDNN.forward">
-<code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param">sequence: Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]], mask: torch.Tensor</em><span class="sig-paren">)</span> &#x2192; Tuple[Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]], torch.Tensor]<a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/transducer/tdnn.html#TDNN.forward"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.transducer.tdnn.TDNN.forward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Forward TDNN for custom encoder.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>sequence</strong> – <p>TDNN input sequences.
-(B, T, D_in) or ((B, T, D_in), (B, T, D_att))</p>
-<blockquote>
-<div><p>or ((B, T, D_in), (B, 2 * (T - 1), D_att))</p>
-</div></blockquote>
-</p></li>
-<li><p><strong>mask</strong> – Mask of TDNN input sequences. (B, 1, T)</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p><dl class="simple">
-<dt>TDNN output sequences.</dt><dd><dl class="simple">
-<dt>(B, sub(T), D_out)</dt><dd><p>or ((B, sub(T), D_out), (B, sub(T), att_dim))
-or ((B, T, D_out), (B, 2 * (sub(T) - 1), D_att)</p>
-</dd>
-</dl>
-</dd>
-</dl>
-<p>mask: Mask of TDNN output sequences. (B, 1, sub(T))</p>
-</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>sequence</p>
-</dd>
-</dl>
-</dd></dl>
-
-</dd></dl>
-
-</section>
 <section id="espnet-nets-pytorch-backend-transducer-utils">
-<span id="id122"></span><h2>espnet.nets.pytorch_backend.transducer.utils<a class="headerlink" href="#espnet-nets-pytorch-backend-transducer-utils" title="Permalink to this headline">¶</a></h2>
+<span id="id121"></span><h2>espnet.nets.pytorch_backend.transducer.utils<a class="headerlink" href="#espnet-nets-pytorch-backend-transducer-utils" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.pytorch_backend.transducer.utils"></span><p>Utility functions for Transducer models.</p>
 <dl class="function">
 <dt id="espnet.nets.pytorch_backend.transducer.utils.check_batch_states">
@@ -12634,7 +12664,7 @@ and a prune-by-value method. Where K is equal to beam_size + beta.</p>
 
 </section>
 <section id="espnet-nets-pytorch-backend-rnn-argument">
-<span id="id123"></span><h2>espnet.nets.pytorch_backend.rnn.argument<a class="headerlink" href="#espnet-nets-pytorch-backend-rnn-argument" title="Permalink to this headline">¶</a></h2>
+<span id="id122"></span><h2>espnet.nets.pytorch_backend.rnn.argument<a class="headerlink" href="#espnet-nets-pytorch-backend-rnn-argument" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.pytorch_backend.rnn.argument"></span><p>Conformer common arguments.</p>
 <dl class="function">
 <dt id="espnet.nets.pytorch_backend.rnn.argument.add_arguments_rnn_attention_common">
@@ -12656,11 +12686,11 @@ and a prune-by-value method. Where K is equal to beam_size + beta.</p>
 
 </section>
 <section id="espnet-nets-pytorch-backend-rnn-init">
-<span id="id124"></span><h2>espnet.nets.pytorch_backend.rnn.__init__<a class="headerlink" href="#espnet-nets-pytorch-backend-rnn-init" title="Permalink to this headline">¶</a></h2>
+<span id="id123"></span><h2>espnet.nets.pytorch_backend.rnn.__init__<a class="headerlink" href="#espnet-nets-pytorch-backend-rnn-init" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.pytorch_backend.rnn.__init__"></span><p>Initialize sub package.</p>
 </section>
 <section id="espnet-nets-pytorch-backend-rnn-encoders">
-<span id="id125"></span><h2>espnet.nets.pytorch_backend.rnn.encoders<a class="headerlink" href="#espnet-nets-pytorch-backend-rnn-encoders" title="Permalink to this headline">¶</a></h2>
+<span id="id124"></span><h2>espnet.nets.pytorch_backend.rnn.encoders<a class="headerlink" href="#espnet-nets-pytorch-backend-rnn-encoders" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.pytorch_backend.rnn.encoders"></span><dl class="class">
 <dt id="espnet.nets.pytorch_backend.rnn.encoders.Encoder">
 <em class="property">class </em><code class="sig-prename descclassname">espnet.nets.pytorch_backend.rnn.encoders.</code><code class="sig-name descname">Encoder</code><span class="sig-paren">(</span><em class="sig-param">etype</em>, <em class="sig-param">idim</em>, <em class="sig-param">elayers</em>, <em class="sig-param">eunits</em>, <em class="sig-param">eprojs</em>, <em class="sig-param">subsample</em>, <em class="sig-param">dropout</em>, <em class="sig-param">in_channel=1</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/espnet/nets/pytorch_backend/rnn/encoders.html#Encoder"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.pytorch_backend.rnn.encoders.Encoder" title="Permalink to this definition">¶</a></dt>
@@ -12848,7 +12878,7 @@ List of subsample factors of each encoder.</p>
 
 </section>
 <section id="espnet-nets-pytorch-backend-rnn-decoders">
-<span id="id126"></span><h2>espnet.nets.pytorch_backend.rnn.decoders<a class="headerlink" href="#espnet-nets-pytorch-backend-rnn-decoders" title="Permalink to this headline">¶</a></h2>
+<span id="id125"></span><h2>espnet.nets.pytorch_backend.rnn.decoders<a class="headerlink" href="#espnet-nets-pytorch-backend-rnn-decoders" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.pytorch_backend.rnn.decoders"></span><p>RNN decoder module.</p>
 <dl class="class">
 <dt id="espnet.nets.pytorch_backend.rnn.decoders.Decoder">
@@ -13039,7 +13069,7 @@ and next state for ys</p>
 
 </section>
 <section id="espnet-nets-pytorch-backend-rnn-attentions">
-<span id="id127"></span><h2>espnet.nets.pytorch_backend.rnn.attentions<a class="headerlink" href="#espnet-nets-pytorch-backend-rnn-attentions" title="Permalink to this headline">¶</a></h2>
+<span id="id126"></span><h2>espnet.nets.pytorch_backend.rnn.attentions<a class="headerlink" href="#espnet-nets-pytorch-backend-rnn-attentions" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.pytorch_backend.rnn.attentions"></span><p>Attention modules for RNN.</p>
 <dl class="class">
 <dt id="espnet.nets.pytorch_backend.rnn.attentions.AttAdd">
@@ -13911,7 +13941,7 @@ and not store pre_compute_k and pre_compute_v</p></li>
 
 </section>
 <section id="espnet-nets-chainer-backend-deterministic-embed-id">
-<span id="id128"></span><h2>espnet.nets.chainer_backend.deterministic_embed_id<a class="headerlink" href="#espnet-nets-chainer-backend-deterministic-embed-id" title="Permalink to this headline">¶</a></h2>
+<span id="id127"></span><h2>espnet.nets.chainer_backend.deterministic_embed_id<a class="headerlink" href="#espnet-nets-chainer-backend-deterministic-embed-id" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.chainer_backend.deterministic_embed_id"></span><dl class="class">
 <dt id="espnet.nets.chainer_backend.deterministic_embed_id.EmbedID">
 <em class="property">class </em><code class="sig-prename descclassname">espnet.nets.chainer_backend.deterministic_embed_id.</code><code class="sig-name descname">EmbedID</code><span class="sig-paren">(</span><em class="sig-param">in_size</em>, <em class="sig-param">out_size</em>, <em class="sig-param">initialW=None</em>, <em class="sig-param">ignore_label=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/espnet/nets/chainer_backend/deterministic_embed_id.html#EmbedID"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.chainer_backend.deterministic_embed_id.EmbedID" title="Permalink to this definition">¶</a></dt>
@@ -14188,7 +14218,7 @@ of return value is filled with 0.</p></li>
 
 </section>
 <section id="espnet-nets-chainer-backend-ctc">
-<span id="id129"></span><h2>espnet.nets.chainer_backend.ctc<a class="headerlink" href="#espnet-nets-chainer-backend-ctc" title="Permalink to this headline">¶</a></h2>
+<span id="id128"></span><h2>espnet.nets.chainer_backend.ctc<a class="headerlink" href="#espnet-nets-chainer-backend-ctc" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.chainer_backend.ctc"></span><dl class="class">
 <dt id="espnet.nets.chainer_backend.ctc.CTC">
 <em class="property">class </em><code class="sig-prename descclassname">espnet.nets.chainer_backend.ctc.</code><code class="sig-name descname">CTC</code><span class="sig-paren">(</span><em class="sig-param">odim</em>, <em class="sig-param">eprojs</em>, <em class="sig-param">dropout_rate</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/espnet/nets/chainer_backend/ctc.html#CTC"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.chainer_backend.ctc.CTC" title="Permalink to this definition">¶</a></dt>
@@ -14291,7 +14321,7 @@ of return value is filled with 0.</p></li>
 
 </section>
 <section id="espnet-nets-chainer-backend-asr-interface">
-<span id="id130"></span><h2>espnet.nets.chainer_backend.asr_interface<a class="headerlink" href="#espnet-nets-chainer-backend-asr-interface" title="Permalink to this headline">¶</a></h2>
+<span id="id129"></span><h2>espnet.nets.chainer_backend.asr_interface<a class="headerlink" href="#espnet-nets-chainer-backend-asr-interface" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.chainer_backend.asr_interface"></span><p>ASR Interface module.</p>
 <dl class="class">
 <dt id="espnet.nets.chainer_backend.asr_interface.ChainerASRInterface">
@@ -14326,7 +14356,7 @@ of return value is filled with 0.</p></li>
 
 </section>
 <section id="espnet-nets-chainer-backend-e2e-asr-transformer">
-<span id="id131"></span><h2>espnet.nets.chainer_backend.e2e_asr_transformer<a class="headerlink" href="#espnet-nets-chainer-backend-e2e-asr-transformer" title="Permalink to this headline">¶</a></h2>
+<span id="id130"></span><h2>espnet.nets.chainer_backend.e2e_asr_transformer<a class="headerlink" href="#espnet-nets-chainer-backend-e2e-asr-transformer" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.chainer_backend.e2e_asr_transformer"></span><p>Transformer-based model for End-to-end ASR.</p>
 <dl class="class">
 <dt id="espnet.nets.chainer_backend.e2e_asr_transformer.E2E">
@@ -14509,11 +14539,11 @@ chainer.Variable (Optional): Output of the encoder.</p>
 
 </section>
 <section id="espnet-nets-chainer-backend-init">
-<span id="id132"></span><h2>espnet.nets.chainer_backend.__init__<a class="headerlink" href="#espnet-nets-chainer-backend-init" title="Permalink to this headline">¶</a></h2>
+<span id="id131"></span><h2>espnet.nets.chainer_backend.__init__<a class="headerlink" href="#espnet-nets-chainer-backend-init" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.chainer_backend.__init__"></span><p>Initialize sub package.</p>
 </section>
 <section id="espnet-nets-chainer-backend-e2e-asr">
-<span id="id133"></span><h2>espnet.nets.chainer_backend.e2e_asr<a class="headerlink" href="#espnet-nets-chainer-backend-e2e-asr" title="Permalink to this headline">¶</a></h2>
+<span id="id132"></span><h2>espnet.nets.chainer_backend.e2e_asr<a class="headerlink" href="#espnet-nets-chainer-backend-e2e-asr" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.chainer_backend.e2e_asr"></span><p>RNN sequence-to-sequence speech recognition model (chainer).</p>
 <dl class="class">
 <dt id="espnet.nets.chainer_backend.e2e_asr.E2E">
@@ -14643,10 +14673,10 @@ float (optional): Accuracy.</p>
 
 </section>
 <section id="espnet-nets-chainer-backend-nets-utils">
-<span id="id134"></span><h2>espnet.nets.chainer_backend.nets_utils<a class="headerlink" href="#espnet-nets-chainer-backend-nets-utils" title="Permalink to this headline">¶</a></h2>
+<span id="id133"></span><h2>espnet.nets.chainer_backend.nets_utils<a class="headerlink" href="#espnet-nets-chainer-backend-nets-utils" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.chainer_backend.nets_utils"></span></section>
 <section id="espnet-nets-chainer-backend-transformer-training">
-<span id="id135"></span><h2>espnet.nets.chainer_backend.transformer.training<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-training" title="Permalink to this headline">¶</a></h2>
+<span id="id134"></span><h2>espnet.nets.chainer_backend.transformer.training<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-training" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.chainer_backend.transformer.training"></span><p>Class Declaration of Transformer’s Training Subprocess.</p>
 <dl class="class">
 <dt id="espnet.nets.chainer_backend.transformer.training.CustomConverter">
@@ -14805,7 +14835,7 @@ used.</p></li>
 
 </section>
 <section id="espnet-nets-chainer-backend-transformer-attention">
-<span id="id136"></span><h2>espnet.nets.chainer_backend.transformer.attention<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-attention" title="Permalink to this headline">¶</a></h2>
+<span id="id135"></span><h2>espnet.nets.chainer_backend.transformer.attention<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-attention" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.chainer_backend.transformer.attention"></span><p>Class Declaration of Transformer’s Attention.</p>
 <dl class="class">
 <dt id="espnet.nets.chainer_backend.transformer.attention.MultiHeadAttention">
@@ -14853,7 +14883,7 @@ used.</p></li>
 
 </section>
 <section id="espnet-nets-chainer-backend-transformer-ctc">
-<span id="id137"></span><h2>espnet.nets.chainer_backend.transformer.ctc<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-ctc" title="Permalink to this headline">¶</a></h2>
+<span id="id136"></span><h2>espnet.nets.chainer_backend.transformer.ctc<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-ctc" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.chainer_backend.transformer.ctc"></span><p>Class Declaration of Transformer’s CTC.</p>
 <dl class="class">
 <dt id="espnet.nets.chainer_backend.transformer.ctc.CTC">
@@ -14962,7 +14992,7 @@ used.</p></li>
 
 </section>
 <section id="espnet-nets-chainer-backend-transformer-positionwise-feed-forward">
-<span id="id138"></span><h2>espnet.nets.chainer_backend.transformer.positionwise_feed_forward<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-positionwise-feed-forward" title="Permalink to this headline">¶</a></h2>
+<span id="id137"></span><h2>espnet.nets.chainer_backend.transformer.positionwise_feed_forward<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-positionwise-feed-forward" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.chainer_backend.transformer.positionwise_feed_forward"></span><p>Class Declaration of Transformer’s Positionwise Feedforward.</p>
 <dl class="class">
 <dt id="espnet.nets.chainer_backend.transformer.positionwise_feed_forward.PositionwiseFeedForward">
@@ -14988,7 +15018,7 @@ used.</p></li>
 
 </section>
 <section id="espnet-nets-chainer-backend-transformer-layer-norm">
-<span id="id139"></span><h2>espnet.nets.chainer_backend.transformer.layer_norm<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-layer-norm" title="Permalink to this headline">¶</a></h2>
+<span id="id138"></span><h2>espnet.nets.chainer_backend.transformer.layer_norm<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-layer-norm" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.chainer_backend.transformer.layer_norm"></span><p>Class Declaration of Transformer’s Label Smootion loss.</p>
 <dl class="class">
 <dt id="espnet.nets.chainer_backend.transformer.layer_norm.LayerNorm">
@@ -15000,11 +15030,11 @@ used.</p></li>
 
 </section>
 <section id="espnet-nets-chainer-backend-transformer-init">
-<span id="id140"></span><h2>espnet.nets.chainer_backend.transformer.__init__<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-init" title="Permalink to this headline">¶</a></h2>
+<span id="id139"></span><h2>espnet.nets.chainer_backend.transformer.__init__<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-init" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.chainer_backend.transformer.__init__"></span><p>Initialize sub package.</p>
 </section>
 <section id="espnet-nets-chainer-backend-transformer-embedding">
-<span id="id141"></span><h2>espnet.nets.chainer_backend.transformer.embedding<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-embedding" title="Permalink to this headline">¶</a></h2>
+<span id="id140"></span><h2>espnet.nets.chainer_backend.transformer.embedding<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-embedding" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.chainer_backend.transformer.embedding"></span><p>Class Declaration of Transformer’s Positional Encoding.</p>
 <dl class="class">
 <dt id="espnet.nets.chainer_backend.transformer.embedding.PositionalEncoding">
@@ -15031,7 +15061,7 @@ used.</p></li>
 
 </section>
 <section id="espnet-nets-chainer-backend-transformer-subsampling">
-<span id="id142"></span><h2>espnet.nets.chainer_backend.transformer.subsampling<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-subsampling" title="Permalink to this headline">¶</a></h2>
+<span id="id141"></span><h2>espnet.nets.chainer_backend.transformer.subsampling<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-subsampling" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.chainer_backend.transformer.subsampling"></span><p>Class Declaration of Transformer’s Input layers.</p>
 <dl class="class">
 <dt id="espnet.nets.chainer_backend.transformer.subsampling.Conv2dSubsampling">
@@ -15097,7 +15127,7 @@ used.</p></li>
 
 </section>
 <section id="espnet-nets-chainer-backend-transformer-encoder">
-<span id="id143"></span><h2>espnet.nets.chainer_backend.transformer.encoder<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-encoder" title="Permalink to this headline">¶</a></h2>
+<span id="id142"></span><h2>espnet.nets.chainer_backend.transformer.encoder<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-encoder" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.chainer_backend.transformer.encoder"></span><p>Class Declaration of Transformer’s Encoder.</p>
 <dl class="class">
 <dt id="espnet.nets.chainer_backend.transformer.encoder.Encoder">
@@ -15154,7 +15184,7 @@ chainer.Variable: Batch of lengths of each encoder outputs.</p>
 
 </section>
 <section id="espnet-nets-chainer-backend-transformer-mask">
-<span id="id144"></span><h2>espnet.nets.chainer_backend.transformer.mask<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-mask" title="Permalink to this headline">¶</a></h2>
+<span id="id143"></span><h2>espnet.nets.chainer_backend.transformer.mask<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-mask" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.chainer_backend.transformer.mask"></span><p>Create mask for subsequent steps.</p>
 <dl class="function">
 <dt id="espnet.nets.chainer_backend.transformer.mask.make_history_mask">
@@ -15175,7 +15205,7 @@ chainer.Variable: Batch of lengths of each encoder outputs.</p>
 
 </section>
 <section id="espnet-nets-chainer-backend-transformer-decoder-layer">
-<span id="id145"></span><h2>espnet.nets.chainer_backend.transformer.decoder_layer<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-decoder-layer" title="Permalink to this headline">¶</a></h2>
+<span id="id144"></span><h2>espnet.nets.chainer_backend.transformer.decoder_layer<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-decoder-layer" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.chainer_backend.transformer.decoder_layer"></span><p>Class Declaration of Transformer’s Decoder Block.</p>
 <dl class="class">
 <dt id="espnet.nets.chainer_backend.transformer.decoder_layer.DecoderLayer">
@@ -15217,7 +15247,7 @@ chainer.Variable: Batch of lengths of each encoder outputs.</p>
 
 </section>
 <section id="espnet-nets-chainer-backend-transformer-label-smoothing-loss">
-<span id="id146"></span><h2>espnet.nets.chainer_backend.transformer.label_smoothing_loss<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-label-smoothing-loss" title="Permalink to this headline">¶</a></h2>
+<span id="id145"></span><h2>espnet.nets.chainer_backend.transformer.label_smoothing_loss<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-label-smoothing-loss" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.chainer_backend.transformer.label_smoothing_loss"></span><p>Class Declaration of Transformer’s Label Smootion loss.</p>
 <dl class="class">
 <dt id="espnet.nets.chainer_backend.transformer.label_smoothing_loss.LabelSmoothingLoss">
@@ -15258,7 +15288,7 @@ chainer.Variable: Batch of lengths of each encoder outputs.</p>
 
 </section>
 <section id="espnet-nets-chainer-backend-transformer-encoder-layer">
-<span id="id147"></span><h2>espnet.nets.chainer_backend.transformer.encoder_layer<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-encoder-layer" title="Permalink to this headline">¶</a></h2>
+<span id="id146"></span><h2>espnet.nets.chainer_backend.transformer.encoder_layer<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-encoder-layer" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.chainer_backend.transformer.encoder_layer"></span><p>Class Declaration of Transformer’s Encoder Block.</p>
 <dl class="class">
 <dt id="espnet.nets.chainer_backend.transformer.encoder_layer.EncoderLayer">
@@ -15286,7 +15316,7 @@ chainer.Variable: Batch of lengths of each encoder outputs.</p>
 
 </section>
 <section id="espnet-nets-chainer-backend-transformer-decoder">
-<span id="id148"></span><h2>espnet.nets.chainer_backend.transformer.decoder<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-decoder" title="Permalink to this headline">¶</a></h2>
+<span id="id147"></span><h2>espnet.nets.chainer_backend.transformer.decoder<a class="headerlink" href="#espnet-nets-chainer-backend-transformer-decoder" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.chainer_backend.transformer.decoder"></span><p>Class Declaration of Transformer’s Decoder.</p>
 <dl class="class">
 <dt id="espnet.nets.chainer_backend.transformer.decoder.Decoder">
@@ -15360,7 +15390,7 @@ chainer.Variable: Batch of lengths of each encoder outputs.</p>
 
 </section>
 <section id="espnet-nets-chainer-backend-rnn-training">
-<span id="id149"></span><h2>espnet.nets.chainer_backend.rnn.training<a class="headerlink" href="#espnet-nets-chainer-backend-rnn-training" title="Permalink to this headline">¶</a></h2>
+<span id="id148"></span><h2>espnet.nets.chainer_backend.rnn.training<a class="headerlink" href="#espnet-nets-chainer-backend-rnn-training" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.chainer_backend.rnn.training"></span><dl class="class">
 <dt id="espnet.nets.chainer_backend.rnn.training.CustomConverter">
 <em class="property">class </em><code class="sig-prename descclassname">espnet.nets.chainer_backend.rnn.training.</code><code class="sig-name descname">CustomConverter</code><span class="sig-paren">(</span><em class="sig-param">subsampling_factor=1</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/espnet/nets/chainer_backend/rnn/training.html#CustomConverter"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.chainer_backend.rnn.training.CustomConverter" title="Permalink to this definition">¶</a></dt>
@@ -15487,11 +15517,11 @@ updates of parameters.</p>
 
 </section>
 <section id="espnet-nets-chainer-backend-rnn-init">
-<span id="id150"></span><h2>espnet.nets.chainer_backend.rnn.__init__<a class="headerlink" href="#espnet-nets-chainer-backend-rnn-init" title="Permalink to this headline">¶</a></h2>
+<span id="id149"></span><h2>espnet.nets.chainer_backend.rnn.__init__<a class="headerlink" href="#espnet-nets-chainer-backend-rnn-init" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.chainer_backend.rnn.__init__"></span><p>Initialize sub package.</p>
 </section>
 <section id="espnet-nets-chainer-backend-rnn-encoders">
-<span id="id151"></span><h2>espnet.nets.chainer_backend.rnn.encoders<a class="headerlink" href="#espnet-nets-chainer-backend-rnn-encoders" title="Permalink to this headline">¶</a></h2>
+<span id="id150"></span><h2>espnet.nets.chainer_backend.rnn.encoders<a class="headerlink" href="#espnet-nets-chainer-backend-rnn-encoders" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.chainer_backend.rnn.encoders"></span><dl class="class">
 <dt id="espnet.nets.chainer_backend.rnn.encoders.Encoder">
 <em class="property">class </em><code class="sig-prename descclassname">espnet.nets.chainer_backend.rnn.encoders.</code><code class="sig-name descname">Encoder</code><span class="sig-paren">(</span><em class="sig-param">etype</em>, <em class="sig-param">idim</em>, <em class="sig-param">elayers</em>, <em class="sig-param">eunits</em>, <em class="sig-param">eprojs</em>, <em class="sig-param">subsample</em>, <em class="sig-param">dropout</em>, <em class="sig-param">in_channel=1</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/espnet/nets/chainer_backend/rnn/encoders.html#Encoder"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.chainer_backend.rnn.encoders.Encoder" title="Permalink to this definition">¶</a></dt>
@@ -15583,7 +15613,7 @@ updates of parameters.</p>
 
 </section>
 <section id="espnet-nets-chainer-backend-rnn-decoders">
-<span id="id152"></span><h2>espnet.nets.chainer_backend.rnn.decoders<a class="headerlink" href="#espnet-nets-chainer-backend-rnn-decoders" title="Permalink to this headline">¶</a></h2>
+<span id="id151"></span><h2>espnet.nets.chainer_backend.rnn.decoders<a class="headerlink" href="#espnet-nets-chainer-backend-rnn-decoders" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.chainer_backend.rnn.decoders"></span><dl class="class">
 <dt id="espnet.nets.chainer_backend.rnn.decoders.Decoder">
 <em class="property">class </em><code class="sig-prename descclassname">espnet.nets.chainer_backend.rnn.decoders.</code><code class="sig-name descname">Decoder</code><span class="sig-paren">(</span><em class="sig-param">eprojs</em>, <em class="sig-param">odim</em>, <em class="sig-param">dtype</em>, <em class="sig-param">dlayers</em>, <em class="sig-param">dunits</em>, <em class="sig-param">sos</em>, <em class="sig-param">eos</em>, <em class="sig-param">att</em>, <em class="sig-param">verbose=0</em>, <em class="sig-param">char_list=None</em>, <em class="sig-param">labeldist=None</em>, <em class="sig-param">lsm_weight=0.0</em>, <em class="sig-param">sampling_probability=0.0</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/espnet/nets/chainer_backend/rnn/decoders.html#Decoder"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.chainer_backend.rnn.decoders.Decoder" title="Permalink to this definition">¶</a></dt>
@@ -15685,7 +15715,7 @@ updates of parameters.</p>
 
 </section>
 <section id="espnet-nets-chainer-backend-rnn-attentions">
-<span id="id153"></span><h2>espnet.nets.chainer_backend.rnn.attentions<a class="headerlink" href="#espnet-nets-chainer-backend-rnn-attentions" title="Permalink to this headline">¶</a></h2>
+<span id="id152"></span><h2>espnet.nets.chainer_backend.rnn.attentions<a class="headerlink" href="#espnet-nets-chainer-backend-rnn-attentions" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.chainer_backend.rnn.attentions"></span><dl class="class">
 <dt id="espnet.nets.chainer_backend.rnn.attentions.AttDot">
 <em class="property">class </em><code class="sig-prename descclassname">espnet.nets.chainer_backend.rnn.attentions.</code><code class="sig-name descname">AttDot</code><span class="sig-paren">(</span><em class="sig-param">eprojs</em>, <em class="sig-param">dunits</em>, <em class="sig-param">att_dim</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/espnet/nets/chainer_backend/rnn/attentions.html#AttDot"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet.nets.chainer_backend.rnn.attentions.AttDot" title="Permalink to this definition">¶</a></dt>
@@ -15766,7 +15796,7 @@ attention-based models.</p>
 
 </section>
 <section id="espnet-nets-scorers-ctc">
-<span id="id154"></span><h2>espnet.nets.scorers.ctc<a class="headerlink" href="#espnet-nets-scorers-ctc" title="Permalink to this headline">¶</a></h2>
+<span id="id153"></span><h2>espnet.nets.scorers.ctc<a class="headerlink" href="#espnet-nets-scorers-ctc" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.scorers.ctc"></span><p>ScorerInterface implementation for CTC.</p>
 <dl class="class">
 <dt id="espnet.nets.scorers.ctc.CTCPrefixScorer">
@@ -15905,7 +15935,7 @@ and next state for ys</p>
 
 </section>
 <section id="espnet-nets-scorers-ngram">
-<span id="id155"></span><h2>espnet.nets.scorers.ngram<a class="headerlink" href="#espnet-nets-scorers-ngram" title="Permalink to this headline">¶</a></h2>
+<span id="id154"></span><h2>espnet.nets.scorers.ngram<a class="headerlink" href="#espnet-nets-scorers-ngram" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.scorers.ngram"></span><p>Ngram lm implement.</p>
 <dl class="class">
 <dt id="espnet.nets.scorers.ngram.NgramFullScorer">
@@ -16049,11 +16079,11 @@ and next state list for ys.</p>
 
 </section>
 <section id="espnet-nets-scorers-init">
-<span id="id156"></span><h2>espnet.nets.scorers.__init__<a class="headerlink" href="#espnet-nets-scorers-init" title="Permalink to this headline">¶</a></h2>
+<span id="id155"></span><h2>espnet.nets.scorers.__init__<a class="headerlink" href="#espnet-nets-scorers-init" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.scorers.__init__"></span><p>Initialize sub package.</p>
 </section>
 <section id="espnet-nets-scorers-length-bonus">
-<span id="id157"></span><h2>espnet.nets.scorers.length_bonus<a class="headerlink" href="#espnet-nets-scorers-length-bonus" title="Permalink to this headline">¶</a></h2>
+<span id="id156"></span><h2>espnet.nets.scorers.length_bonus<a class="headerlink" href="#espnet-nets-scorers-length-bonus" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet.nets.scorers.length_bonus"></span><p>Length bonus module.</p>
 <dl class="class">
 <dt id="espnet.nets.scorers.length_bonus.LengthBonus">
