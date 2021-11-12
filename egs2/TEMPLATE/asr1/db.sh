@@ -32,6 +32,7 @@ LIBRISPEECH=
 MINI_LIBRISPEECH=downloads
 LIBRITTS=
 LJSPEECH=downloads
+L3DAS22=
 NSC=
 JSSS=downloads
 JSUT=downloads
