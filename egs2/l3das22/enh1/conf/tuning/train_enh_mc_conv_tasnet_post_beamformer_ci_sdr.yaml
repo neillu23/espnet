@@ -29,7 +29,14 @@ scheduler_conf:
     patience: 3
 model_conf:
     loss_type: ci_sdr
-    post_beamforming: mvdr_souden
+    post_beamforming: True
+    post_beamforming_args:
+        beamformer_type: mvdr_souden
+        diagonal_loading: True
+        diag_eps: 1.0e-07
+        mask_flooring: False
+        flooring_thres: 1.0e-06
+        use_torch_solver: True
     mask_type: PSM^2
     ref_channel: 4
     n_fft: 512

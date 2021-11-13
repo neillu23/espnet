@@ -19,6 +19,7 @@ from espnet2.enh.layers.dnn_beamformer import DNN_Beamformer
 from espnet2.enh.separator.abs_separator import AbsSeparator
 from espnet2.torch_utils.device_funcs import force_gatherable
 from espnet2.train.abs_espnet_model import AbsESPnetModel
+from espnet2.utils.get_default_kwargs import get_default_kwargs
 
 
 is_torch_1_3_plus = LooseVersion(torch.__version__) >= LooseVersion("1.3.0")
@@ -52,7 +53,8 @@ class ESPnetEnhancementModel(AbsESPnetModel):
         encoder: AbsEncoder,
         separator: AbsSeparator,
         decoder: AbsDecoder,
-        post_beamforming: Optional[str] = None,
+        post_beamforming: bool = False,
+        post_beamforming_args: Optional[dict] = get_default_kwargs(DNN_Beamformer),
         stft_consistency: bool = False,
         loss_type: str = "mask_mse",
         mask_type: Optional[str] = None,
@@ -62,7 +64,7 @@ class ESPnetEnhancementModel(AbsESPnetModel):
         n_fft: int = 512,
         hop_length: int = 128,
     ):
-        assert check_argument_types()
+        # assert check_argument_types()
 
         super().__init__()
 
@@ -100,14 +102,15 @@ class ESPnetEnhancementModel(AbsESPnetModel):
         self.ref_channel = getattr(self.separator, "ref_channel", ref_channel)
         # for multi-channel input
         self.post_beamforming = post_beamforming
-        if post_beamforming is not None and loss_type in ("ci_sdr", "si_snr", "snr"):
+        post_beamforming_args["num_spk"] = self.num_spk
+        post_beamforming_args["use_nn"] = False
+        post_beamforming_args["use_noise_mask"] = False
+        post_beamforming_args["ref_channel"] = ref_channel
+        if post_beamforming and loss_type in ("ci_sdr", "si_snr", "snr"):
+            print("Applying post-beamforming", flush=True)
             self.post_beamformer = DNN_Beamformer(
                 n_fft // 2 + 1,
-                num_spk=self.num_spk,
-                use_nn=False,
-                use_noise_mask=False,
-                ref_channel=ref_channel,
-                beamformer_type=post_beamforming,
+                **post_beamforming_args,
             )
             self.tf_decoder = STFTDecoder(n_fft=n_fft, hop_length=hop_length)
         else:
@@ -116,7 +119,7 @@ class ESPnetEnhancementModel(AbsESPnetModel):
         # for time-domain loss types
         self.add_tf_loss = add_tf_loss
         self.tf_loss_weight = tf_loss_weight
-        if add_tf_loss or post_beamforming is not None:
+        if add_tf_loss or post_beamforming:
             self.tf_encoder = STFTEncoder(n_fft=n_fft, hop_length=hop_length)
 
     @staticmethod
@@ -558,7 +561,9 @@ class ESPnetEnhancementModel(AbsESPnetModel):
                 if self.num_spk == 1:
                     speech_pre = [self.tf_decoder(spec_pre, speech_lengths)[0]]
                 else:
-                    speech_pre = [self.tf_decoder(sp, speech_lengths)[0] for sp in spec_pre]
+                    speech_pre = [
+                        self.tf_decoder(sp, speech_lengths)[0] for sp in spec_pre
+                    ]
             if not cal_loss:
                 loss, perm = None, None
                 return loss, speech_pre, None, speech_lengths, perm, stats
