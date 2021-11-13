@@ -54,6 +54,7 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
 fi
 
 if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
+    log "Data preparation"
     # The following directories will be created:
     # train_multich, dev_multich
     local/l3das22_data_prep.sh  ${L3DAS22} || exit 1;
