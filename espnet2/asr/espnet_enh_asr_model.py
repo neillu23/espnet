@@ -1,4 +1,5 @@
 from itertools import chain
+from math import ceil
 import random
 from typing import Dict
 from typing import List
@@ -10,6 +11,7 @@ from scipy.optimize import linear_sum_assignment
 import torch
 from typeguard import check_argument_types
 
+from espnet.nets.pytorch_backend.nets_utils import pad_list
 from espnet2.asr.espnet_model import ESPnetASRModel
 from espnet2.enh.espnet_model import ESPnetEnhancementModel
 from espnet2.torch_utils.device_funcs import force_gatherable
@@ -44,6 +46,8 @@ class ESPnetEnhASRModel(AbsESPnetModel):
         truncate_length: int = 32000,
         truncate_win_len: int = 10,
         truncate_win_shift: int = 10,
+        truncate_center_mode: bool = False,
+        truncate_slice_mode: str = "sample",
         enh_real_prob: float = 1.0,
     ):
         assert check_argument_types()
@@ -87,6 +91,13 @@ class ESPnetEnhASRModel(AbsESPnetModel):
         self.truncate_win_len = truncate_win_len
         # assumed window shift used in enh_model.encoder
         self.truncate_win_shift = truncate_win_shift
+        # Whether to use center=True mode in enh_model.encoder
+        self.truncate_center_mode = truncate_center_mode
+        # "sample" for sample-level truncation; "frame" for encoder-level truncation
+        self.truncate_slice_mode = truncate_slice_mode
+        assert (
+            self.truncate_slice_mode == "sample"
+        ), "Currently only supporting sample-level truncation"
 
         self.truncate_win_overlap = self.truncate_win_len - self.truncate_win_shift
         self.truncated_frames = (
@@ -97,30 +108,102 @@ class ESPnetEnhASRModel(AbsESPnetModel):
         # if < 1.0, feed the real data only to the backend with probability
         self.enh_real_prob = enh_real_prob
 
-    def _truncate_speech(self, speech_mix: torch.Tensor, ilens: torch.Tensor):
-        """Randomly truncate the speech signal to a fixed length.
+    @staticmethod
+    def get_pad_slice(
+        start_sample, end_sample, full_length, win_length, hop_length, center=False
+    ):
+        """Calculate the required padding on both sides and the corresponding slice
+        on the resultant encoded representation.
 
-        Usage:
-        >>> x = torch.rand(2, 72000)
-        >>> ilens = torch.LongTensor([x.size(-1) for _ in range(len(x))])
-        >>> feat = self.enh_subclass.encoder(x, ilens)[0]
-        >>> x_t, olens, offsets = _truncate_speech(x, ilens)
-        >>> feat_t = self.enh_subclass.encoder(x_t, olens)[0]
-        >>> for b in range(len(x_t)):
-                assert (
-                    feat_t[b].shape
-                    == feat[b, offsets[b] : offsets[b] + self.truncated_frames].shape
-                )
-                assert torch.allclose(
-                    feat_t[b], feat[b, offsets[b] : offsets[b] + self.truncated_frames]
-                )
+        Args:
+            start_sample (int): index of the start sample
+            end_sample (int): index of the end sample
+            full_length (int): total length of the input sequence
+            win_length (int): size of the sliding window
+            hop_length (int): hop size of the sliding window
+            center (bool): whether to apply the center mode with the sliding window
+        Returns:
+            pad_left (int): number of zeros to be padded to the left
+            pad_right (int): number of zeros to be padded to the right
+            pad_slice (slice): slice to be applied to the resultant encoded representation
+        """
+        overlap_length = win_length - hop_length
+        if center:
+            # num_frames = (len(x) + win_length - overlap_length) // hop_length
+            start_index, pad_left = divmod(start_sample, hop_length)
+            end_index, pad_right = divmod(end_sample + hop_length, hop_length)
+
+            if start_sample >= win_length // 2:
+                # pad some zeros (up to `n_pad` frames) on the left before STFT
+                # later, STFT will pad (win_length // 2) zeros in both sides
+                n_pad = ceil(win_length // 2 / hop_length)
+                pad_left += n_pad * hop_length
+                left_slice = n_pad
+            else:
+                # pad `start_sample` zeros to align with iSTFT(spec)
+                pad_left = start_sample
+                left_slice = start_index
+
+            if (full_length - end_sample) >= win_length // 2:
+                # pad some zeros (up to `n_pad` frames) on the right before STFT
+                # later, STFT will pad (win_length // 2) zeros in both sides
+                n_pad = ceil(win_length // 2 / hop_length)
+                pad_right += n_pad * hop_length
+            else:
+                # pad `full_length - end_sample` zeros to align with iSTFT(spec)
+                pad_right = full_length - end_sample
+            right_slice = left_slice + end_index - start_index
+
+            pad_slice = slice(left_slice, right_slice)
+        else:
+            # num_frames = (len(x) - overlap_length) // hop_length
+            start_index, pad_left = divmod(start_sample, hop_length)
+            end_index, pad_right = divmod(end_sample - overlap_length, hop_length)
+            pad_slice = slice(0, end_index - start_index)
+        return pad_left, pad_right, pad_slice
+
+    def _truncate_speech(
+        self,
+        speech_mix: torch.Tensor,
+        ilens: torch.Tensor,
+        center: bool = False,
+        slice_mode: str = "sample",
+    ):
+        """Truncate the input speech with given length and window info.
+
+        Note: this can be used for truncated BPTT.
+
+        Args:
+            speech_mix (torch.Tensor): input speech (Batch, samples [, channels])
+            ilens (torch.Tensor): input speech lengths (Batch,)
+            truncate_length (int): length of the truncated chunk with gradient enabled
+                NOTE: This may be adjusted slightly to match the exact length of X frames.
+            truncate_win_len (int): assumed window length (in samples)
+                                    used in the downstream encoder
+                NOTE: This should be the final window length including padding.
+            truncate_win_shift (int): assumed window shift (in samples)
+                                    used in the downstream encoder
+            center (bool): whether to apply center mode in the downstream encoder
+                        (e.g. STFT, conv)
+            slice_mode (str): one of ("sample", "frame")
+
+        Returns:
+            speech_truncated (torch.Tensor): truncated speech
+            olens (torch.Tensor): truncated speech lengths
+            truncate_length (int): the finally used truncate_length
+            out_slice (List[slice]): the slice to be applied to the processed output
+            offsets (torch.Tensor): expected output offsets to align the truncated
+                speech with full-length speech after the downstream encoder
         """
         if self.truncate_length <= 0:
             raise ValueError(
                 f"Invalid data length ({ilens}) or truncate_length "
                 f"({self.truncate_length})"
             )
+        assert slice_mode in ("sample", "frame"), slice_mode
         min_length = torch.min(ilens)
+        truncate_win_overlap = self.truncate_win_len - self.truncate_win_shift
+        to_add = self.truncate_win_len if center else 0
         if min_length < self.truncate_length:
             print(
                 f"WARNING: sample is shorter than {self.truncate_length}, "
@@ -128,32 +211,59 @@ class ESPnetEnhASRModel(AbsESPnetModel):
                 flush=True,
             )
             truncate_length = min_length
-            truncated_frames = (
-                truncate_length - self.truncate_win_overlap
-            ) // self.truncate_win_shift
         else:
             truncate_length = self.truncate_length
-            truncated_frames = self.truncated_frames
-        olens = ilens.new_full(ilens.size(), truncate_length)
-        speech_truncated = speech_mix.new_empty(
-            [speech_mix.size(0), truncate_length, *speech_mix.shape[2:]]
+        truncated_frames = (
+            truncate_length - truncate_win_overlap + to_add
+        ) // self.truncate_win_shift
+        truncate_length = (
+            truncated_frames * self.truncate_win_shift + truncate_win_overlap - to_add
         )
-        frame_offsets = ilens.new_zeros(ilens.size())
+        speech_truncated = []
+        olens = []
+        offsets = ilens.new_zeros(ilens.size())
+        out_slice = [slice(None) for _ in range(speech_mix.size(0))]
         for i, length in enumerate(ilens):
             if length == truncate_length:
-                frame_offsets[i] = 0
-                speech_truncated[i] = speech_mix[i, :length]
+                offsets[i] = 0
+                speech_truncated.append(speech_mix[i, :length])
             else:
                 total_frames = (
-                    length - self.truncate_win_overlap
+                    length - truncate_win_overlap + to_add
                 ) // self.truncate_win_shift
                 assert total_frames > truncated_frames, (total_frames, truncated_frames)
-                frame_offsets[i] = torch.randint(
+                offset = torch.randint(
                     size=(), low=0, high=total_frames - truncated_frames
                 )
-                idx = frame_offsets[i] * self.truncate_win_shift
-                speech_truncated[i] = speech_mix[i, idx : idx + truncate_length]
-        return speech_truncated, olens, truncate_length, frame_offsets
+                idx = offset.item() * self.truncate_win_shift
+                offsets[i] = offset if slice_mode == "frame" else idx
+                pad_left, pad_right, pad_slice = self.get_pad_slice(
+                    idx,
+                    idx + truncate_length,
+                    length,
+                    self.truncate_win_len,
+                    self.truncate_win_shift,
+                    center=center,
+                )
+                start = idx - pad_left
+                end = idx + truncate_length + pad_right
+                assert idx - pad_left >= 0, (idx, pad_left)
+                assert idx + truncate_length + pad_right <= length, (
+                    idx + truncate_length,
+                    pad_right,
+                    length,
+                )
+                speech_truncated.append(speech_mix[i, start:end])
+                olens.append(end - start)
+                if center:
+                    out_slice[i] = (
+                        pad_slice
+                        if slice_mode == "frame"
+                        else slice(pad_left, pad_left + truncate_length)
+                    )
+        olens = torch.as_tensor(olens, dtype=torch.long, device=ilens.device)
+        speech_truncated = pad_list(speech_truncated, 0).to(speech_mix.device)
+        return speech_truncated, olens, truncate_length, out_slice, offsets
 
     def forward(
         self,
@@ -530,9 +640,15 @@ class ESPnetEnhASRModel(AbsESPnetModel):
                 speech_mix_truncate,
                 speech_olengths,
                 truncate_length,
-                frame_offsets,
-            ) = self._truncate_speech(speech_mix, speech_lengths)
-            sample_offsets = frame_offsets * self.truncate_win_shift
+                out_slice,
+                offsets,
+            ) = self._truncate_speech(
+                speech_mix,
+                speech_lengths,
+                center=self.truncate_center_mode,
+                slice_mode=self.truncate_slice_mode,
+            )
+            sample_offsets = offsets * self.truncate_win_shift
             if speech_ref is not None:
                 speech_ref2 = speech_ref.new_empty(
                     [*speech_ref.shape[:2], truncate_length, *speech_ref.shape[3:]]
@@ -582,7 +698,7 @@ class ESPnetEnhASRModel(AbsESPnetModel):
             for b in range(len(speech_pre)):
                 speech_pre[
                     b, :, sample_offsets[b] : sample_offsets[b] + truncate_length
-                ] = speech_pre_truncate[b]
+                ] = speech_pre_truncate[b, :, out_slice[b]]
             speech_pre = speech_pre.unbind(dim=1)
         else:
             (
