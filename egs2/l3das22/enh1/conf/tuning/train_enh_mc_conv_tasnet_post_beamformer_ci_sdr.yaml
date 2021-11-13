@@ -39,7 +39,7 @@ encoder_conf:
     channel: 256
     kernel_size: 20
     stride: 10
-    in_channel: 5
+    in_channel: 8
 decoder: conv
 decoder_conf:
     channel: 256
