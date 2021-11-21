@@ -1,0 +1,1 @@
+../../TEMPLATE/asr1/asr_hfwav2vec2.sh
