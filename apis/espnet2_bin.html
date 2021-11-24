@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>core tools (espnet2) &mdash; ESPnet 0.10.4a1 documentation</title><link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <title>core tools (espnet2) &mdash; ESPnet 0.10.5a1 documentation</title><link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
     <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
   <!--[if lt IE 9]>
     <script src="../_static/js/html5shiv.min.js"></script>
@@ -32,7 +32,7 @@
             <a href="../index.html" class="icon icon-home"> ESPnet
           </a>
               <div class="version">
-                0.10.4a1
+                0.10.5a1
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
@@ -92,6 +92,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../_gen/espnet2.text.html">espnet2.text package</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../_gen/espnet2.bin.html">espnet2.bin package</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../_gen/espnet2.enh.html">espnet2.enh package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../_gen/espnet2.fst.html">espnet2.fst package</a></li>
 </ul>
 <p><span class="caption-text">Tool Reference:</span></p>
 <ul class="current">
@@ -100,6 +101,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#aggregate-stats-dirs-py">aggregate_stats_dirs.py</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#asr-align-py">asr_align.py</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#asr-inference-py">asr_inference.py</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#asr-inference-k2-py">asr_inference_k2.py</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#asr-inference-streaming-py">asr_inference_streaming.py</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#asr-train-py">asr_train.py</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#diar-inference-py">diar_inference.py</a></li>
@@ -394,8 +396,118 @@ Text converter related:
 </pre></div>
 </div>
 </section>
+<section id="asr-inference-k2-py">
+<span id="id5"></span><h2>asr_inference_k2.py<a class="headerlink" href="#asr-inference-k2-py" title="Permalink to this headline">¶</a></h2>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: asr_inference_k2.py [-h] [--config CONFIG]
+                           [--log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}]
+                           --output_dir OUTPUT_DIR [--ngpu NGPU] [--seed SEED]
+                           [--dtype {float16,float32,float64}]
+                           [--num_workers NUM_WORKERS]
+                           --data_path_and_name_and_type
+                           DATA_PATH_AND_NAME_AND_TYPE [--key_file KEY_FILE]
+                           [--allow_variable_data_keys ALLOW_VARIABLE_DATA_KEYS]
+                           [--asr_train_config ASR_TRAIN_CONFIG]
+                           [--asr_model_file ASR_MODEL_FILE]
+                           [--lm_train_config LM_TRAIN_CONFIG]
+                           [--lm_file LM_FILE]
+                           [--word_lm_train_config WORD_LM_TRAIN_CONFIG]
+                           [--word_lm_file WORD_LM_FILE]
+                           [--model_tag MODEL_TAG] [--batch_size BATCH_SIZE]
+                           [--nbest NBEST] [--beam_size BEAM_SIZE]
+                           [--penalty PENALTY] [--maxlenratio MAXLENRATIO]
+                           [--minlenratio MINLENRATIO]
+                           [--ctc_weight CTC_WEIGHT] [--lm_weight LM_WEIGHT]
+                           [--streaming STREAMING]
+                           [--token_type {char,bpe,None}]
+                           [--bpemodel BPEMODEL]
+                           [--is_ctc_decoding IS_CTC_DECODING]
+                           [--use_nbest_rescoring USE_NBEST_RESCORING]
+                           [--num_paths NUM_PATHS]
+                           [--nbest_batch_size NBEST_BATCH_SIZE]
+                           [--nll_batch_size NLL_BATCH_SIZE]
+                           [--k2_config K2_CONFIG]
+
+ASR Decoding
+
+optional arguments:
+  --config CONFIG       Give config file in yaml format (default: None)
+  --log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}
+                        The verbose level of logging (default: INFO)
+  --output_dir OUTPUT_DIR
+  --ngpu NGPU           The number of gpus. 0 indicates CPU mode (default: 0)
+  --seed SEED           Random seed (default: 0)
+  --dtype {float16,float32,float64}
+                        Data type (default: float32)
+  --num_workers NUM_WORKERS
+                        The number of workers used for DataLoader (default: 1)
+
+Input data related:
+  --data_path_and_name_and_type DATA_PATH_AND_NAME_AND_TYPE
+  --key_file KEY_FILE
+  --allow_variable_data_keys ALLOW_VARIABLE_DATA_KEYS
+
+The model configuration related:
+  --asr_train_config ASR_TRAIN_CONFIG
+                        ASR training configuration (default: None)
+  --asr_model_file ASR_MODEL_FILE
+                        ASR model parameter file (default: None)
+  --lm_train_config LM_TRAIN_CONFIG
+                        LM training configuration (default: None)
+  --lm_file LM_FILE     LM parameter file (default: None)
+  --word_lm_train_config WORD_LM_TRAIN_CONFIG
+                        Word LM training configuration (default: None)
+  --word_lm_file WORD_LM_FILE
+                        Word LM parameter file (default: None)
+  --model_tag MODEL_TAG
+                        Pretrained model tag. If specify this option,
+                        *_train_config and *_file will be overwritten
+                        (default: None)
+
+Beam-search related:
+  --batch_size BATCH_SIZE
+                        The batch size for inference (default: 1)
+  --nbest NBEST         Output N-best hypotheses (default: 1)
+  --beam_size BEAM_SIZE
+                        Beam size (default: 20)
+  --penalty PENALTY     Insertion penalty (default: 0.0)
+  --maxlenratio MAXLENRATIO
+                        Input length ratio to obtain max output length. If
+                        maxlenratio=0.0 (default), it uses a end-detect
+                        function to automatically find maximum hypothesis
+                        lengths (default: 0.0)
+  --minlenratio MINLENRATIO
+                        Input length ratio to obtain min output length
+                        (default: 0.0)
+  --ctc_weight CTC_WEIGHT
+                        CTC weight in joint decoding (default: 0.5)
+  --lm_weight LM_WEIGHT
+                        RNNLM weight (default: 1.0)
+  --streaming STREAMING
+
+Text converter related:
+  --token_type {char,bpe,None}
+                        The token type for ASR model. If not given, refers
+                        from the training args (default: None)
+  --bpemodel BPEMODEL   The model path of sentencepiece. If not given, refers
+                        from the training args (default: None)
+  --is_ctc_decoding IS_CTC_DECODING
+                        Use ctc topology as decoding graph (default: True)
+  --use_nbest_rescoring USE_NBEST_RESCORING
+  --num_paths NUM_PATHS
+                        The third argument for k2.random_paths (default: 1000)
+  --nbest_batch_size NBEST_BATCH_SIZE
+                        batchify nbest list when computing am/lm scores to
+                        avoid OOM (default: 500)
+  --nll_batch_size NLL_BATCH_SIZE
+                        batch_size when computing nll during nbest rescoring
+                        (default: 100)
+  --k2_config K2_CONFIG
+                        Config file for decoding with k2 (default: None)
+</pre></div>
+</div>
+</section>
 <section id="asr-inference-streaming-py">
-<span id="id5"></span><h2>asr_inference_streaming.py<a class="headerlink" href="#asr-inference-streaming-py" title="Permalink to this headline">¶</a></h2>
+<span id="id6"></span><h2>asr_inference_streaming.py<a class="headerlink" href="#asr-inference-streaming-py" title="Permalink to this headline">¶</a></h2>
 <div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: asr_inference_streaming.py [-h] [--config CONFIG]
                                   [--log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}]
                                   --output_dir OUTPUT_DIR [--ngpu NGPU]
@@ -493,7 +605,7 @@ Text converter related:
 </div>
 </section>
 <section id="asr-train-py">
-<span id="id6"></span><h2>asr_train.py<a class="headerlink" href="#asr-train-py" title="Permalink to this headline">¶</a></h2>
+<span id="id7"></span><h2>asr_train.py<a class="headerlink" href="#asr-train-py" title="Permalink to this headline">¶</a></h2>
 <div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: asr_train.py [-h] [--config CONFIG] [--print_config]
                     [--log_level {ERROR,WARNING,INFO,DEBUG,NOTSET}]
                     [--dry_run DRY_RUN]
@@ -520,6 +632,7 @@ Text converter related:
                     [--early_stopping_criterion EARLY_STOPPING_CRITERION EARLY_STOPPING_CRITERION EARLY_STOPPING_CRITERION]
                     [--best_model_criterion BEST_MODEL_CRITERION [BEST_MODEL_CRITERION ...]]
                     [--keep_nbest_models KEEP_NBEST_MODELS [KEEP_NBEST_MODELS ...]]
+                    [--nbest_averaging_interval NBEST_AVERAGING_INTERVAL]
                     [--grad_clip GRAD_CLIP] [--grad_clip_type GRAD_CLIP_TYPE]
                     [--grad_noise GRAD_NOISE] [--accum_grad ACCUM_GRAD]
                     [--no_forward_run NO_FORWARD_RUN] [--resume RESUME]
@@ -676,6 +789,8 @@ Trainer related:
                         The criterion used for judging of the best model. Give a pair referring the phase, &quot;train&quot; or &quot;valid&quot;,the criterion name, and the mode, &quot;min&quot; or &quot;max&quot;, e.g. &quot;acc,max&quot;. (default: [(&#39;train&#39;, &#39;loss&#39;, &#39;min&#39;), (&#39;valid&#39;, &#39;loss&#39;, &#39;min&#39;), (&#39;train&#39;, &#39;acc&#39;, &#39;max&#39;), (&#39;valid&#39;, &#39;acc&#39;, &#39;max&#39;)])
   --keep_nbest_models KEEP_NBEST_MODELS [KEEP_NBEST_MODELS ...]
                         Remove previous snapshots excluding the n-best scored epochs (default: [10])
+  --nbest_averaging_interval NBEST_AVERAGING_INTERVAL
+                        The epoch interval to apply model averaging and save nbest models (default: 0)
   --grad_clip GRAD_CLIP
                         Gradient norm threshold to clip (default: 5.0)
   --grad_clip_type GRAD_CLIP_TYPE
@@ -966,7 +1081,7 @@ Optimizer related:
 </div>
 </section>
 <section id="diar-inference-py">
-<span id="id7"></span><h2>diar_inference.py<a class="headerlink" href="#diar-inference-py" title="Permalink to this headline">¶</a></h2>
+<span id="id8"></span><h2>diar_inference.py<a class="headerlink" href="#diar-inference-py" title="Permalink to this headline">¶</a></h2>
 <div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: diar_inference.py [-h] [--config CONFIG]
                          [--log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}]
                          --output_dir OUTPUT_DIR [--ngpu NGPU] [--seed SEED]
@@ -1029,7 +1144,7 @@ Diarize speech related:
 </div>
 </section>
 <section id="diar-train-py">
-<span id="id8"></span><h2>diar_train.py<a class="headerlink" href="#diar-train-py" title="Permalink to this headline">¶</a></h2>
+<span id="id9"></span><h2>diar_train.py<a class="headerlink" href="#diar-train-py" title="Permalink to this headline">¶</a></h2>
 <div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: diar_train.py [-h] [--config CONFIG] [--print_config]
                      [--log_level {ERROR,WARNING,INFO,DEBUG,NOTSET}]
                      [--dry_run DRY_RUN]
@@ -1056,6 +1171,7 @@ Diarize speech related:
                      [--early_stopping_criterion EARLY_STOPPING_CRITERION EARLY_STOPPING_CRITERION EARLY_STOPPING_CRITERION]
                      [--best_model_criterion BEST_MODEL_CRITERION [BEST_MODEL_CRITERION ...]]
                      [--keep_nbest_models KEEP_NBEST_MODELS [KEEP_NBEST_MODELS ...]]
+                     [--nbest_averaging_interval NBEST_AVERAGING_INTERVAL]
                      [--grad_clip GRAD_CLIP] [--grad_clip_type GRAD_CLIP_TYPE]
                      [--grad_noise GRAD_NOISE] [--accum_grad ACCUM_GRAD]
                      [--no_forward_run NO_FORWARD_RUN] [--resume RESUME]
@@ -1182,6 +1298,8 @@ Trainer related:
                         The criterion used for judging of the best model. Give a pair referring the phase, &quot;train&quot; or &quot;valid&quot;,the criterion name, and the mode, &quot;min&quot; or &quot;max&quot;, e.g. &quot;acc,max&quot;. (default: [(&#39;train&#39;, &#39;loss&#39;, &#39;min&#39;), (&#39;valid&#39;, &#39;loss&#39;, &#39;min&#39;), (&#39;train&#39;, &#39;acc&#39;, &#39;max&#39;), (&#39;valid&#39;, &#39;acc&#39;, &#39;max&#39;)])
   --keep_nbest_models KEEP_NBEST_MODELS [KEEP_NBEST_MODELS ...]
                         Remove previous snapshots excluding the n-best scored epochs (default: [10])
+  --nbest_averaging_interval NBEST_AVERAGING_INTERVAL
+                        The epoch interval to apply model averaging and save nbest models (default: 0)
   --grad_clip GRAD_CLIP
                         Gradient norm threshold to clip (default: 5.0)
   --grad_clip_type GRAD_CLIP_TYPE
@@ -1462,7 +1580,7 @@ Optimizer related:
 </div>
 </section>
 <section id="enh-inference-py">
-<span id="id9"></span><h2>enh_inference.py<a class="headerlink" href="#enh-inference-py" title="Permalink to this headline">¶</a></h2>
+<span id="id10"></span><h2>enh_inference.py<a class="headerlink" href="#enh-inference-py" title="Permalink to this headline">¶</a></h2>
 <div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: enh_inference.py [-h] [--config CONFIG]
                         [--log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}]
                         --output_dir OUTPUT_DIR [--ngpu NGPU] [--seed SEED]
@@ -1540,7 +1658,7 @@ SeparateSpeech related:
 </div>
 </section>
 <section id="enh-scoring-py">
-<span id="id10"></span><h2>enh_scoring.py<a class="headerlink" href="#enh-scoring-py" title="Permalink to this headline">¶</a></h2>
+<span id="id11"></span><h2>enh_scoring.py<a class="headerlink" href="#enh-scoring-py" title="Permalink to this headline">¶</a></h2>
 <div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: enh_scoring.py [-h] [--config CONFIG]
                       [--log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}]
                       --output_dir OUTPUT_DIR
@@ -1567,7 +1685,7 @@ Input data related:
 </div>
 </section>
 <section id="enh-train-py">
-<span id="id11"></span><h2>enh_train.py<a class="headerlink" href="#enh-train-py" title="Permalink to this headline">¶</a></h2>
+<span id="id12"></span><h2>enh_train.py<a class="headerlink" href="#enh-train-py" title="Permalink to this headline">¶</a></h2>
 <div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: enh_train.py [-h] [--config CONFIG] [--print_config]
                     [--log_level {ERROR,WARNING,INFO,DEBUG,NOTSET}]
                     [--dry_run DRY_RUN]
@@ -1594,6 +1712,7 @@ Input data related:
                     [--early_stopping_criterion EARLY_STOPPING_CRITERION EARLY_STOPPING_CRITERION EARLY_STOPPING_CRITERION]
                     [--best_model_criterion BEST_MODEL_CRITERION [BEST_MODEL_CRITERION ...]]
                     [--keep_nbest_models KEEP_NBEST_MODELS [KEEP_NBEST_MODELS ...]]
+                    [--nbest_averaging_interval NBEST_AVERAGING_INTERVAL]
                     [--grad_clip GRAD_CLIP] [--grad_clip_type GRAD_CLIP_TYPE]
                     [--grad_noise GRAD_NOISE] [--accum_grad ACCUM_GRAD]
                     [--no_forward_run NO_FORWARD_RUN] [--resume RESUME]
@@ -1713,6 +1832,8 @@ Trainer related:
                         The criterion used for judging of the best model. Give a pair referring the phase, &quot;train&quot; or &quot;valid&quot;,the criterion name, and the mode, &quot;min&quot; or &quot;max&quot;, e.g. &quot;acc,max&quot;. (default: [(&#39;train&#39;, &#39;loss&#39;, &#39;min&#39;), (&#39;valid&#39;, &#39;loss&#39;, &#39;min&#39;), (&#39;train&#39;, &#39;acc&#39;, &#39;max&#39;), (&#39;valid&#39;, &#39;acc&#39;, &#39;max&#39;)])
   --keep_nbest_models KEEP_NBEST_MODELS [KEEP_NBEST_MODELS ...]
                         Remove previous snapshots excluding the n-best scored epochs (default: [10])
+  --nbest_averaging_interval NBEST_AVERAGING_INTERVAL
+                        The epoch interval to apply model averaging and save nbest models (default: 0)
   --grad_clip GRAD_CLIP
                         Gradient norm threshold to clip (default: 5.0)
   --grad_clip_type GRAD_CLIP_TYPE
@@ -1979,7 +2100,7 @@ Optimizer related:
 </div>
 </section>
 <section id="gan-tts-train-py">
-<span id="id12"></span><h2>gan_tts_train.py<a class="headerlink" href="#gan-tts-train-py" title="Permalink to this headline">¶</a></h2>
+<span id="id13"></span><h2>gan_tts_train.py<a class="headerlink" href="#gan-tts-train-py" title="Permalink to this headline">¶</a></h2>
 <div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: gan_tts_train.py [-h] [--config CONFIG] [--print_config]
                         [--log_level {ERROR,WARNING,INFO,DEBUG,NOTSET}]
                         [--dry_run DRY_RUN]
@@ -2007,6 +2128,7 @@ Optimizer related:
                         [--early_stopping_criterion EARLY_STOPPING_CRITERION EARLY_STOPPING_CRITERION EARLY_STOPPING_CRITERION]
                         [--best_model_criterion BEST_MODEL_CRITERION [BEST_MODEL_CRITERION ...]]
                         [--keep_nbest_models KEEP_NBEST_MODELS [KEEP_NBEST_MODELS ...]]
+                        [--nbest_averaging_interval NBEST_AVERAGING_INTERVAL]
                         [--grad_clip GRAD_CLIP]
                         [--grad_clip_type GRAD_CLIP_TYPE]
                         [--grad_noise GRAD_NOISE] [--accum_grad ACCUM_GRAD]
@@ -2155,6 +2277,8 @@ Trainer related:
                         The criterion used for judging of the best model. Give a pair referring the phase, &quot;train&quot; or &quot;valid&quot;,the criterion name, and the mode, &quot;min&quot; or &quot;max&quot;, e.g. &quot;acc,max&quot;. (default: [(&#39;train&#39;, &#39;loss&#39;, &#39;min&#39;), (&#39;valid&#39;, &#39;loss&#39;, &#39;min&#39;), (&#39;train&#39;, &#39;acc&#39;, &#39;max&#39;), (&#39;valid&#39;, &#39;acc&#39;, &#39;max&#39;)])
   --keep_nbest_models KEEP_NBEST_MODELS [KEEP_NBEST_MODELS ...]
                         Remove previous snapshots excluding the n-best scored epochs (default: [10])
+  --nbest_averaging_interval NBEST_AVERAGING_INTERVAL
+                        The epoch interval to apply model averaging and save nbest models (default: 0)
   --grad_clip GRAD_CLIP
                         Gradient norm threshold to clip (default: 5.0)
   --grad_clip_type GRAD_CLIP_TYPE
@@ -2448,7 +2572,7 @@ Optimizer related:
 </div>
 </section>
 <section id="hubert-train-py">
-<span id="id13"></span><h2>hubert_train.py<a class="headerlink" href="#hubert-train-py" title="Permalink to this headline">¶</a></h2>
+<span id="id14"></span><h2>hubert_train.py<a class="headerlink" href="#hubert-train-py" title="Permalink to this headline">¶</a></h2>
 <div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: hubert_train.py [-h] [--config CONFIG] [--print_config]
                        [--log_level {ERROR,WARNING,INFO,DEBUG,NOTSET}]
                        [--dry_run DRY_RUN]
@@ -2476,6 +2600,7 @@ Optimizer related:
                        [--early_stopping_criterion EARLY_STOPPING_CRITERION EARLY_STOPPING_CRITERION EARLY_STOPPING_CRITERION]
                        [--best_model_criterion BEST_MODEL_CRITERION [BEST_MODEL_CRITERION ...]]
                        [--keep_nbest_models KEEP_NBEST_MODELS [KEEP_NBEST_MODELS ...]]
+                       [--nbest_averaging_interval NBEST_AVERAGING_INTERVAL]
                        [--grad_clip GRAD_CLIP]
                        [--grad_clip_type GRAD_CLIP_TYPE]
                        [--grad_noise GRAD_NOISE] [--accum_grad ACCUM_GRAD]
@@ -2642,6 +2767,8 @@ Trainer related:
                         The criterion used for judging of the best model. Give a pair referring the phase, &quot;train&quot; or &quot;valid&quot;,the criterion name, and the mode, &quot;min&quot; or &quot;max&quot;, e.g. &quot;acc,max&quot;. (default: [(&#39;train&#39;, &#39;loss&#39;, &#39;min&#39;), (&#39;valid&#39;, &#39;loss&#39;, &#39;min&#39;), (&#39;train&#39;, &#39;acc&#39;, &#39;max&#39;), (&#39;valid&#39;, &#39;acc&#39;, &#39;max&#39;)])
   --keep_nbest_models KEEP_NBEST_MODELS [KEEP_NBEST_MODELS ...]
                         Remove previous snapshots excluding the n-best scored epochs (default: [10])
+  --nbest_averaging_interval NBEST_AVERAGING_INTERVAL
+                        The epoch interval to apply model averaging and save nbest models (default: 0)
   --grad_clip GRAD_CLIP
                         Gradient norm threshold to clip (default: 5.0)
   --grad_clip_type GRAD_CLIP_TYPE
@@ -2923,7 +3050,7 @@ Optimizer related:
 </div>
 </section>
 <section id="launch-py">
-<span id="id14"></span><h2>launch.py<a class="headerlink" href="#launch-py" title="Permalink to this headline">¶</a></h2>
+<span id="id15"></span><h2>launch.py<a class="headerlink" href="#launch-py" title="Permalink to this headline">¶</a></h2>
 <div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: launch.py [-h] [--cmd CMD] [--log LOG]
                  [--max_num_log_files MAX_NUM_LOG_FILES] [--ngpu NGPU]
                  [--num_nodes NUM_NODES | --host HOST] [--envfile ENVFILE]
@@ -2975,7 +3102,7 @@ optional arguments:
 </div>
 </section>
 <section id="lm-calc-perplexity-py">
-<span id="id15"></span><h2>lm_calc_perplexity.py<a class="headerlink" href="#lm-calc-perplexity-py" title="Permalink to this headline">¶</a></h2>
+<span id="id16"></span><h2>lm_calc_perplexity.py<a class="headerlink" href="#lm-calc-perplexity-py" title="Permalink to this headline">¶</a></h2>
 <div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: lm_calc_perplexity.py [-h] [--config CONFIG]
                              [--log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}]
                              --output_dir OUTPUT_DIR [--ngpu NGPU]
@@ -3018,7 +3145,7 @@ The model configuration related:
 </div>
 </section>
 <section id="lm-train-py">
-<span id="id16"></span><h2>lm_train.py<a class="headerlink" href="#lm-train-py" title="Permalink to this headline">¶</a></h2>
+<span id="id17"></span><h2>lm_train.py<a class="headerlink" href="#lm-train-py" title="Permalink to this headline">¶</a></h2>
 <div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: lm_train.py [-h] [--config CONFIG] [--print_config]
                    [--log_level {ERROR,WARNING,INFO,DEBUG,NOTSET}]
                    [--dry_run DRY_RUN]
@@ -3044,6 +3171,7 @@ The model configuration related:
                    [--early_stopping_criterion EARLY_STOPPING_CRITERION EARLY_STOPPING_CRITERION EARLY_STOPPING_CRITERION]
                    [--best_model_criterion BEST_MODEL_CRITERION [BEST_MODEL_CRITERION ...]]
                    [--keep_nbest_models KEEP_NBEST_MODELS [KEEP_NBEST_MODELS ...]]
+                   [--nbest_averaging_interval NBEST_AVERAGING_INTERVAL]
                    [--grad_clip GRAD_CLIP] [--grad_clip_type GRAD_CLIP_TYPE]
                    [--grad_noise GRAD_NOISE] [--accum_grad ACCUM_GRAD]
                    [--no_forward_run NO_FORWARD_RUN] [--resume RESUME]
@@ -3169,6 +3297,8 @@ Trainer related:
                         The criterion used for judging of the best model. Give a pair referring the phase, &quot;train&quot; or &quot;valid&quot;,the criterion name, and the mode, &quot;min&quot; or &quot;max&quot;, e.g. &quot;acc,max&quot;. (default: [(&#39;train&#39;, &#39;loss&#39;, &#39;min&#39;), (&#39;valid&#39;, &#39;loss&#39;, &#39;min&#39;), (&#39;train&#39;, &#39;acc&#39;, &#39;max&#39;), (&#39;valid&#39;, &#39;acc&#39;, &#39;max&#39;)])
   --keep_nbest_models KEEP_NBEST_MODELS [KEEP_NBEST_MODELS ...]
                         Remove previous snapshots excluding the n-best scored epochs (default: [10])
+  --nbest_averaging_interval NBEST_AVERAGING_INTERVAL
+                        The epoch interval to apply model averaging and save nbest models (default: 0)
   --grad_clip GRAD_CLIP
                         Gradient norm threshold to clip (default: 5.0)
   --grad_clip_type GRAD_CLIP_TYPE
@@ -3430,7 +3560,7 @@ Optimizer related:
 </div>
 </section>
 <section id="pack-py">
-<span id="id17"></span><h2>pack.py<a class="headerlink" href="#pack-py" title="Permalink to this headline">¶</a></h2>
+<span id="id18"></span><h2>pack.py<a class="headerlink" href="#pack-py" title="Permalink to this headline">¶</a></h2>
 <div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: pack.py [-h] {asr,tts,enh,diar} ...
 
 Pack input files to archive format
@@ -3443,7 +3573,7 @@ optional arguments:
 </div>
 </section>
 <section id="split-scps-py">
-<span id="id18"></span><h2>split_scps.py<a class="headerlink" href="#split-scps-py" title="Permalink to this headline">¶</a></h2>
+<span id="id19"></span><h2>split_scps.py<a class="headerlink" href="#split-scps-py" title="Permalink to this headline">¶</a></h2>
 <div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: split_scps.py [-h]
                      [--log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}]
                      --scps SCPS [SCPS ...] [--names NAMES [NAMES ...]]
@@ -3466,7 +3596,7 @@ optional arguments:
 </div>
 </section>
 <section id="tokenize-text-py">
-<span id="id19"></span><h2>tokenize_text.py<a class="headerlink" href="#tokenize-text-py" title="Permalink to this headline">¶</a></h2>
+<span id="id20"></span><h2>tokenize_text.py<a class="headerlink" href="#tokenize-text-py" title="Permalink to this headline">¶</a></h2>
 <div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: tokenize_text.py [-h]
                         [--log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}]
                         --input INPUT --output OUTPUT [--field FIELD]
@@ -3525,7 +3655,7 @@ write_vocabulary mode related:
 </div>
 </section>
 <section id="tts-inference-py">
-<span id="id20"></span><h2>tts_inference.py<a class="headerlink" href="#tts-inference-py" title="Permalink to this headline">¶</a></h2>
+<span id="id21"></span><h2>tts_inference.py<a class="headerlink" href="#tts-inference-py" title="Permalink to this headline">¶</a></h2>
 <div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: tts_inference.py [-h] [--config CONFIG]
                         [--log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}]
                         --output_dir OUTPUT_DIR [--ngpu NGPU] [--seed SEED]
@@ -3624,7 +3754,7 @@ Vocoder related:
 </div>
 </section>
 <section id="tts-train-py">
-<span id="id21"></span><h2>tts_train.py<a class="headerlink" href="#tts-train-py" title="Permalink to this headline">¶</a></h2>
+<span id="id22"></span><h2>tts_train.py<a class="headerlink" href="#tts-train-py" title="Permalink to this headline">¶</a></h2>
 <div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: tts_train.py [-h] [--config CONFIG] [--print_config]
                     [--log_level {ERROR,WARNING,INFO,DEBUG,NOTSET}]
                     [--dry_run DRY_RUN]
@@ -3651,6 +3781,7 @@ Vocoder related:
                     [--early_stopping_criterion EARLY_STOPPING_CRITERION EARLY_STOPPING_CRITERION EARLY_STOPPING_CRITERION]
                     [--best_model_criterion BEST_MODEL_CRITERION [BEST_MODEL_CRITERION ...]]
                     [--keep_nbest_models KEEP_NBEST_MODELS [KEEP_NBEST_MODELS ...]]
+                    [--nbest_averaging_interval NBEST_AVERAGING_INTERVAL]
                     [--grad_clip GRAD_CLIP] [--grad_clip_type GRAD_CLIP_TYPE]
                     [--grad_noise GRAD_NOISE] [--accum_grad ACCUM_GRAD]
                     [--no_forward_run NO_FORWARD_RUN] [--resume RESUME]
@@ -3789,6 +3920,8 @@ Trainer related:
                         The criterion used for judging of the best model. Give a pair referring the phase, &quot;train&quot; or &quot;valid&quot;,the criterion name, and the mode, &quot;min&quot; or &quot;max&quot;, e.g. &quot;acc,max&quot;. (default: [(&#39;train&#39;, &#39;loss&#39;, &#39;min&#39;), (&#39;valid&#39;, &#39;loss&#39;, &#39;min&#39;), (&#39;train&#39;, &#39;acc&#39;, &#39;max&#39;), (&#39;valid&#39;, &#39;acc&#39;, &#39;max&#39;)])
   --keep_nbest_models KEEP_NBEST_MODELS [KEEP_NBEST_MODELS ...]
                         Remove previous snapshots excluding the n-best scored epochs (default: [10])
+  --nbest_averaging_interval NBEST_AVERAGING_INTERVAL
+                        The epoch interval to apply model averaging and save nbest models (default: 0)
   --grad_clip GRAD_CLIP
                         Gradient norm threshold to clip (default: 5.0)
   --grad_clip_type GRAD_CLIP_TYPE

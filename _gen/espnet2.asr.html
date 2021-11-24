@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>espnet2.asr package &mdash; ESPnet 0.10.4a1 documentation</title><link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <title>espnet2.asr package &mdash; ESPnet 0.10.5a1 documentation</title><link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
     <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
   <!--[if lt IE 9]>
     <script src="../_static/js/html5shiv.min.js"></script>
@@ -32,7 +32,7 @@
             <a href="../index.html" class="icon icon-home"> ESPnet
           </a>
               <div class="version">
-                0.10.4a1
+                0.10.5a1
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
@@ -126,6 +126,7 @@
 <li class="toctree-l1"><a class="reference internal" href="espnet2.text.html">espnet2.text package</a></li>
 <li class="toctree-l1"><a class="reference internal" href="espnet2.bin.html">espnet2.bin package</a></li>
 <li class="toctree-l1"><a class="reference internal" href="espnet2.enh.html">espnet2.enh package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.fst.html">espnet2.fst package</a></li>
 </ul>
 <p><span class="caption-text">Tool Reference:</span></p>
 <ul>
@@ -272,6 +273,23 @@
 <dd><p>Bases: <a class="reference internal" href="espnet2.train.html#espnet2.train.abs_espnet_model.AbsESPnetModel" title="espnet2.train.abs_espnet_model.AbsESPnetModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">espnet2.train.abs_espnet_model.AbsESPnetModel</span></code></a></p>
 <p>CTC-attention hybrid Encoder-Decoder model</p>
 <dl class="method">
+<dt id="espnet2.asr.espnet_model.ESPnetASRModel.batchify_nll">
+<code class="sig-name descname">batchify_nll</code><span class="sig-paren">(</span><em class="sig-param">encoder_out: torch.Tensor</em>, <em class="sig-param">encoder_out_lens: torch.Tensor</em>, <em class="sig-param">ys_pad: torch.Tensor</em>, <em class="sig-param">ys_pad_lens: torch.Tensor</em>, <em class="sig-param">batch_size: int = 100</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/espnet2/asr/espnet_model.html#ESPnetASRModel.batchify_nll"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet2.asr.espnet_model.ESPnetASRModel.batchify_nll" title="Permalink to this definition">¶</a></dt>
+<dd><p>Compute negative log likelihood(nll) from transformer-decoder</p>
+<p>To avoid OOM, this fuction seperate the input into batches.
+Then call nll for each batch and combine and return results.
+:param encoder_out: (Batch, Length, Dim)
+:param encoder_out_lens: (Batch,)
+:param ys_pad: (Batch, Length)
+:param ys_pad_lens: (Batch,)
+:param batch_size: int, samples each batch contain when computing nll,</p>
+<blockquote>
+<div><p>you may change this to avoid OOM or increase
+GPU memory usage</p>
+</div></blockquote>
+</dd></dl>
+
+<dl class="method">
 <dt id="espnet2.asr.espnet_model.ESPnetASRModel.collect_feats">
 <code class="sig-name descname">collect_feats</code><span class="sig-paren">(</span><em class="sig-param">speech: torch.Tensor</em>, <em class="sig-param">speech_lengths: torch.Tensor</em>, <em class="sig-param">text: torch.Tensor</em>, <em class="sig-param">text_lengths: torch.Tensor</em><span class="sig-paren">)</span> &#x2192; Dict[str, torch.Tensor]<a class="reference internal" href="../_modules/espnet2/asr/espnet_model.html#ESPnetASRModel.collect_feats"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet2.asr.espnet_model.ESPnetASRModel.collect_feats" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
@@ -301,6 +319,23 @@
 <li><p><strong>speech_lengths</strong> – (Batch, )</p></li>
 <li><p><strong>text</strong> – (Batch, Length)</p></li>
 <li><p><strong>text_lengths</strong> – (Batch,)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="espnet2.asr.espnet_model.ESPnetASRModel.nll">
+<code class="sig-name descname">nll</code><span class="sig-paren">(</span><em class="sig-param">encoder_out: torch.Tensor</em>, <em class="sig-param">encoder_out_lens: torch.Tensor</em>, <em class="sig-param">ys_pad: torch.Tensor</em>, <em class="sig-param">ys_pad_lens: torch.Tensor</em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="reference internal" href="../_modules/espnet2/asr/espnet_model.html#ESPnetASRModel.nll"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet2.asr.espnet_model.ESPnetASRModel.nll" title="Permalink to this definition">¶</a></dt>
+<dd><p>Compute negative log likelihood(nll) from transformer-decoder</p>
+<p>Normally, this function is called in batchify_nll.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>encoder_out</strong> – (Batch, Length, Dim)</p></li>
+<li><p><strong>encoder_out_lens</strong> – (Batch,)</p></li>
+<li><p><strong>ys_pad</strong> – (Batch, Length)</p></li>
+<li><p><strong>ys_pad_lens</strong> – (Batch,)</p></li>
 </ul>
 </dd>
 </dl>

@@ -81,17 +81,6 @@ espnet2.bin.__init__
     :show-inheritance:
 
 
-.. _espnet2.bin.k2_asr_inference:
-
-espnet2.bin.k2_asr_inference
-----------------------------
-
-.. automodule:: espnet2.bin.k2_asr_inference
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-
 .. _espnet2.bin.gan_tts_train:
 
 espnet2.bin.gan_tts_train
@@ -230,6 +219,17 @@ espnet2.bin.asr_align
 ---------------------
 
 .. automodule:: espnet2.bin.asr_align
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+
+.. _espnet2.bin.asr_inference_k2:
+
+espnet2.bin.asr_inference_k2
+----------------------------
+
+.. automodule:: espnet2.bin.asr_inference_k2
     :members:
     :undoc-members:
     :show-inheritance:
