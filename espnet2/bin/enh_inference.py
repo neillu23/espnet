@@ -289,6 +289,7 @@ def inference(
     ref_channel: Optional[int],
     normalize_output_wav: bool,
     rotate_channel: int,
+    min_length: Optional[int],
 ):
     assert check_argument_types()
     if batch_size > 1:
@@ -322,6 +323,7 @@ def inference(
         device=device,
         dtype=dtype,
     )
+    separate_speech.eval()
 
     # 3. Build data-iterator
     loader = EnhancementTask.build_streaming_iterator(
@@ -359,10 +361,19 @@ def inference(
                 batch["speech_mix"], shifts=-rotate_channel, dims=-1
             )
 
+        maxL = max([l for l in batch["speech_mix_lengths"]])
+        if min_length is not None and  maxL < min_length:
+            print('[WARNING] padding short input to min_length=%d' % min_length, flush=True)
+            if batch["speech_mix"].ndim == 2:
+                batch["speech_mix"] = torch.nn.functional.pad(batch["speech_mix"], (0, min_length - maxL))
+            else:
+                assert batch["speech_mix"].ndim == 3, batch["speech_mix"].ndim
+                batch["speech_mix"] = torch.nn.functional.pad(batch["speech_mix"], (0, 0, 0, min_length - maxL))
+
         waves = separate_speech(**batch)
         for (spk, w) in enumerate(waves):
             for b in range(batch_size):
-                writers[spk][keys[b]] = fs, w[b]
+                writers[spk][keys[b]] = fs, w[b, :batch["speech_mix_lengths"][b]]
 
     for writer in writers:
         writer.close()
@@ -478,6 +489,15 @@ def get_parser():
         default=0,
         help="rotate the input multi-channel speech to make channel "
         "`rotate_channel` be the first channel",
+    )
+
+    group = parser.add_argument_group("Unet beamformer related")
+    group.add_argument(
+        "--min_length",
+        type=int,
+        default=None,
+        help="if not None, the input speech is ensured to be "
+        "no shorter than `min_length` via zero-padding",
     )
 
     return parser

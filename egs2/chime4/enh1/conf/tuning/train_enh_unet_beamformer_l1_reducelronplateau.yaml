@@ -1,0 +1,57 @@
+optim: adam
+init: xavier_uniform
+max_epoch: 100
+batch_type: folded
+batch_size: 8
+iterator_type: chunk
+chunk_length: 40000
+num_workers: 4
+optim_conf:
+    lr: 1.0e-03
+    eps: 1.0e-08
+    weight_decay: 0
+patience: 10
+grad_clip: 2
+val_scheduler_criterion:
+- valid
+- loss
+best_model_criterion:
+-   - valid
+    - si_snr
+    - max
+-   - valid
+    - loss
+    - min
+keep_nbest_models: 1
+#scheduler: warmuplr
+#scheduler_conf:
+#    warmup_steps: 25000
+scheduler: reducelronplateau
+scheduler_conf:
+    mode: min
+    factor: 0.1
+    patience: 5
+model_conf:
+    loss_type: l1_time
+    mask_type: PSM^2
+    ref_channel: 3
+    n_fft: 512
+    hop_length: 128
+encoder: stft
+encoder_conf:
+    n_fft: 512
+    hop_length: 128
+decoder: stft
+decoder_conf:
+    n_fft: 512
+    hop_length: 128
+separator: unet_beamformer
+separator_conf:
+    num_spk: 1
+    in_channels: 4
+    conv_channels: [32, 32, 32, 64, 64, 96, 96, 96, 128, 256]
+    conv_kernel_size: [[7, 1], [1, 7], [8, 6], [7, 6], [6, 5], [5, 5], [6, 3], [5, 3], [6, 3], [5, 3]]
+    conv_stride: [[1, 1], [1, 1], [2, 2], [1, 1], [2, 2], [1, 1], [2, 2], [1, 1], [2, 1], [1, 1]]
+    dropout_rate: 0.5
+    nonlinear: none
+    use_noise_mask: false
