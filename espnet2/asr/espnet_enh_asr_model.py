@@ -648,7 +648,10 @@ class ESPnetEnhASRModel(AbsESPnetModel):
                 center=self.truncate_center_mode,
                 slice_mode=self.truncate_slice_mode,
             )
-            sample_offsets = offsets * self.truncate_win_shift
+            if self.truncate_slice_mode == "sample":
+                sample_offsets = offsets
+            else:
+                sample_offsets = offsets * self.truncate_win_shift
             if speech_ref is not None:
                 speech_ref2 = speech_ref.new_empty(
                     [*speech_ref.shape[:2], truncate_length, *speech_ref.shape[3:]]
