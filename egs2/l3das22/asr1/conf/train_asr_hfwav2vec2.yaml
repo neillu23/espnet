@@ -1,0 +1,25 @@
+batch_type: folded
+batch_size: 16
+accum_grad: 2
+max_epoch: 10
+patience: none
+num_att_plot: 0
+# The initialization method for model parameters
+init: null # xavier_uniform
+best_model_criterion:
+-   - valid
+    - acc
+    - max
+keep_nbest_models: 10
+
+model_conf:
+    ctc_weight: 1.0
+    lsm_weight: 0.1
+    length_normalized_loss: false
+
+optim: adam
+optim_conf:
+    lr: 0.005
+scheduler: warmuplr
+scheduler_conf:
+    warmup_steps: 20000
