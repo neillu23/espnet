@@ -546,6 +546,55 @@ registered hooks while the latter silently ignores them.</p>
 </dd></dl>
 
 <dl class="class">
+<dt id="espnet2.enh.loss.criterions.time_domain.HubertDFLoss">
+<em class="property">class </em><code class="sig-prename descclassname">espnet2.enh.loss.criterions.time_domain.</code><code class="sig-name descname">HubertDFLoss</code><span class="sig-paren">(</span><em class="sig-param">layer=12</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/espnet2/enh/loss/criterions/time_domain.html#HubertDFLoss"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet2.enh.loss.criterions.time_domain.HubertDFLoss" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#espnet2.enh.loss.criterions.time_domain.TimeDomainLoss" title="espnet2.enh.loss.criterions.time_domain.TimeDomainLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">espnet2.enh.loss.criterions.time_domain.TimeDomainLoss</span></code></a></p>
+<p>Hubert Deep Feature Loss</p>
+<dl class="simple">
+<dt>Reference:</dt><dd><p>Hsu, W. N., Bolte, B., Tsai, Y. H. H., Lakhotia, K., Salakhutdinov, R.,
+&amp; Mohamed, A. (2021). HuBERT: Self-Supervised Speech Representation
+Learning by Masked Prediction of Hidden Units.
+arXiv preprint arXiv:2106.07447.
+pretrained model: https://huggingface.co/facebook/hubert-large-ls960-ft</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ref</strong> – (Batch, samples)</p></li>
+<li><p><strong>inf</strong> – (Batch, samples)</p></li>
+<li><p><strong>layer</strong> (<em>int</em>) – calculate deep feature loss on this layer</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>(Batch,)</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>loss</p>
+</dd>
+</dl>
+<dl class="method">
+<dt id="espnet2.enh.loss.criterions.time_domain.HubertDFLoss.forward">
+<code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param">ref: torch.Tensor</em>, <em class="sig-param">inf: torch.Tensor</em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="reference internal" href="../_modules/espnet2/enh/loss/criterions/time_domain.html#HubertDFLoss.forward"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet2.enh.loss.criterions.time_domain.HubertDFLoss.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+<dl class="method">
+<dt id="espnet2.enh.loss.criterions.time_domain.HubertDFLoss.name">
+<em class="property">property </em><code class="sig-name descname">name</code><a class="headerlink" href="#espnet2.enh.loss.criterions.time_domain.HubertDFLoss.name" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
 <dt id="espnet2.enh.loss.criterions.time_domain.SISNRLoss">
 <em class="property">class </em><code class="sig-prename descclassname">espnet2.enh.loss.criterions.time_domain.</code><code class="sig-name descname">SISNRLoss</code><span class="sig-paren">(</span><em class="sig-param">eps=1.1920928955078125e-07</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/espnet2/enh/loss/criterions/time_domain.html#SISNRLoss"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet2.enh.loss.criterions.time_domain.SISNRLoss" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#espnet2.enh.loss.criterions.time_domain.TimeDomainLoss" title="espnet2.enh.loss.criterions.time_domain.TimeDomainLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">espnet2.enh.loss.criterions.time_domain.TimeDomainLoss</span></code></a></p>
@@ -596,10 +645,112 @@ registered hooks while the latter silently ignores them.</p>
 </dd></dl>
 
 <dl class="class">
+<dt id="espnet2.enh.loss.criterions.time_domain.STOILoss">
+<em class="property">class </em><code class="sig-prename descclassname">espnet2.enh.loss.criterions.time_domain.</code><code class="sig-name descname">STOILoss</code><span class="sig-paren">(</span><em class="sig-param">sr=16000</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/espnet2/enh/loss/criterions/time_domain.html#STOILoss"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet2.enh.loss.criterions.time_domain.STOILoss" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#espnet2.enh.loss.criterions.time_domain.TimeDomainLoss" title="espnet2.enh.loss.criterions.time_domain.TimeDomainLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">espnet2.enh.loss.criterions.time_domain.TimeDomainLoss</span></code></a></p>
+<p>STOI loss</p>
+<dl class="simple">
+<dt>Reference:</dt><dd><p>[1] C.H.Taal, R.C.Hendriks, R.Heusdens, J.Jensen ‘A Short-Time Objective
+Intelligibility Measure for Time-Frequency Weighted Noisy Speech’,
+ICASSP 2010, Texas, Dallas.
+[2] C.H.Taal, R.C.Hendriks, R.Heusdens, J.Jensen ‘An Algorithm for
+Intelligibility Prediction of Time-Frequency Weighted Noisy Speech’,
+IEEE Transactions on Audio, Speech, and Language Processing, 2011.
+[3] J. Jensen and C. H. Taal, ‘An Algorithm for Predicting the
+Intelligibility of Speech Masked by Modulated Noise Maskers’,
+IEEE Transactions on Audio, Speech and Language Processing, 2016.</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ref</strong> – (Batch, samples)</p></li>
+<li><p><strong>inf</strong> – (Batch, samples)</p></li>
+<li><p><strong>filter_length</strong> (<em>int</em>) – a time-invariant filter that allows
+slight distortion via filtering</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>(Batch,)</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>loss</p>
+</dd>
+</dl>
+<dl class="method">
+<dt id="espnet2.enh.loss.criterions.time_domain.STOILoss.forward">
+<code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param">ref: torch.Tensor</em>, <em class="sig-param">inf: torch.Tensor</em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="reference internal" href="../_modules/espnet2/enh/loss/criterions/time_domain.html#STOILoss.forward"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet2.enh.loss.criterions.time_domain.STOILoss.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+<dl class="method">
+<dt id="espnet2.enh.loss.criterions.time_domain.STOILoss.name">
+<em class="property">property </em><code class="sig-name descname">name</code><a class="headerlink" href="#espnet2.enh.loss.criterions.time_domain.STOILoss.name" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
 <dt id="espnet2.enh.loss.criterions.time_domain.TimeDomainLoss">
 <em class="property">class </em><code class="sig-prename descclassname">espnet2.enh.loss.criterions.time_domain.</code><code class="sig-name descname">TimeDomainLoss</code><a class="reference internal" href="../_modules/espnet2/enh/loss/criterions/time_domain.html#TimeDomainLoss"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet2.enh.loss.criterions.time_domain.TimeDomainLoss" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#espnet2.enh.loss.criterions.abs_loss.AbsEnhLoss" title="espnet2.enh.loss.criterions.abs_loss.AbsEnhLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">espnet2.enh.loss.criterions.abs_loss.AbsEnhLoss</span></code></a>, <code class="xref py py-class docutils literal notranslate"><span class="pre">abc.ABC</span></code></p>
 <p>Initializes internal Module state, shared by both nn.Module and ScriptModule.</p>
+</dd></dl>
+
+<dl class="class">
+<dt id="espnet2.enh.loss.criterions.time_domain.Wav2vec2DFLoss">
+<em class="property">class </em><code class="sig-prename descclassname">espnet2.enh.loss.criterions.time_domain.</code><code class="sig-name descname">Wav2vec2DFLoss</code><span class="sig-paren">(</span><em class="sig-param">layer=12</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/espnet2/enh/loss/criterions/time_domain.html#Wav2vec2DFLoss"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet2.enh.loss.criterions.time_domain.Wav2vec2DFLoss" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#espnet2.enh.loss.criterions.time_domain.TimeDomainLoss" title="espnet2.enh.loss.criterions.time_domain.TimeDomainLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">espnet2.enh.loss.criterions.time_domain.TimeDomainLoss</span></code></a></p>
+<p>Wav2vec2 Deep Feature Loss</p>
+<dl class="simple">
+<dt>Reference:</dt><dd><p>Baevski, A., Zhou, H., Mohamed, A., &amp; Auli, M. (2020). wav2vec 2.0:
+A framework for self-supervised learning of speech representations.
+In Proc. NIPS 2020
+pretrained model: <a class="reference external" href="https://huggingface.co/facebook/wav2vec2-base-960h">https://huggingface.co/facebook/wav2vec2-base-960h</a></p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ref</strong> – (Batch, samples)</p></li>
+<li><p><strong>inf</strong> – (Batch, samples)</p></li>
+<li><p><strong>layer</strong> (<em>int</em>) – calculate deep feature loss on this layer</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>(Batch,)</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>loss</p>
+</dd>
+</dl>
+<dl class="method">
+<dt id="espnet2.enh.loss.criterions.time_domain.Wav2vec2DFLoss.forward">
+<code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param">ref: torch.Tensor</em>, <em class="sig-param">inf: torch.Tensor</em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="reference internal" href="../_modules/espnet2/enh/loss/criterions/time_domain.html#Wav2vec2DFLoss.forward"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet2.enh.loss.criterions.time_domain.Wav2vec2DFLoss.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+<dl class="method">
+<dt id="espnet2.enh.loss.criterions.time_domain.Wav2vec2DFLoss.name">
+<em class="property">property </em><code class="sig-name descname">name</code><a class="headerlink" href="#espnet2.enh.loss.criterions.time_domain.Wav2vec2DFLoss.name" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
 </dd></dl>
 
 </section>
