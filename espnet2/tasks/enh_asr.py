@@ -1,4 +1,5 @@
 import argparse
+import copy
 import logging
 from typing import Callable
 from typing import Collection
@@ -13,28 +14,24 @@ from typeguard import check_argument_types
 from typeguard import check_return_type
 
 from espnet2.asr.ctc import CTC
-from espnet2.asr.decoder.abs_decoder import AbsDecoder
-from espnet2.asr.decoder.rnn_decoder import RNNDecoder
-from espnet2.asr.decoder.transformer_decoder import TransformerDecoder
-from espnet2.asr.encoder.abs_encoder import AbsEncoder
-from espnet2.asr.encoder.rnn_encoder import RNNEncoder
-from espnet2.asr.encoder.transformer_encoder import TransformerEncoder
-from espnet2.asr.encoder.vgg_rnn_encoder import VGGRNNEncoder
-from espnet2.asr.espnet_joint_model import ESPnetEnhASRModel
+from espnet2.asr.espnet_enh_asr_model import ESPnetEnhASRModel
 from espnet2.asr.espnet_model import ESPnetASRModel
-from espnet2.asr.frontend.abs_frontend import AbsFrontend
-from espnet2.asr.frontend.default import DefaultFrontend
-from espnet2.asr.specaug.abs_specaug import AbsSpecAug
-from espnet2.asr.specaug.specaug import SpecAug
-from espnet2.enh.abs_enh import AbsEnhancement
+from espnet2.asr.transducer.joint_network import JointNetwork
 from espnet2.enh.espnet_model import ESPnetEnhancementModel
-from espnet2.enh.nets.beamformer_net import BeamformerNet
-from espnet2.enh.nets.tasnet import TasNet
-from espnet2.enh.nets.tf_mask_net import TFMaskingNet
-from espnet2.layers.abs_normalize import AbsNormalize
-from espnet2.layers.global_mvn import GlobalMVN
-from espnet2.layers.utterance_mvn import UtteranceMVN
 from espnet2.tasks.abs_task import AbsTask
+from espnet2.tasks.asr import ASRTask
+from espnet2.tasks.asr import frontend_choices
+from espnet2.tasks.asr import specaug_choices
+from espnet2.tasks.asr import normalize_choices
+from espnet2.tasks.asr import preencoder_choices as asr_preencoder_choices_
+from espnet2.tasks.asr import encoder_choices as asr_encoder_choices_
+from espnet2.tasks.asr import postencoder_choices as asr_postencoder_choices_
+from espnet2.tasks.asr import decoder_choices as asr_decoder_choices_
+from espnet2.tasks.enh import EnhancementTask
+from espnet2.tasks.enh import encoder_choices as enh_encoder_choices_
+from espnet2.tasks.enh import decoder_choices as enh_decoder_choices_
+from espnet2.tasks.enh import separator_choices as enh_separator_choices_
+from espnet2.tasks.enh import criterion_choices as enh_criterion_choices_
 from espnet2.text.phoneme_tokenizer import g2p_choices
 from espnet2.torch_utils.initialize import initialize
 from espnet2.train.class_choices import ClassChoices
@@ -47,73 +44,56 @@ from espnet2.utils.types import int_or_none
 from espnet2.utils.types import str2bool
 from espnet2.utils.types import str_or_none
 
-enh_choices = ClassChoices(
-    name="enh",
-    classes=dict(tf_masking=TFMaskingNet, tasnet=TasNet, wpe_beamformer=BeamformerNet),
-    type_check=AbsEnhancement,
-    default="tf_masking",
-)
-frontend_choices = ClassChoices(
-    name="frontend",
-    classes=dict(default=DefaultFrontend),
-    type_check=AbsFrontend,
-    default="default",
-)
-specaug_choices = ClassChoices(
-    name="specaug",
-    classes=dict(specaug=SpecAug),
-    type_check=AbsSpecAug,
-    default=None,
-    optional=True,
-)
-normalize_choices = ClassChoices(
-    "normalize",
-    classes=dict(
-        global_mvn=GlobalMVN,
-        utterance_mvn=UtteranceMVN,
-    ),
-    type_check=AbsNormalize,
-    default="utterance_mvn",
-    optional=True,
-)
-encoder_choices = ClassChoices(
-    "encoder",
-    classes=dict(
-        transformer=TransformerEncoder,
-        vgg_rnn=VGGRNNEncoder,
-        rnn=RNNEncoder,
-    ),
-    type_check=AbsEncoder,
-    default="rnn",
-)
-decoder_choices = ClassChoices(
-    "decoder",
-    classes=dict(transformer=TransformerDecoder, rnn=RNNDecoder),
-    type_check=AbsDecoder,
-    default="rnn",
-)
+
+enh_encoder_choices = copy.deepcopy(enh_encoder_choices_)
+enh_encoder_choices.name = "enh_encoder"
+enh_decoder_choices = copy.deepcopy(enh_decoder_choices_)
+enh_decoder_choices.name = "enh_decoder"
+enh_separator_choices = copy.deepcopy(enh_separator_choices_)
+enh_separator_choices.name = "enh_separator"
+enh_criterions_choices = copy.deepcopy(enh_criterion_choices_)
+enh_criterions_choices.name = "enh_criterions"
+
+asr_preencoder_choices = copy.deepcopy(asr_preencoder_choices_)
+asr_preencoder_choices.name = "asr_preencoder"
+asr_encoder_choices = copy.deepcopy(asr_encoder_choices_)
+asr_encoder_choices.name = "asr_encoder"
+asr_postencoder_choices = copy.deepcopy(asr_postencoder_choices_)
+asr_postencoder_choices.name = "asr_postencoder"
+asr_decoder_choices = copy.deepcopy(asr_decoder_choices_)
+asr_decoder_choices.name = "asr_decoder"
 
 MAX_REFERENCE_NUM = 100
 
 
-class ASRTask(AbsTask):
+class EnhASRTask(AbsTask):
     # If you need more than one optimizers, change this value
     num_optimizers: int = 1
 
     # Add variable objects configurations
     class_choices_list = [
-        # --enh and --enh_conf
-        enh_choices,
+        # --enh_encoder and --enh_encoder_conf
+        enh_encoder_choices,
+        # --enh_separator and --enh_separator_conf
+        enh_separator_choices,
+        # --enh_decoder and --enh_decoder_conf
+        enh_decoder_choices,
+        # --enh_criterion and --enh_criterion_conf
+        enh_criterions_choices,
         # --frontend and --frontend_conf
         frontend_choices,
         # --specaug and --specaug_conf
         specaug_choices,
         # --normalize and --normalize_conf
         normalize_choices,
-        # --encoder and --encoder_conf
-        encoder_choices,
-        # --decoder and --decoder_conf
-        decoder_choices,
+        # --asr_preencoder and --asr_preencoder_conf
+        asr_preencoder_choices,
+        # --asr_encoder and --asr_encoder_conf
+        asr_encoder_choices,
+        # --asr_postencoder and --asr_postencoder_conf
+        asr_postencoder_choices,
+        # --asr_decoder and --asr_decoder_conf
+        asr_decoder_choices,
     ]
 
     # If you need to modify train() or eval() procedures, change Trainer class here
@@ -176,6 +156,13 @@ class ASRTask(AbsTask):
             help="The keyword arguments for model class.",
         )
 
+        group.add_argument(
+            "--model_conf",
+            action=NestedDictAction,
+            default=get_default_kwargs(ESPnetEnhASRModel),
+            help="The keyword arguments for model class.",
+        )
+
         group = parser.add_argument_group(description="Preprocess related")
         group.add_argument(
             "--use_preprocessor",
@@ -215,6 +202,12 @@ class ASRTask(AbsTask):
             default=None,
             help="Specify g2p method if --token_type=phn",
         )
+        group.add_argument(
+            "--enhancement_conf",
+            action=NestedDictAction,
+            default=None,
+            help="The keyword arguments for enhancement model class.",
+        )
 
         for class_choices in cls.class_choices_list:
             # Append --<name> and --<name>_conf.
@@ -246,7 +239,7 @@ class ASRTask(AbsTask):
                 token_list=args.token_list,
                 bpemodel=args.bpemodel,
                 non_linguistic_symbols=args.non_linguistic_symbols,
-                text_name=["text_ref1", "text_ref2"],
+                text_name=["text"],
                 text_cleaner=args.cleaner,
                 g2p_type=args.g2p,
             )
@@ -260,10 +253,10 @@ class ASRTask(AbsTask):
         cls, train: bool = True, inference: bool = False
     ) -> Tuple[str, ...]:
         if not inference:
-            retval = ("speech_mix", "speech_ref1", "text_ref1")
+            retval = ("speech", "speech_ref1", "text")
         else:
             # Recognition mode
-            retval = ("speech_mix",)
+            retval = ("speech",)
         return retval
 
     @classmethod
@@ -294,70 +287,48 @@ class ASRTask(AbsTask):
         vocab_size = len(token_list)
         logging.info(f"Vocabulary size: {vocab_size }")
 
-        # 0. Build pre enhancement model
-        enh_model = enh_choices.get_class(args.enh)(**args.enh_conf)
+        # 0. Build enhancement model
+        enh_conf = dict(init=None, model_conf=args.enh_model_conf)
+        enh_attributes = [
+            "encoder", "encoder_conf",
+            "separator", "separator_conf",
+            "decoder", "decoder_conf",
+            "criterions",
+        ]
+        for attr in enh_attributes:
+            enh_conf[attr] = (
+                getattr(args, "enh_" + attr, None) if getattr(args, "enh_" + attr, None) is not None
+                else getattr(args, attr, None)
+            )
+        enh_model = EnhancementTask.build_model(argparse.Namespace(**enh_conf))
 
-        # 1. frontend
-        if args.input_size is None:
-            # Extract features in the model
-            frontend_class = frontend_choices.get_class(args.frontend)
-            frontend = frontend_class(**args.frontend_conf)
-            input_size = frontend.output_size()
-        else:
-            # Give features from data-loader
-            args.frontend = None
-            args.frontend_conf = {}
-            frontend = None
-            input_size = args.input_size
+        # 1. Build asr model
+        asr_conf = dict(init=None, model_conf=args.asr_model_conf)
+        asr_attributes = [
+            "token_list",
+            "input_size",
+            "frontend", "frontend_conf",
+            "specaug", "specaug_conf",
+            "normalize", "normalize_conf",
+            "preencoder", "preencoder_conf",
+            "encoder", "encoder_conf",
+            "postencoder", "postencoder_conf",
+            "decoder", "decoder_conf",
+            "ctc_conf",
+        ]
+        for attr in asr_attributes:
+            asr_conf[attr] = (
+                getattr(args, "asr_" + attr, None) if getattr(args, "asr_" + attr, None) is not None
+                else getattr(args, attr, None)
+            )
+        asr_model = ASRTask.build_model(argparse.Namespace(**asr_conf))
 
-        # 2. Data augmentation for spectrogram
-        if args.specaug is not None:
-            specaug_class = specaug_choices.get_class(args.specaug)
-            specaug = specaug_class(**args.specaug_conf)
-        else:
-            specaug = None
-
-        # 3. Normalization layer
-        if args.normalize is not None:
-            normalize_class = normalize_choices.get_class(args.normalize)
-            normalize = normalize_class(**args.normalize_conf)
-        else:
-            normalize = None
-
-        # 4. Encoder
-        encoder_class = encoder_choices.get_class(args.encoder)
-        encoder = encoder_class(input_size=input_size, **args.encoder_conf)
-
-        # 5. Decoder
-        decoder_class = decoder_choices.get_class(args.decoder)
-
-        decoder = decoder_class(
-            vocab_size=vocab_size,
-            encoder_output_size=encoder.output_size(),
-            **args.decoder_conf,
-        )
-
-        # 6. CTC
-        ctc = CTC(
-            odim=vocab_size, encoder_output_sizse=encoder.output_size(), **args.ctc_conf
-        )
-
-        # 7. RNN-T Decoder (Not implemented)
-        rnnt_decoder = None
 
         # 8. Build model
         model = ESPnetEnhASRModel(
-            vocab_size=vocab_size,
-            enh=enh_model,
-            frontend=frontend,
-            specaug=specaug,
-            normalize=normalize,
-            encoder=encoder,
-            decoder=decoder,
-            ctc=ctc,
-            rnnt_decoder=rnnt_decoder,
-            token_list=token_list,
-            **args.asr_model_conf,
+            enh_model=enh_model,
+            asr_model=asr_model,
+            **args.model_conf,
         )
 
         # FIXME(kamo): Should be done in model?

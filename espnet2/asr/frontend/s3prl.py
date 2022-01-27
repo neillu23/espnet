@@ -123,8 +123,7 @@ class S3prlFrontend(AbsFrontend):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         wavs = [wav[: input_lengths[i]] for i, wav in enumerate(input)]
         self.upstream.eval()
-        with torch.no_grad():
-            feats = self.upstream(wavs)
+        feats = self.upstream(wavs)
         feats = self.featurizer(wavs, feats)
 
         if self.args.tile_factor != 1:

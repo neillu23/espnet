@@ -26,6 +26,7 @@ from espnet2.enh.loss.criterions.tf_domain import FrequencyDomainMSE
 from espnet2.enh.loss.criterions.time_domain import CISDRLoss
 from espnet2.enh.loss.criterions.time_domain import SISNRLoss
 from espnet2.enh.loss.criterions.time_domain import SNRLoss
+from espnet2.enh.loss.criterions.time_domain import TimeDomainL1
 from espnet2.enh.loss.wrappers.abs_wrapper import AbsLossWrapper
 from espnet2.enh.loss.wrappers.fixed_order import FixedOrderSolver
 from espnet2.enh.loss.wrappers.pit_solver import PITSolver
@@ -37,6 +38,7 @@ from espnet2.enh.separator.neural_beamformer import NeuralBeamformer
 from espnet2.enh.separator.rnn_separator import RNNSeparator
 from espnet2.enh.separator.tcn_separator import TCNSeparator
 from espnet2.enh.separator.transformer_separator import TransformerSeparator
+from espnet2.enh.separator.complex_tcn_dense_unet import CSeqUNetDenseSeg
 from espnet2.tasks.abs_task import AbsTask
 from espnet2.torch_utils.initialize import initialize
 from espnet2.train.class_choices import ClassChoices
@@ -64,6 +66,7 @@ separator_choices = ClassChoices(
         conformer=ConformerSeparator,
         wpe_beamformer=NeuralBeamformer,
         asteroid=AsteroidModel_Converter,
+        complex_tcn_dense_unet=CSeqUNetDenseSeg,
     ),
     type_check=AbsSeparator,
     default="rnn",
@@ -91,6 +94,7 @@ criterion_choices = ClassChoices(
         si_snr=SISNRLoss,
         mse=FrequencyDomainMSE,
         l1=FrequencyDomainL1,
+        td_l1=TimeDomainL1,
     ),
     type_check=AbsEnhLoss,
     default=None,

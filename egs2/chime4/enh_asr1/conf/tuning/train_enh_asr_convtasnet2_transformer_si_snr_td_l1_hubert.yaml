@@ -1,0 +1,116 @@
+# minibatch related
+batch_type: folded
+batch_size: 8  # A6000 x 4
+accum_grad: 4
+max_epoch: 50
+patience: none
+# The initialization method for model parameters
+init: xavier_uniform
+val_scheduler_criterion:
+- valid
+- loss
+best_model_criterion:
+-   - valid
+    - acc
+    - max
+keep_nbest_models: 10
+num_att_plot: 0
+unused_parameters: true
+freeze_param: [
+    "asr_model.frontend.upstream",
+]
+
+# network architecture
+enh_encoder: conv
+enh_encoder_conf:
+    channel: 256
+    kernel_size: 40
+    stride: 20
+enh_decoder: conv
+enh_decoder_conf:
+    channel: 256
+    kernel_size: 40
+    stride: 20
+enh_separator: tcn
+enh_separator_conf:
+    num_spk: 1
+    layer: 4
+    stack: 2
+    bottleneck_dim: 256
+    hidden_dim: 512
+    kernel: 3
+    causal: False
+    norm_type: "gLN"
+    nonlinear: relu
+enh_criterions:
+  # The first criterion
+  - name: si_snr
+    conf:
+      eps: 1.0e-7
+    # the wrapper for the current criterion
+    # for single-talker case, we simplely use fixed_order wrapper
+    wrapper: fixed_order
+    wrapper_conf:
+      weight: 0.5
+  - name: td_l1
+    conf:
+      eps: 1.0e-7
+    # the wrapper for the current criterion
+    # for single-talker case, we simplely use fixed_order wrapper
+    wrapper: fixed_order
+    wrapper_conf:
+      weight: 0.5
+
+frontend: s3prl
+frontend_conf:
+    frontend_conf:
+        upstream: hubert_large_ll60k  # Note: If the upstream is changed, please change the input_size in the preencoder.
+    download_dir: ./hub
+    multilayer_feature: True
+
+asr_preencoder: linear
+asr_preencoder_conf:
+    input_size: 1024  # Note: If the upstream is changed, please change this value accordingly.
+    output_size: 80
+
+# encoder related
+asr_encoder: transformer
+asr_encoder_conf:
+    output_size: 256
+    attention_heads: 4
+    linear_units: 2048
+    num_blocks: 12
+    dropout_rate: 0.1
+    positional_dropout_rate: 0.1
+    attention_dropout_rate: 0.0
+    input_layer: conv2d2
+    normalize_before: true
+
+# decoder related
+asr_decoder: transformer
+asr_decoder_conf:
+    attention_heads: 4
+    linear_units: 2048
+    num_blocks: 6
+    dropout_rate: 0.1
+    positional_dropout_rate: 0.1
+    self_attention_dropout_rate: 0.0
+    src_attention_dropout_rate: 0.0
+
+asr_model_conf:
+    ctc_weight: 0.3
+    lsm_weight: 0.1
+    length_normalized_loss: false
+    extract_feats_in_collect_stats: false
+
+model_conf:
+    enh_loss_weight: 1
+    enh_loss_prob: 0
+    bypass_enh_prob: 0
+
+optim: adam
+optim_conf:
+    lr: 0.005
+scheduler: warmuplr
+scheduler_conf:
+    warmup_steps: 30000

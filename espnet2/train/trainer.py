@@ -505,6 +505,7 @@ class Trainer:
             reporter.measure_iter_time(iterator, "iter_time"), 1
         ):
             assert isinstance(batch, dict), type(batch)
+            batch["utt_id"] = _
 
             if distributed:
                 torch.distributed.all_reduce(iterator_stop, ReduceOp.SUM)
@@ -706,6 +707,7 @@ class Trainer:
         iterator_stop = torch.tensor(0).to("cuda" if ngpu > 0 else "cpu")
         for (_, batch) in iterator:
             assert isinstance(batch, dict), type(batch)
+            batch["utt_id"] = _
             if distributed:
                 torch.distributed.all_reduce(iterator_stop, ReduceOp.SUM)
                 if iterator_stop > 0:
