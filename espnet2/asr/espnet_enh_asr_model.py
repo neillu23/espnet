@@ -102,11 +102,12 @@ class ESPnetEnhASRModel(AbsESPnetModel):
         # Bypass the enhancement module
         bypass_enh_flag = False
         if not enh_loss_flag:
-            if random.random() <= self.bypass_enh_prob:
+            if self.training and random.random() <= self.bypass_enh_prob:
                 bypass_enh_flag = True
 
         # 1. Enhancement
         # model forward
+        loss_enh = None
         if not bypass_enh_flag:
             speech_pre, feature_mix, feature_pre, others = self.enh_model.forward_enhance(speech, speech_lengths)
             # loss computation
@@ -120,8 +121,6 @@ class ESPnetEnhASRModel(AbsESPnetModel):
                     speech_ref,
                 )
                 loss_enh = loss_enh[0]
-            else:
-                loss_enh = None
         else:
             speech_pre = [speech]
 

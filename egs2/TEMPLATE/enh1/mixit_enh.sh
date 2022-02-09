@@ -81,12 +81,6 @@ ref_channel=0
 score_with_asr=false
 asr_exp=""       # asr model for scoring WER
 lm_exp=""       # lm model for scoring WER
-inference_asr_model=valid.acc.best.pth # ASR model path for decoding.
-inference_lm=valid.loss.best.pth       # Language model path for decoding.
-nlsyms_txt=none  # Non-linguistic symbol list if existing.
-inference_asr_tag=    # Suffix to the result dir for decoding.
-inference_asr_config= # Config for decoding.
-inference_asr_args=   # Arguments for ASR decoding, e.g., "--lm_weight 0.1".
 
 # [Task dependent] Set the datadir name created by local/data.sh
 train_set=       # Name of training set.
@@ -160,18 +154,6 @@ Options:
                             output is single-channel and reference speech is multi-channel
                             (default="${ref_channel}")
 
-    # ASR evaluation related
-    --score_with_asr       # Enable ASR evaluation (default="${score_with_asr}")
-    --asr_exp              # asr model for scoring WER  (default="${asr_exp}")
-    --lm_exp               # lm model for scoring WER (default="${lm_exp}")
-    --nlsyms_txt           # Non-linguistic symbol list if existing.  (default="${nlsyms_txt}")
-    --inference_asr_model  # ASR model path for decoding. (default="${inference_asr_model}")
-    --inference_lm         # Language model path for decoding. (default="${inference_lm}")
-    --nlsyms_txt           # Non-linguistic symbol list if existing. (default="${nlsyms_txt}")
-    --inference_asr_tag    # Suffix to the result dir for decoding. (default="${inference_asr_tag}")
-    --inference_asr_config # Config for ASR decoding.  (default="${inference_asr_config}")
-    --inference_asr_args   # Arguments for ASR decoding, e.g., "--lm_weight 0.1". (default="${inference_asr_args}")
-
     # [Task dependent] Set the datadir name created by local/data.sh
     --train_set     # Name of training set (required).
     --valid_set       # Name of development set (required).
@@ -216,23 +198,6 @@ if [ -z "${enh_tag}" ]; then
         enh_tag+="$(echo "${enh_args}" | sed -e "s/--/\_/g" -e "s/[ |=]//g")"
     fi
 fi
-
-if [ -z "${inference_asr_tag}" ]; then
-    if [ -n "${inference_asr_config}" ]; then
-        inference_asr_tag="$(basename "${inference_asr_config}" .yaml)"
-    else
-        inference_asr_tag=asr_inference
-    fi
-    # Add overwritten arg's info
-    if [ -n "${inference_asr_args}" ]; then
-        inference_asr_tag+="$(echo "${inference_asr_args}" | sed -e "s/--/\_/g" -e "s/[ |=]//g")"
-    fi
-    if [ -n "${lm_exp}" ]; then
-        inference_asr_tag+="_lm_$(basename "${lm_exp}")_$(echo "${inference_lm}" | sed -e "s/\//_/g" -e "s/\.[^.]*$//g")"
-    fi
-    inference_asr_tag+="_asr_model_$(echo "${inference_asr_model}" | sed -e "s/\//_/g" -e "s/\.[^.]*$//g")"
-fi
-
 
 
 # The directory used for collect-stats mode
@@ -303,6 +268,7 @@ if ! "${skip_data_prep}"; then
                 _suf=""
             fi
             utils/copy_data_dir.sh data/"${dset}" "${data_feats}${_suf}/${dset}"
+            [ -f data/"${dset}"/utt2category ] && cp data/"${dset}"/utt2category "${data_feats}${_suf}/${dset}"
             rm -f ${data_feats}${_suf}/${dset}/{segments,wav.scp,reco2file_and_channel}
             _opts=
             if [ -e data/"${dset}"/segments ]; then
@@ -386,6 +352,12 @@ if ! "${skip_data_prep}"; then
                     utils/filter_scp.pl "${data_feats}/${dset}/utt2num_samples"  \
                     >"${data_feats}/${dset}/${spk}.scp"
             done
+
+            if [ -f ${data_feats}/org/${dset}/utt2category ]; then
+                <"${data_feats}/org/${dset}/utt2category" \
+                    utils/filter_scp.pl "${data_feats}/${dset}/utt2num_samples"  \
+                    >"${data_feats}/${dset}/utt2category"
+            fi
 
             # fix_data_dir.sh leaves only utts which exist in all files
             utils/fix_data_dir.sh --utt_extra_files "${_scp_list}" "${data_feats}/${dset}"
@@ -481,7 +453,7 @@ if ! "${skip_train}"; then
 
         # shellcheck disable=SC2086
         ${train_cmd} JOB=1:"${_nj}" "${_logdir}"/stats.JOB.log \
-            ${python} -m espnet2.bin.enh_train \
+            ${python} -m espnet2.bin.mixit_enh_train \
                 --collect_stats true \
                 --use_preprocessor true \
                 ${_train_data_param} \
@@ -578,7 +550,7 @@ if ! "${skip_train}"; then
             --num_nodes "${num_nodes}" \
             --init_file_prefix "${enh_exp}"/.dist_init_ \
             --multiprocessing_distributed true -- \
-            ${python} -m espnet2.bin.enh_train \
+            ${python} -m espnet2.bin.mixit_enh_train \
                 ${_train_data_param} \
                 ${_valid_data_param} \
                 ${_train_shape_param} \
@@ -611,7 +583,8 @@ if ! "${skip_eval}"; then
         mkdir -p "${enh_exp}"; echo "${run_args} --stage 7 \"\$@\"; exit \$?" > "${enh_exp}/run_enhance.sh"; chmod +x "${enh_exp}/run_enhance.sh"
         _opts=
 
-        for dset in "${valid_set}" ${test_sets}; do
+        # for dset in "${valid_set}" ${test_sets}; do
+        for dset in ${test_sets}; do
             _data="${data_feats}/${dset}"
             _dir="${enh_exp}/enhanced_${dset}"
             _logdir="${_dir}/logdir"
@@ -639,7 +612,7 @@ if ! "${skip_eval}"; then
             log "Enhancement started... log: '${_logdir}/enh_inference.*.log'"
             # shellcheck disable=SC2086
             ${_cmd} --gpu "${_ngpu}" JOB=1:"${_nj}" "${_logdir}"/enh_inference.JOB.log \
-                ${python} -m espnet2.bin.enh_inference \
+                ${python} -m espnet2.bin.mixit_enh_inference \
                     --ngpu "${_ngpu}" \
                     --fs "${fs}" \
                     --data_path_and_name_and_type "${_data}/${_scp},speech_mix,${_type}" \
@@ -671,84 +644,63 @@ if ! "${skip_eval}"; then
         log "Stage 8: Scoring"
         _cmd=${decode_cmd}
 
-        # score_obs=true: Scoring for observation signal
-        # score_obs=false: Scoring for enhanced signal
-        for score_obs in true false; do
-            # Peform only at the first time for observation
-            if "${score_obs}" && [ -e "${data_feats}/RESULTS.md" ]; then
-                log "${data_feats}/RESULTS.md already exists. The scoring for observation will be skipped"
-                continue
-            fi
+        # for dset in "${valid_set}" ${test_sets}; do
+        for dset in ${test_sets}; do
+            _data="${data_feats}/${dset}"
+            _inf_dir="${enh_exp}/enhanced_${dset}"
+            _dir="${enh_exp}/enhanced_${dset}/scoring"
+            _logdir="${_dir}/logdir"
+            mkdir -p "${_logdir}"
 
-            for dset in "${valid_set}" ${test_sets}; do
-                _data="${data_feats}/${dset}"
-                if "${score_obs}"; then
-                    _dir="${data_feats}/${dset}/scoring"
-                else
-                    _dir="${enh_exp}/enhanced_${dset}/scoring"
-                fi
-
-                _logdir="${_dir}/logdir"
-                mkdir -p "${_logdir}"
-
-                # 1. Split the key file
-                key_file=${_data}/wav.scp
-                split_scps=""
-                _nj=$(min "${inference_nj}" "$(<${key_file} wc -l)")
-                for n in $(seq "${_nj}"); do
-                    split_scps+=" ${_logdir}/keys.${n}.scp"
-                done
-                # shellcheck disable=SC2086
-                utils/split_scp.pl "${key_file}" ${split_scps}
+            # 1. Split the key file
+            key_file=${_data}/wav.scp
+            split_scps=""
+            _nj=$(min "${inference_nj}" "$(<${key_file} wc -l)")
+            for n in $(seq "${_nj}"); do
+                split_scps+=" ${_logdir}/keys.${n}.scp"
+            done
+            # shellcheck disable=SC2086
+            utils/split_scp.pl "${key_file}" ${split_scps}
 
 
-                _ref_scp=
-                for spk in $(seq "${spk_num}"); do
-                    _ref_scp+="--ref_scp ${_data}/spk${spk}.scp "
-                done
-                _inf_scp=
-                for spk in $(seq "${spk_num}"); do
-                    if "${score_obs}"; then
-                        # To compute the score of observation, input original wav.scp
-                        _inf_scp+="--inf_scp ${data_feats}/${dset}/wav.scp "
-                    else
-                        _inf_scp+="--inf_scp ${enh_exp}/enhanced_${dset}/spk${spk}.scp "
-                    fi
-                done
+            _ref_scp=
+            for spk in $(seq "${spk_num}"); do
+                _ref_scp+="--ref_scp ${_data}/spk${spk}.scp "
+            done
+            _inf_scp=
+            for spk in $(seq "${spk_num}"); do
+                _inf_scp+="--inf_scp ${_inf_dir}/spk${spk}.scp "
+            done
 
-                # 2. Submit scoring jobs
-                log "Scoring started... log: '${_logdir}/enh_scoring.*.log'"
-                # shellcheck disable=SC2086
-                ${_cmd} JOB=1:"${_nj}" "${_logdir}"/enh_scoring.JOB.log \
-                    ${python} -m espnet2.bin.enh_scoring \
-                        --key_file "${_logdir}"/keys.JOB.scp \
-                        --output_dir "${_logdir}"/output.JOB \
-                        ${_ref_scp} \
-                        ${_inf_scp} \
-                        --ref_channel ${ref_channel}
+            # 2. Submit scoring jobs
+            log "Scoring started... log: '${_logdir}/enh_scoring.*.log'"
+            # shellcheck disable=SC2086
+            ${_cmd} JOB=1:"${_nj}" "${_logdir}"/enh_scoring.JOB.log \
+                ${python} -m espnet2.bin.enh_scoring \
+                    --key_file "${_logdir}"/keys.JOB.scp \
+                    --output_dir "${_logdir}"/output.JOB \
+                    ${_ref_scp} \
+                    ${_inf_scp} \
+                    --ref_channel ${ref_channel}
 
-                for spk in $(seq "${spk_num}"); do
-                    for protocol in ${scoring_protocol} wav; do
-                        for i in $(seq "${_nj}"); do
-                            cat "${_logdir}/output.${i}/${protocol}_spk${spk}"
-                        done | LC_ALL=C sort -k1 > "${_dir}/${protocol}_spk${spk}"
-                    done
-                done
-
-
-                for protocol in ${scoring_protocol}; do
-                    # shellcheck disable=SC2046
-                    paste $(for j in $(seq ${spk_num}); do echo "${_dir}"/"${protocol}"_spk"${j}" ; done)  |
-                    awk 'BEGIN{sum=0}
-                        {n=0;score=0;for (i=2; i<=NF; i+=2){n+=1;score+=$i}; sum+=score/n}
-                        END{printf ("%.2f\n",sum/NR)}' > "${_dir}/result_${protocol,,}.txt"
+            for spk in $(seq "${spk_num}"); do
+                for protocol in ${scoring_protocol} wav; do
+                    for i in $(seq "${_nj}"); do
+                        cat "${_logdir}/output.${i}/${protocol}_spk${spk}"
+                    done | LC_ALL=C sort -k1 > "${_dir}/${protocol}_spk${spk}"
                 done
             done
 
-            ./scripts/utils/show_enh_score.sh "${_dir}/../.." > "${_dir}/../../RESULTS.md"
+
+            for protocol in ${scoring_protocol}; do
+                # shellcheck disable=SC2046
+                paste $(for j in $(seq ${spk_num}); do echo "${_dir}"/"${protocol}"_spk"${j}" ; done)  |
+                awk 'BEGIN{sum=0}
+                    {n=0;score=0;for (i=2; i<=NF; i+=2){n+=1;score+=$i}; sum+=score/n}
+                    END{printf ("%.2f\n",sum/NR)}' > "${_dir}/result_${protocol,,}.txt"
+            done
         done
-        log "Evaluation result for observation: ${data_feats}/RESULTS.md"
-        log "Evaluation result for enhancement: ${enh_exp}/enhanced/RESULTS.md"
+        ./scripts/utils/show_enh_score.sh ${enh_exp} > "${enh_exp}/RESULTS.md"
 
     fi
 else
@@ -760,15 +712,10 @@ if "${score_with_asr}"; then
     if [ ${stage} -le 9 ] && [ ${stop_stage} -ge 9 ]; then
         log "Stage 9: Decode with pretrained ASR model: "
         _cmd=${decode_cmd}
+        decode_asr_model=valid.acc.best.pth
 
-        _opts=
-        if [ -n "${inference_asr_config}" ]; then
-            _opts+="--config ${inference_asr_config} "
-        fi
-        if [ -n "${lm_exp}" ]; then
-            _opts+="--lm_train_config ${lm_exp}/config.yaml "
-            _opts+="--lm_file ${lm_exp}/${inference_lm} "
-        fi
+        decode_args="--lm_train_config ${lm_exp}/config.yaml "
+        decode_args+="--lm_file ${lm_exp}/valid.loss.best.pth "
 
         if ${gpu_inference}; then
             _cmd=${cuda_cmd}
@@ -778,86 +725,68 @@ if "${score_with_asr}"; then
             _ngpu=0
         fi
 
-        # score_obs=true: Scoring for observation signal
-        # score_obs=false: Scoring for enhanced signal
-        for score_obs in true false; do
-            # Peform only at the first time for observation
-            if "${score_obs}" && [ -e "${data_feats}/RESULTS_ASR.md" ]; then
-                log "${data_feats}/RESULTS_ASR.md already exists. The scoring for observation will be skipped"
-                continue
-            fi
 
-            for dset in ${valid_set} ${test_sets}; do
-                _data="${data_feats}/${dset}"
-                if "${score_obs}"; then
-                    _dir="${data_feats}/${inference_asr_tag}/${dset}/"
+        for dset in ${valid_set} ${test_sets}; do
+            _data="${data_feats}/${dset}"
+            _inf_dir="${enh_exp}/enhanced_${dset}"
+            _dir="${enh_exp}/enhanced_${dset}/scoring_asr"
+
+            for spk in $(seq "${spk_num}"); do
+                _ddir=${_dir}/spk_${spk}
+                _logdir="${_ddir}/logdir"
+                _decode_dir="${_ddir}/decode"
+                mkdir -p ${_ddir}
+                mkdir -p "${_logdir}"
+                mkdir -p "${_decode_dir}"
+
+                cat ${enh_exp}/enhanced_${dset}/scoring/wav_spk${spk} > ${_ddir}/wav.scp
+                cp data/${dset}/text_spk${spk} ${_ddir}/text
+                cp ${_data}/{spk2utt,utt2spk,utt2num_samples,feats_type} ${_ddir}
+                utils/fix_data_dir.sh "${_ddir}"
+                mv ${_ddir}/wav.scp ${_ddir}/wav_ori.scp
+
+                scripts/audio/format_wav_scp.sh --nj "${inference_nj}" --cmd "${_cmd}" \
+                    --out-filename "wav.scp" \
+                    --audio-format "${audio_format}" --fs "${fs}" \
+                    "${_ddir}/wav_ori.scp" "${_ddir}" \
+                    "${_ddir}/formated/logs/" "${_ddir}/formated/"
+
+                if [[ "${audio_format}" == *ark* ]]; then
+                    _type=kaldi_ark
                 else
-                    _dir="${enh_exp}/${inference_asr_tag}/${dset}"
+                    # "sound" supports "wav", "flac", etc.
+                    _type=sound
                 fi
 
-                for spk in $(seq "${spk_num}"); do
-                    _ddir=${_dir}/spk_${spk}
-                    _logdir="${_ddir}/logdir"
-                    _decode_dir="${_ddir}/decode"
-                    mkdir -p ${_ddir}
-                    mkdir -p "${_logdir}"
-                    mkdir -p "${_decode_dir}"
+                # 1. Split the key file
+                key_file=${_ddir}/wav.scp
+                _nj=$(min "${inference_nj}" "$(<${key_file} wc -l)")
 
-                    if "${score_obs}"; then
-                        # Using same wav.scp for all speakers
-                        cp "${_data}/wav.scp" "${_ddir}/wav.scp"
-                    else
-                        cp "${enh_exp}/enhanced_${dset}/scoring/wav_spk${spk}" "${_ddir}/wav.scp"
-                    fi
-                    cp data/${dset}/text_spk${spk} ${_ddir}/text
-                    cp ${_data}/{spk2utt,utt2spk,utt2num_samples,feats_type} ${_ddir}
-                    utils/fix_data_dir.sh "${_ddir}"
-                    mv ${_ddir}/wav.scp ${_ddir}/wav_ori.scp
+                split_scps=""
+                for n in $(seq "${_nj}"); do
+                    split_scps+=" ${_logdir}/keys.${n}.scp"
+                done
+                # shellcheck disable=SC2086
+                utils/split_scp.pl "${key_file}" ${split_scps}
 
-                    scripts/audio/format_wav_scp.sh --nj "${inference_nj}" --cmd "${_cmd}" \
-                        --out-filename "wav.scp" \
-                        --audio-format "${audio_format}" --fs "${fs}" \
-                        "${_ddir}/wav_ori.scp" "${_ddir}" \
-                        "${_ddir}/formated/logs/" "${_ddir}/formated/"
+                log "Decoding started... log: '${_logdir}/asr_inference.*.log'"
+                # shellcheck disable=SC2086
+                ${_cmd} --gpu "${_ngpu}" JOB=1:"${_nj}" "${_logdir}"/asr_inference.JOB.log \
+                    python3 -m espnet2.bin.asr_inference \
+                        --ngpu "${_ngpu}" \
+                        --data_path_and_name_and_type "${_ddir}/wav.scp,speech,${_type}" \
+                        --key_file "${_logdir}"/keys.JOB.scp \
+                        --asr_train_config "${asr_exp}"/config.yaml \
+                        --asr_model_file "${asr_exp}"/"${decode_asr_model}" \
+                        --output_dir "${_logdir}"/output.JOB ${decode_args}
 
-                    if [[ "${audio_format}" == *ark* ]]; then
-                        _type=kaldi_ark
-                    else
-                        # "sound" supports "wav", "flac", etc.
-                        _type=sound
-                    fi
-
-                    # 1. Split the key file
-                    key_file=${_ddir}/wav.scp
-                    _nj=$(min "${inference_nj}" "$(<${key_file} wc -l)")
-
-                    split_scps=""
-                    for n in $(seq "${_nj}"); do
-                        split_scps+=" ${_logdir}/keys.${n}.scp"
-                    done
-                    # shellcheck disable=SC2086
-                    utils/split_scp.pl "${key_file}" ${split_scps}
-
-                    log "Decoding started... log: '${_logdir}/asr_inference.*.log'"
-                    # shellcheck disable=SC2086
-                    ${_cmd} --gpu "${_ngpu}" JOB=1:"${_nj}" "${_logdir}"/asr_inference.JOB.log \
-                        python3 -m espnet2.bin.asr_inference \
-                            --ngpu "${_ngpu}" \
-                            --data_path_and_name_and_type "${_ddir}/wav.scp,speech,${_type}" \
-                            --key_file "${_logdir}"/keys.JOB.scp \
-                            --asr_train_config "${asr_exp}"/config.yaml \
-                            --asr_model_file "${asr_exp}"/"${inference_asr_model}" \
-                            --output_dir "${_logdir}"/output.JOB \
-                            ${_opts} ${inference_asr_args}
-
-
-                    for f in token token_int score text; do
-                        for i in $(seq "${_nj}"); do
-                            cat "${_logdir}/output.${i}/1best_recog/${f}"
-                        done | LC_ALL=C sort -k1 >"${_decode_dir}/${f}"
-                    done
+                for f in token token_int score text; do
+                    for i in $(seq "${_nj}"); do
+                        cat "${_logdir}/output.${i}/1best_recog/${f}"
+                    done | LC_ALL=C sort -k1 >"${_decode_dir}/${f}"
                 done
             done
+
         done
     fi
 
@@ -865,6 +794,7 @@ if "${score_with_asr}"; then
         log "Stage 10: Scoring with pretrained ASR model: "
 
         _cmd=${decode_cmd}
+        nlsyms_txt='./data/nlsyms.txt'
         cleaner=none
 
         if ${gpu_inference}; then
@@ -875,99 +805,82 @@ if "${score_with_asr}"; then
             _ngpu=0
         fi
 
-        # score_obs=true: Scoring for observation signal
-        # score_obs=false: Scoring for enhanced signal
-        for score_obs in true false; do
-            # Peform only at the first time for observation
-            if "${score_obs}" && [ -e "${data_feats}/RESULTS_ASR.md" ]; then
-                log "${data_feats}/RESULTS_ASR.md already exists. The scoring for observation will be skipped"
-                continue
-            fi
+        for dset in ${valid_set} ${test_sets}; do
+            _inf_dir="${enh_exp}/enhanced_${dset}"
+            _dir="${enh_exp}/enhanced_${dset}/scoring_asr"
 
-            for dset in ${valid_set} ${test_sets}; do
-                if "${score_obs}"; then
-                    _dir="${data_feats}/${inference_asr_tag}/${dset}"
-                else
-                    _dir="${enh_exp}/${inference_asr_tag}/${dset}/"
-                fi
+            for spk in $(seq "${spk_num}"); do
+                _ddir=${_dir}/spk_${spk}
+                _logdir="${_ddir}/logdir"
+                _decode_dir="${_ddir}/decode"
 
-                for spk in $(seq "${spk_num}"); do
-                    _ddir=${_dir}/spk_${spk}
-                    _logdir="${_ddir}/logdir"
-                    _decode_dir="${_ddir}/decode"
+                for _type in cer wer; do
 
-                    for _type in cer wer; do
+                    _scoredir="${_ddir}/score_${_type}"
+                    mkdir -p "${_scoredir}"
 
-                        _scoredir="${_ddir}/score_${_type}"
-                        mkdir -p "${_scoredir}"
+                    if [ "${_type}" = wer ]; then
+                        # Tokenize text to word level
+                        paste \
+                            <(<"${_ddir}/text" \
+                                python3 -m espnet2.bin.tokenize_text  \
+                                    -f 2- --input - --output - \
+                                    --token_type word \
+                                    --non_linguistic_symbols "${nlsyms_txt}" \
+                                    --remove_non_linguistic_symbols true \
+                                    --cleaner "${cleaner}" \
+                                    ) \
+                            <(<"${_ddir}/text" awk '{ print "(" $1 ")" }') \
+                                >"${_scoredir}/ref.trn"
 
-                        if [ "${_type}" = wer ]; then
-                            # Tokenize text to word level
-                            paste \
-                                <(<"${_ddir}/text" \
-                                    python3 -m espnet2.bin.tokenize_text  \
-                                        -f 2- --input - --output - \
-                                        --token_type word \
-                                        --non_linguistic_symbols "${nlsyms_txt}" \
-                                        --remove_non_linguistic_symbols true \
-                                        --cleaner "${cleaner}" \
-                                        ) \
-                                <(<"${_ddir}/text" awk '{ print "(" $1 ")" }') \
-                                    >"${_scoredir}/ref.trn"
+                        # NOTE(kamo): Don't use cleaner for hyp
+                        paste \
+                            <(<"${_decode_dir}/text"  \
+                                python3 -m espnet2.bin.tokenize_text  \
+                                    -f 2- --input - --output - \
+                                    --token_type word \
+                                    --non_linguistic_symbols "${nlsyms_txt}" \
+                                    --remove_non_linguistic_symbols true \
+                                    ) \
+                            <(<"${_ddir}/text" awk '{ print "(" $1 ")" }') \
+                                >"${_scoredir}/hyp.trn"
+                    elif [ "${_type}" = cer ]; then
+                        # Tokenize text to char level
+                        paste \
+                            <(<"${_ddir}/text" \
+                                python3 -m espnet2.bin.tokenize_text  \
+                                    -f 2- --input - --output - \
+                                    --token_type char \
+                                    --non_linguistic_symbols "${nlsyms_txt}" \
+                                    --remove_non_linguistic_symbols true \
+                                    --cleaner "${cleaner}" \
+                                    ) \
+                            <(<"${_ddir}/text" awk '{ print "(" $1 ")" }') \
+                                >"${_scoredir}/ref.trn"
 
-                            # NOTE(kamo): Don't use cleaner for hyp
-                            paste \
-                                <(<"${_decode_dir}/text"  \
-                                    python3 -m espnet2.bin.tokenize_text  \
-                                        -f 2- --input - --output - \
-                                        --token_type word \
-                                        --non_linguistic_symbols "${nlsyms_txt}" \
-                                        --remove_non_linguistic_symbols true \
-                                        ) \
-                                <(<"${_ddir}/text" awk '{ print "(" $1 ")" }') \
-                                    >"${_scoredir}/hyp.trn"
-                        elif [ "${_type}" = cer ]; then
-                            # Tokenize text to char level
-                            paste \
-                                <(<"${_ddir}/text" \
-                                    python3 -m espnet2.bin.tokenize_text  \
-                                        -f 2- --input - --output - \
-                                        --token_type char \
-                                        --non_linguistic_symbols "${nlsyms_txt}" \
-                                        --remove_non_linguistic_symbols true \
-                                        --cleaner "${cleaner}" \
-                                        ) \
-                                <(<"${_ddir}/text" awk '{ print "(" $1 ")" }') \
-                                    >"${_scoredir}/ref.trn"
+                        # NOTE(kamo): Don't use cleaner for hyp
+                        paste \
+                            <(<"${_decode_dir}/text"  \
+                                python3 -m espnet2.bin.tokenize_text  \
+                                    -f 2- --input - --output - \
+                                    --token_type char \
+                                    --non_linguistic_symbols "${nlsyms_txt}" \
+                                    --remove_non_linguistic_symbols true \
+                                    ) \
+                            <(<"${_ddir}/text" awk '{ print "(" $1 ")" }') \
+                                >"${_scoredir}/hyp.trn"
+                    fi
 
-                            # NOTE(kamo): Don't use cleaner for hyp
-                            paste \
-                                <(<"${_decode_dir}/text"  \
-                                    python3 -m espnet2.bin.tokenize_text  \
-                                        -f 2- --input - --output - \
-                                        --token_type char \
-                                        --non_linguistic_symbols "${nlsyms_txt}" \
-                                        --remove_non_linguistic_symbols true \
-                                        ) \
-                                <(<"${_ddir}/text" awk '{ print "(" $1 ")" }') \
-                                    >"${_scoredir}/hyp.trn"
-                        fi
+                    sclite \
+                        -r "${_scoredir}/ref.trn" trn \
+                        -h "${_scoredir}/hyp.trn" trn \
+                        -i rm -o all stdout > "${_scoredir}/result.txt"
 
-                        sclite \
-                            -r "${_scoredir}/ref.trn" trn \
-                            -h "${_scoredir}/hyp.trn" trn \
-                            -i rm -o all stdout > "${_scoredir}/result.txt"
-
-                        log "Write ${_type} result in ${_scoredir}/result.txt"
-                        grep -e Avg -e SPKR -m 2 "${_scoredir}/result.txt"
-                    done
+                    log "Write ${_type} result in ${_scoredir}/result.txt"
+                    grep -e Avg -e SPKR -m 2 "${_scoredir}/result.txt"
                 done
             done
-
-            scripts/utils/show_asr_result.sh "${_dir}/../../" > "${_dir}"/../../RESULTS_ASR.md
         done
-        log "Evaluation result for observation: ${data_feats}/RESULTS_ASR.md"
-        log "Evaluation result for enhancement: ${enh_exp}/RESULTS_ASR.md"
     fi
 else
     log "Skip the stages for scoring with asr"
