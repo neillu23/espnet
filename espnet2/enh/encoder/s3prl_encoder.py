@@ -10,7 +10,9 @@ from distutils.version import LooseVersion
 import torch
 from torch_complex.tensor import ComplexTensor
 
+from espnet.nets.pytorch_backend.nets_utils import pad_list
 from espnet2.enh.encoder.abs_encoder import AbsEncoder
+from espnet2.utils.get_default_kwargs import get_default_kwargs
 
 is_torch_1_9_plus = LooseVersion(torch.__version__) >= LooseVersion("1.9.0")
 
@@ -31,24 +33,25 @@ class S3PRLEncoder(AbsEncoder):
 
     def __init__(
         self,
-        frontend_conf: Optional[dict] = get_default_kwargs(Frontend),
+        upstream_conf: Optional[dict],
         download_dir: str = None,
         multilayer_feature: bool = False,
+        layer_selection: int = None,
     ):
         super().__init__()
         if download_dir is not None:
             torch.hub.set_dir(download_dir)
 
         self.multilayer_feature = multilayer_feature
-        self.upstream, self.featurizer = self._get_upstream(frontend_conf)
+        self.layer_selection = layer_selection
+        self.upstream, self.featurizer = self._get_upstream(upstream_conf)
 
         self.pretrained_params = copy.deepcopy(self.upstream.state_dict())
-        self.output_dim = self.featurizer.output_dim
 
-    def _get_upstream(self, frontend_conf):
+    def _get_upstream(self, upstream_conf):
         """Get S3PRL upstream model."""
         s3prl_args = base_s3prl_setup(
-            Namespace(**frontend_conf, device="cpu"),
+            Namespace(**upstream_conf, device="cpu"),
         )
         self.args = s3prl_args
 
@@ -74,8 +77,8 @@ class S3PRLEncoder(AbsEncoder):
         ) is not None and s3prl_upstream.model.__class__.__name__ in [
             "Wav2Vec2Model",
             "HubertModel",
-        ]:  
-            s3prl_upstream.model.encoder.layerdrop = 0.0 
+        ]:
+            s3prl_upstream.model.encoder.layerdrop = 0.0
 
         from s3prl.upstream.interfaces import Featurizer
 
@@ -83,11 +86,15 @@ class S3PRLEncoder(AbsEncoder):
             feature_selection = "last_hidden_state"
         else:
             feature_selection = "hidden_states"
-        s3prl_featurizer = Featurizer(
+
+        featurizer_args = dict(
             upstream=s3prl_upstream,
             feature_selection=feature_selection,
             upstream_device="cpu",
         )
+        if self.layer_selection is not None:
+            featurizer_args["layer_selection"] = self.layer_selection
+        s3prl_featurizer = Featurizer(**featurizer_args)
 
         return s3prl_upstream, s3prl_featurizer
 
@@ -110,15 +117,14 @@ class S3PRLEncoder(AbsEncoder):
 
     @property
     def output_dim(self) -> int:
-        return self.output_dim
+        return self.featurizer.output_dim
 
     def forward(
         self, input: torch.Tensor, input_lengths: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         wavs = [wav[: input_lengths[i]] for i, wav in enumerate(input)]
         self.upstream.eval()
-        with torch.no_grad():
-            feats = self.upstream(wavs)
+        feats = self.upstream(wavs)
         feats = self.featurizer(wavs, feats)
 
         if self.args.tile_factor != 1:
@@ -134,4 +140,4 @@ class S3PRLEncoder(AbsEncoder):
 
     def reload_pretrained_parameters(self):
         self.upstream.load_state_dict(self.pretrained_params)
-        logging.info("Pretrained S3PRL frontend model parameters reloaded!")
+        logging.info("Pretrained S3PRL upstream model parameters reloaded!")

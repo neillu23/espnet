@@ -27,8 +27,6 @@ from espnet2.enh.loss.criterions.tf_domain import FrequencyDomainMSE
 from espnet2.enh.loss.criterions.time_domain import CISDRLoss
 from espnet2.enh.loss.criterions.time_domain import SISNRLoss
 from espnet2.enh.loss.criterions.time_domain import SNRLoss
-from espnet2.enh.loss.criterions.time_domain import TH_SISNRLoss
-from espnet2.enh.loss.criterions.time_domain import TH_SNRLoss
 from espnet2.enh.loss.criterions.time_domain import TimeDomainL1
 from espnet2.enh.loss.wrappers.abs_wrapper import AbsLossWrapper
 from espnet2.enh.loss.wrappers.fixed_order import FixedOrderSolver
@@ -96,10 +94,8 @@ criterion_choices = ClassChoices(
     name="criterions",
     classes=dict(
         snr=SNRLoss,
-        th_snr=TH_SNRLoss,
         ci_sdr=CISDRLoss,
         si_snr=SISNRLoss,
-        th_si_snr=TH_SISNRLoss,
         mse=FrequencyDomainMSE,
         l1=FrequencyDomainL1,
         td_l1=TimeDomainL1,

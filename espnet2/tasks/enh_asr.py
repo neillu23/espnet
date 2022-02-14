@@ -18,6 +18,7 @@ from espnet2.asr.espnet_enh_asr_model import ESPnetEnhASRModel
 from espnet2.asr.espnet_model import ESPnetASRModel
 from espnet2.asr.transducer.joint_network import JointNetwork
 from espnet2.enh.espnet_model import ESPnetEnhancementModel
+from espnet2.st.espnet_model import ESPnetSTModel
 from espnet2.tasks.abs_task import AbsTask
 from espnet2.tasks.asr import ASRTask
 from espnet2.tasks.asr import frontend_choices
@@ -32,6 +33,11 @@ from espnet2.tasks.enh import encoder_choices as enh_encoder_choices_
 from espnet2.tasks.enh import decoder_choices as enh_decoder_choices_
 from espnet2.tasks.enh import separator_choices as enh_separator_choices_
 from espnet2.tasks.enh import criterion_choices as enh_criterion_choices_
+from espnet2.tasks.st import STTask
+from espnet2.tasks.st import preencoder_choices as st_preencoder_choices_
+from espnet2.tasks.st import encoder_choices as st_encoder_choices_
+from espnet2.tasks.st import postencoder_choices as st_postencoder_choices_
+from espnet2.tasks.st import decoder_choices as st_decoder_choices_
 from espnet2.text.phoneme_tokenizer import g2p_choices
 from espnet2.torch_utils.initialize import initialize
 from espnet2.train.class_choices import ClassChoices
@@ -44,7 +50,7 @@ from espnet2.utils.types import int_or_none
 from espnet2.utils.types import str2bool
 from espnet2.utils.types import str_or_none
 
-
+# Enhancement
 enh_encoder_choices = copy.deepcopy(enh_encoder_choices_)
 enh_encoder_choices.name = "enh_encoder"
 enh_decoder_choices = copy.deepcopy(enh_decoder_choices_)
@@ -54,6 +60,7 @@ enh_separator_choices.name = "enh_separator"
 enh_criterions_choices = copy.deepcopy(enh_criterion_choices_)
 enh_criterions_choices.name = "enh_criterions"
 
+# ASR (also SLU)
 asr_preencoder_choices = copy.deepcopy(asr_preencoder_choices_)
 asr_preencoder_choices.name = "asr_preencoder"
 asr_encoder_choices = copy.deepcopy(asr_encoder_choices_)
@@ -63,8 +70,44 @@ asr_postencoder_choices.name = "asr_postencoder"
 asr_decoder_choices = copy.deepcopy(asr_decoder_choices_)
 asr_decoder_choices.name = "asr_decoder"
 
+# ST
+st_preencoder_choices = copy.deepcopy(st_preencoder_choices_)
+st_preencoder_choices.name = "st_preencoder"
+st_encoder_choices = copy.deepcopy(st_encoder_choices_)
+st_encoder_choices.name = "st_encoder"
+st_postencoder_choices = copy.deepcopy(st_postencoder_choices_)
+st_postencoder_choices.name = "st_postencoder"
+st_decoder_choices = copy.deepcopy(st_decoder_choices_)
+st_decoder_choices.name = "st_decoder"
+
 MAX_REFERENCE_NUM = 100
 
+name2task = dict(
+    enh=EnhancementTask,
+    asr=ASRTask,
+    st=STTask,
+)
+
+# More can be added to the following attributes
+enh_attributes = [
+    "encoder", "encoder_conf",
+    "separator", "separator_conf",
+    "decoder", "decoder_conf",
+    "criterions",
+]
+
+asr_attributes = [
+    "token_list",
+    "input_size",
+    "frontend", "frontend_conf",
+    "specaug", "specaug_conf",
+    "normalize", "normalize_conf",
+    "preencoder", "preencoder_conf",
+    "encoder", "encoder_conf",
+    "postencoder", "postencoder_conf",
+    "decoder", "decoder_conf",
+    "ctc_conf",
+]
 
 class EnhASRTask(AbsTask):
     # If you need more than one optimizers, change this value
@@ -94,6 +137,14 @@ class EnhASRTask(AbsTask):
         asr_postencoder_choices,
         # --asr_decoder and --asr_decoder_conf
         asr_decoder_choices,
+        # --st_preencoder and --st_preencoder_conf
+        st_preencoder_choices,
+        # --st_encoder and --st_encoder_conf
+        st_encoder_choices,
+        # --st_postencoder and --st_postencoder_conf
+        st_postencoder_choices,
+        # --st_decoder and --st_decoder_conf
+        st_decoder_choices,
     ]
 
     # If you need to modify train() or eval() procedures, change Trainer class here
@@ -142,6 +193,14 @@ class EnhASRTask(AbsTask):
             default=get_default_kwargs(CTC),
             help="The keyword arguments for CTC class.",
         )
+
+        group.add_argument(
+            "--enh_model_conf",
+            action=NestedDictAction,
+            default=get_default_kwargs(ESPnetEnhancementModel),
+            help="The keyword arguments for model class.",
+        )
+
         group.add_argument(
             "--asr_model_conf",
             action=NestedDictAction,
@@ -150,9 +209,9 @@ class EnhASRTask(AbsTask):
         )
 
         group.add_argument(
-            "--enh_model_conf",
+            "--st_model_conf",
             action=NestedDictAction,
-            default=get_default_kwargs(ESPnetEnhancementModel),
+            default=get_default_kwargs(ESPnetSTModel),
             help="The keyword arguments for model class.",
         )
 
@@ -203,10 +262,12 @@ class EnhASRTask(AbsTask):
             help="Specify g2p method if --token_type=phn",
         )
         group.add_argument(
-            "--enhancement_conf",
-            action=NestedDictAction,
-            default=None,
-            help="The keyword arguments for enhancement model class.",
+            "--subtask_series",
+            type=str,
+            nargs="+",
+            default=("enh", "asr"),
+            choices=["enh", "asr", "st"],
+            help="The series of subtasks in the pipeline.",
         )
 
         for class_choices in cls.class_choices_list:
@@ -287,49 +348,23 @@ class EnhASRTask(AbsTask):
         vocab_size = len(token_list)
         logging.info(f"Vocabulary size: {vocab_size }")
 
-        # 0. Build enhancement model
-        enh_conf = dict(init=None, model_conf=args.enh_model_conf)
-        enh_attributes = [
-            "encoder", "encoder_conf",
-            "separator", "separator_conf",
-            "decoder", "decoder_conf",
-            "criterions",
-        ]
-        for attr in enh_attributes:
-            enh_conf[attr] = (
-                getattr(args, "enh_" + attr, None) if getattr(args, "enh_" + attr, None) is not None
-                else getattr(args, attr, None)
-            )
-        enh_model = EnhancementTask.build_model(argparse.Namespace(**enh_conf))
+        # Build submodels in the order of subtask_series
+        model_conf = args.model_conf.copy()
+        for _, subtask in enumerate(args.subtask_series):
+            subtask_conf = dict(init=None, model_conf=eval(f"args.{subtask}_model_conf"))
 
-        # 1. Build asr model
-        asr_conf = dict(init=None, model_conf=args.asr_model_conf)
-        asr_attributes = [
-            "token_list",
-            "input_size",
-            "frontend", "frontend_conf",
-            "specaug", "specaug_conf",
-            "normalize", "normalize_conf",
-            "preencoder", "preencoder_conf",
-            "encoder", "encoder_conf",
-            "postencoder", "postencoder_conf",
-            "decoder", "decoder_conf",
-            "ctc_conf",
-        ]
-        for attr in asr_attributes:
-            asr_conf[attr] = (
-                getattr(args, "asr_" + attr, None) if getattr(args, "asr_" + attr, None) is not None
-                else getattr(args, attr, None)
-            )
-        asr_model = ASRTask.build_model(argparse.Namespace(**asr_conf))
+            for attr in eval(f"{subtask}_attributes"):
+                subtask_conf[attr] = (
+                    getattr(args, subtask + "_" + attr, None) if getattr(args, subtask + "_" + attr, None) is not None
+                    else getattr(args, attr, None)
+                )
 
+            model_conf[f"{subtask}_model"] = name2task[subtask].build_model(
+                argparse.Namespace(**subtask_conf)
+            )
 
         # 8. Build model
-        model = ESPnetEnhASRModel(
-            enh_model=enh_model,
-            asr_model=asr_model,
-            **args.model_conf,
-        )
+        model = ESPnetEnhASRModel(**model_conf)
 
         # FIXME(kamo): Should be done in model?
         # 9. Initialize

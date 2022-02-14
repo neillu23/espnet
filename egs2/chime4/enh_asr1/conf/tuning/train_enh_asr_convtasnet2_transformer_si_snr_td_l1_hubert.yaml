@@ -21,6 +21,10 @@ freeze_param: [
 ]
 
 # network architecture
+subtask_series:
+- enh
+- asr
+
 enh_encoder: conv
 enh_encoder_conf:
     channel: 256
@@ -57,9 +61,10 @@ enh_criterions:
       eps: 1.0e-7
     # the wrapper for the current criterion
     # for single-talker case, we simplely use fixed_order wrapper
-    wrapper: fixed_order
-    wrapper_conf:
-      weight: 0.5
+    wrapper: 
+    - type: fixed_order
+      wrapper_conf:
+        weight: 0.5
 
 frontend: s3prl
 frontend_conf:
