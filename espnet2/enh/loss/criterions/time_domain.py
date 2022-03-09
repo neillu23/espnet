@@ -120,3 +120,24 @@ class SISNRLoss(TimeDomainLoss):
         pair_wise_si_snr = 10 * torch.log10(pair_wise_si_snr + self.eps)  # [B]
 
         return -1 * pair_wise_si_snr
+
+
+class TimeDomainL1(TimeDomainLoss):
+    def __init__(self, eps=None):
+        super().__init__()
+
+    @property
+    def name(self) -> str:
+        return "td_l1_loss"
+
+    def forward(
+        self,
+        ref: torch.Tensor,
+        inf: torch.Tensor,
+    ) -> torch.Tensor:
+        # the return tensor should be shape of (batch,)
+
+        noise = inf - ref
+
+        l1_loss = torch.sum(torch.abs(noise), axis=1)
+        return l1_loss

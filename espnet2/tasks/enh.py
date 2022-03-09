@@ -26,6 +26,7 @@ from espnet2.enh.loss.criterions.tf_domain import FrequencyDomainMSE
 from espnet2.enh.loss.criterions.time_domain import CISDRLoss
 from espnet2.enh.loss.criterions.time_domain import SISNRLoss
 from espnet2.enh.loss.criterions.time_domain import SNRLoss
+from espnet2.enh.loss.criterions.time_domain import TimeDomainL1
 from espnet2.enh.loss.wrappers.abs_wrapper import AbsLossWrapper
 from espnet2.enh.loss.wrappers.fixed_order import FixedOrderSolver
 from espnet2.enh.loss.wrappers.pit_solver import PITSolver
@@ -95,6 +96,7 @@ criterion_choices = ClassChoices(
         si_snr=SISNRLoss,
         mse=FrequencyDomainMSE,
         l1=FrequencyDomainL1,
+        td_l1=TimeDomainL1,
     ),
     type_check=AbsEnhLoss,
     default=None,
@@ -231,10 +233,11 @@ class EnhancementTask(AbsTask):
         loss_wrappers = []
         for ctr in args.criterions:
             criterion = criterion_choices.get_class(ctr["name"])(**ctr["conf"])
-            loss_wrapper = loss_wrapper_choices.get_class(ctr["wrapper"])(
-                criterion=criterion, **ctr["wrapper_conf"]
-            )
-            loss_wrappers.append(loss_wrapper)
+            for ctr_wrp in ctr["wrapper"]:
+                loss_wrapper = loss_wrapper_choices.get_class(ctr_wrp["type"])(
+                    criterion=criterion, **ctr_wrp["wrapper_conf"]
+                )
+                loss_wrappers.append(loss_wrapper)
 
         # 1. Build model
         model = ESPnetEnhancementModel(
