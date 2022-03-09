@@ -2,6 +2,7 @@
 from distutils.version import LooseVersion
 from typing import Dict
 from typing import List
+from typing import OrderedDict
 from typing import Optional
 from typing import Tuple
 
@@ -10,6 +11,7 @@ from typeguard import check_argument_types
 
 from espnet2.enh.decoder.abs_decoder import AbsDecoder
 from espnet2.enh.encoder.abs_encoder import AbsEncoder
+from espnet2.enh.encoder.s3prl_encoder import S3PRLEncoder
 from espnet2.enh.loss.criterions.tf_domain import FrequencyDomainLoss
 from espnet2.enh.loss.criterions.time_domain import TimeDomainLoss
 from espnet2.enh.loss.wrappers.abs_wrapper import AbsLossWrapper
@@ -136,6 +138,26 @@ class ESPnetEnhancementModel(AbsESPnetModel):
         speech_mix = speech_mix[:, : speech_lengths.max()]
 
         # model forward
+        speech_pre, feature_mix, feature_pre, others = self.forward_enhance(speech_mix, speech_lengths)
+
+        # loss computation
+        loss, stats, weight = self.forward_loss(
+            speech_pre,
+            speech_lengths,
+            feature_mix,
+            feature_pre,
+            others,
+            speech_ref,
+            noise_ref,
+            dereverb_speech_ref,
+        )
+        return loss, stats, weight
+
+    def forward_enhance(
+        self,
+        speech_mix: torch.Tensor,
+        speech_lengths: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         feature_mix, flens = self.encoder(speech_mix, speech_lengths)
         feature_pre, flens, others = self.separator(feature_mix, flens)
         if feature_pre is not None:
@@ -144,7 +166,19 @@ class ESPnetEnhancementModel(AbsESPnetModel):
             # some models (e.g. neural beamformer trained with mask loss)
             # do not predict time-domain signal in the training stage
             speech_pre = None
+        return speech_pre, feature_mix, feature_pre, others
 
+    def forward_loss(
+        self,
+        speech_pre: torch.Tensor,
+        speech_lengths: torch.Tensor,
+        feature_mix: torch.Tensor,
+        feature_pre: torch.Tensor,
+        others: OrderedDict,
+        speech_ref: torch.Tensor,
+        noise_ref: torch.Tensor = None,
+        dereverb_speech_ref: torch.Tensor = None,
+    ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor], torch.Tensor]:
         loss = 0.0
         stats = dict()
         o = {}
@@ -185,6 +219,7 @@ class ESPnetEnhancementModel(AbsESPnetModel):
         stats["loss"] = loss.detach()
 
         # force_gatherable: to-device and to-tensor if scalar for DataParallel
+        batch_size = speech_ref[0].shape[0]
         loss, stats, weight = force_gatherable((loss, stats, batch_size), loss.device)
         return loss, stats, weight
 

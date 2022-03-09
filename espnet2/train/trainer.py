@@ -512,6 +512,8 @@ class Trainer:
                 if iterator_stop > 0:
                     break
 
+            batch["utt_id"] = _
+
             batch = to_device(batch, "cuda" if ngpu > 0 else "cpu")
             if no_forward_run:
                 all_steps_are_invalid = False
@@ -712,6 +714,8 @@ class Trainer:
                 if iterator_stop > 0:
                     break
 
+            batch["utt_id"] = _
+
             batch = to_device(batch, "cuda" if ngpu > 0 else "cpu")
             if no_forward_run:
                 continue
@@ -763,6 +767,9 @@ class Trainer:
                 len(next(iter(batch.values()))),
                 len(ids),
             )
+
+            batch["utt_id"] = ids
+
             batch = to_device(batch, "cuda" if ngpu > 0 else "cpu")
             if no_forward_run:
                 continue
