@@ -19,6 +19,7 @@ from espnet2.enh.encoder.abs_encoder import AbsEncoder
 from espnet2.enh.encoder.conv_encoder import ConvEncoder
 from espnet2.enh.encoder.null_encoder import NullEncoder
 from espnet2.enh.encoder.stft_encoder import STFTEncoder
+from espnet2.enh.encoder.s3prl_encoder import S3PRLEncoder
 from espnet2.enh.espnet_model import ESPnetEnhancementModel
 from espnet2.enh.loss.criterions.abs_loss import AbsEnhLoss
 from espnet2.enh.loss.criterions.tf_domain import FrequencyDomainL1
@@ -29,6 +30,7 @@ from espnet2.enh.loss.criterions.time_domain import SNRLoss
 from espnet2.enh.loss.criterions.time_domain import TimeDomainL1
 from espnet2.enh.loss.wrappers.abs_wrapper import AbsLossWrapper
 from espnet2.enh.loss.wrappers.fixed_order import FixedOrderSolver
+from espnet2.enh.loss.wrappers.mixit_solver import MixITSolver
 from espnet2.enh.loss.wrappers.pit_solver import PITSolver
 from espnet2.enh.separator.abs_separator import AbsSeparator
 from espnet2.enh.separator.asteroid_models import AsteroidModel_Converter
@@ -40,6 +42,7 @@ from espnet2.enh.separator.rnn_separator import RNNSeparator
 from espnet2.enh.separator.skim_separator import SkiMSeparator
 from espnet2.enh.separator.tcn_separator import TCNSeparator
 from espnet2.enh.separator.transformer_separator import TransformerSeparator
+from espnet2.enh.separator.complex_tcn_dense_unet import CSeqUNetDenseSeg
 from espnet2.tasks.abs_task import AbsTask
 from espnet2.torch_utils.initialize import initialize
 from espnet2.train.class_choices import ClassChoices
@@ -52,7 +55,7 @@ from espnet2.utils.types import str_or_none
 
 encoder_choices = ClassChoices(
     name="encoder",
-    classes=dict(stft=STFTEncoder, conv=ConvEncoder, same=NullEncoder),
+    classes=dict(stft=STFTEncoder, conv=ConvEncoder, same=NullEncoder, s3prl=S3PRLEncoder),
     type_check=AbsEncoder,
     default="stft",
 )
@@ -67,8 +70,10 @@ separator_choices = ClassChoices(
         dccrn=DCCRNSeparator,
         transformer=TransformerSeparator,
         conformer=ConformerSeparator,
+        conformer_reg=ConformerRegressionSeparator,
         wpe_beamformer=NeuralBeamformer,
         asteroid=AsteroidModel_Converter,
+        complex_tcn_dense_unet=CSeqUNetDenseSeg,
     ),
     type_check=AbsSeparator,
     default="rnn",
@@ -83,7 +88,7 @@ decoder_choices = ClassChoices(
 
 loss_wrapper_choices = ClassChoices(
     name="loss_wrappers",
-    classes=dict(pit=PITSolver, fixed_order=FixedOrderSolver),
+    classes=dict(pit=PITSolver, fixed_order=FixedOrderSolver, mixit=MixITSolver),
     type_check=AbsLossWrapper,
     default=None,
 )
@@ -245,7 +250,7 @@ class EnhancementTask(AbsTask):
             separator=separator,
             decoder=decoder,
             loss_wrappers=loss_wrappers,
-            **args.model_conf
+            **args.model_conf,
         )
 
         # FIXME(kamo): Should be done in model?

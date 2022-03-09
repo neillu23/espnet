@@ -6,14 +6,15 @@ from typing import Optional
 from typing import Tuple
 from typing import Union
 
-import humanfriendly
+from distutils.version import LooseVersion
 import torch
-from typeguard import check_argument_types
+from torch_complex.tensor import ComplexTensor
 
-from espnet.nets.pytorch_backend.frontends.frontend import Frontend
 from espnet.nets.pytorch_backend.nets_utils import pad_list
-from espnet2.asr.frontend.abs_frontend import AbsFrontend
+from espnet2.enh.encoder.abs_encoder import AbsEncoder
 from espnet2.utils.get_default_kwargs import get_default_kwargs
+
+is_torch_1_9_plus = LooseVersion(torch.__version__) >= LooseVersion("1.9.0")
 
 
 def base_s3prl_setup(args):
@@ -27,35 +28,30 @@ def base_s3prl_setup(args):
     return args
 
 
-class S3prlFrontend(AbsFrontend):
-    """Speech Pretrained Representation frontend structure for ASR."""
+class S3PRLEncoder(AbsEncoder):
+    """S3PRL encoder for speech enhancement and separation"""
 
     def __init__(
         self,
-        fs: Union[int, str] = 16000,
-        frontend_conf: Optional[dict] = get_default_kwargs(Frontend),
+        upstream_conf: Optional[dict],
         download_dir: str = None,
         multilayer_feature: bool = False,
+        layer_selection: int = None,
     ):
-        assert check_argument_types()
         super().__init__()
-        if isinstance(fs, str):
-            fs = humanfriendly.parse_size(fs)
-
         if download_dir is not None:
             torch.hub.set_dir(download_dir)
 
         self.multilayer_feature = multilayer_feature
-        self.upstream, self.featurizer = self._get_upstream(frontend_conf)
-        self.pretrained_params = copy.deepcopy(self.upstream.state_dict())
-        self.output_dim = self.featurizer.output_dim
-        self.frontend_type = "s3prl"
-        self.hop_length = self.upstream.get_downsample_rates("key")
+        self.layer_selection = layer_selection
+        self.upstream, self.featurizer = self._get_upstream(upstream_conf)
 
-    def _get_upstream(self, frontend_conf):
+        self.pretrained_params = copy.deepcopy(self.upstream.state_dict())
+
+    def _get_upstream(self, upstream_conf):
         """Get S3PRL upstream model."""
         s3prl_args = base_s3prl_setup(
-            Namespace(**frontend_conf, device="cpu"),
+            Namespace(**upstream_conf, device="cpu"),
         )
         self.args = s3prl_args
 
@@ -90,11 +86,15 @@ class S3prlFrontend(AbsFrontend):
             feature_selection = "last_hidden_state"
         else:
             feature_selection = "hidden_states"
-        s3prl_featurizer = Featurizer(
+
+        featurizer_args = dict(
             upstream=s3prl_upstream,
             feature_selection=feature_selection,
             upstream_device="cpu",
         )
+        if self.layer_selection is not None:
+            featurizer_args["layer_selection"] = self.layer_selection
+        s3prl_featurizer = Featurizer(**featurizer_args)
 
         return s3prl_upstream, s3prl_featurizer
 
@@ -115,8 +115,9 @@ class S3prlFrontend(AbsFrontend):
         )
         return tiled_feature
 
-    def output_size(self) -> int:
-        return self.output_dim
+    @property
+    def output_dim(self) -> int:
+        return self.featurizer.output_dim
 
     def forward(
         self, input: torch.Tensor, input_lengths: torch.Tensor
@@ -139,4 +140,4 @@ class S3prlFrontend(AbsFrontend):
 
     def reload_pretrained_parameters(self):
         self.upstream.load_state_dict(self.pretrained_params)
-        logging.info("Pretrained S3PRL frontend model parameters reloaded!")
+        logging.info("Pretrained S3PRL upstream model parameters reloaded!")

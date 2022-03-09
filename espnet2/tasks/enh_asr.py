@@ -18,6 +18,7 @@ from espnet2.asr.espnet_enh_asr_model import ESPnetEnhASRModel
 from espnet2.asr.espnet_model import ESPnetASRModel
 from espnet2.asr.transducer.joint_network import JointNetwork
 from espnet2.enh.espnet_model import ESPnetEnhancementModel
+from espnet2.st.espnet_model import ESPnetSTModel
 from espnet2.tasks.abs_task import AbsTask
 from espnet2.tasks.asr import ASRTask
 from espnet2.tasks.asr import frontend_choices
@@ -238,7 +239,7 @@ class EnhASRTask(AbsTask):
         group.add_argument(
             "--st_model_conf",
             action=NestedDictAction,
-            default=get_default_kwargs(ESPnetEnhancementModel),
+            default=get_default_kwargs(ESPnetSTModel),
             help="The keyword arguments for st submodel class.",
         )
 
@@ -288,13 +289,6 @@ class EnhASRTask(AbsTask):
             default=None,
             help="Specify g2p method if --token_type=phn",
         )
-        group.add_argument(
-            "--enhancement_conf",
-            action=NestedDictAction,
-            default=None,
-            help="The keyword arguments for enhancement model class.",
-        )
-
         group.add_argument(
             "--subtask_series",
             type=str,
