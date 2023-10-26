@@ -8,7 +8,8 @@
 
 import torch
 from torch import nn
-
+from espnet2.asr.layers.film_blocks import FiLM
+import logging
 from espnet.nets.pytorch_backend.transformer.layer_norm import LayerNorm
 
 
@@ -43,6 +44,9 @@ class EncoderLayer(nn.Module):
         normalize_before=True,
         concat_after=False,
         stochastic_depth_rate=0.0,
+        embed_condition: bool = False,
+        embed_condition_size: int = 0,
+        embed_condition_method: str = "FiLM",
     ):
         """Construct an EncoderLayer object."""
         super(EncoderLayer, self).__init__()
@@ -57,8 +61,16 @@ class EncoderLayer(nn.Module):
         if self.concat_after:
             self.concat_linear = nn.Linear(size + size, size)
         self.stochastic_depth_rate = stochastic_depth_rate
+        self.embed_condition = embed_condition
+        self.embed_condition_size = embed_condition_size
+        self.embed_condition_method = embed_condition_method
+        if self.embed_condition:
+            # logging.info("size: {}".format(size))
+            # import pdb; pdb.set_trace()
+            self.condition_layer = FiLM(size, embed_condition_size, "linear")
 
-    def forward(self, x, mask, cache=None):
+
+    def forward(self, x, mask, condition_features=None, cache=None):
         """Compute encoded features.
 
         Args:
@@ -100,9 +112,12 @@ class EncoderLayer(nn.Module):
             x_concat = torch.cat((x, self.self_attn(x_q, x, x, mask)), dim=-1)
             x = residual + stoch_layer_coeff * self.concat_linear(x_concat)
         else:
-            x = residual + stoch_layer_coeff * self.dropout(
-                self.self_attn(x_q, x, x, mask)
-            )
+            x = self.self_attn(x_q, x, x, mask)
+            x = stoch_layer_coeff * self.dropout(x)
+            if self.embed_condition:
+                x = self.condition_layer(x, condition_features)
+                # logging.info("use FiLM layer")
+            x = residual + x
         if not self.normalize_before:
             x = self.norm1(x)
 
@@ -116,4 +131,4 @@ class EncoderLayer(nn.Module):
         if cache is not None:
             x = torch.cat([cache, x], dim=1)
 
-        return x, mask
+        return x, mask, condition_features

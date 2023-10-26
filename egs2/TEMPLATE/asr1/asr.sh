@@ -41,6 +41,8 @@ gpu_inference=false  # Whether to perform gpu decoding.
 dumpdir=dump         # Directory to dump features.
 expdir=exp           # Directory to save experiments.
 python=python3       # Specify python to execute espnet commands.
+use_lid_asr=False
+
 
 # Data preparation related
 local_data_opts= # The options given to local/data.sh.
@@ -1377,6 +1379,13 @@ if [ ${stage} -le 11 ] && [ ${stop_stage} -ge 11 ] && ! [[ " ${skip_stages} " =~
             _opts+="--train_data_path_and_name_and_type ${_asr_train_dir}/${ref_text_files[$i]},${ref_text_names[$i]},text "
             _opts+="--train_shape_file ${asr_stats_dir}/train/${ref_text_names[$i]}_shape.${token_type} "
         done
+
+        #For Conditional ASR
+        if [ "${use_lid_asr}" = true ]; then
+            _opts+="--train_data_path_and_name_and_type ${_asr_train_dir}/langs_idx,langs,text "
+            _opts+="--valid_data_path_and_name_and_type ${_asr_valid_dir}/langs_idx,langs,text "
+            _opts+="--lid_tokens ${_asr_train_dir}/all_langs "
+        fi
     fi
 
     # shellcheck disable=SC2068
@@ -1532,6 +1541,12 @@ if [ ${stage} -le 12 ] && [ ${stop_stage} -ge 12 ] && ! [[ " ${skip_stages} " =~
         else
             _scp=feats.scp
             _type=kaldi_ark
+        fi
+
+        #For Conditional ASR
+        if [ "${use_lid_asr}" = true ]; then
+            _opts+="--data_path_and_name_and_type ${_data}/langs_idx,langs,text "
+            # _opts+="--lid_tokens ${_asr_train_dir}/all_langs "
         fi
 
         # 1. Split the key file

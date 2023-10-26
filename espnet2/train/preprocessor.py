@@ -402,6 +402,11 @@ class CommonPreprocessor(AbsPreprocessor):
     def _text_process(
         self, data: Dict[str, Union[str, np.ndarray]]
     ) -> Dict[str, np.ndarray]:
+        # logging.info("self.text_name",self.text_name)
+        # logging.info("self.aux_task_names",self.aux_task_names)
+        # logging.info("names in data",data.keys())
+        # logging.info("self.token_id_converter",self.token_id_converter)
+
         if self.text_name in data and self.tokenizer is not None:
             text = data[self.text_name]
             if isinstance(text, np.ndarray):
@@ -424,6 +429,8 @@ class CommonPreprocessor(AbsPreprocessor):
                     tokens = self.tokenizer.text2tokens(text)
                     text_ints = self.token_id_converter.tokens2ids(tokens)
                     data[name] = np.array(text_ints, dtype=np.int64)
+        if "langs" in data:
+            data["langs"] = np.array([data["langs"]], dtype=np.int64)
         assert check_return_type(data)
         return data
 
@@ -432,6 +439,9 @@ class CommonPreprocessor(AbsPreprocessor):
     ) -> Dict[str, np.ndarray]:
         assert check_argument_types()
 
+        # logging.info("self.text_name",self.text_name)
+        # logging.info("self.aux_task_names",self.aux_task_names)
+        # logging.info("names in data",data.keys())
         data = self._speech_process(data)
         data = self._text_process(data)
         return data

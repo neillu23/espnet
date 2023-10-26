@@ -427,7 +427,7 @@ class Speech2Text:
 
     @torch.no_grad()
     def __call__(
-        self, speech: Union[torch.Tensor, np.ndarray]
+        self, speech: Union[torch.Tensor, np.ndarray], langs: torch.Tensor = None
     ) -> Union[
         ListOfHypothesis,
         Tuple[
@@ -451,9 +451,11 @@ class Speech2Text:
 
         # data: (Nsamples,) -> (1, Nsamples)
         speech = speech.unsqueeze(0).to(getattr(torch, self.dtype))
+        if langs is not None:
+            langs = langs.unsqueeze(0)
         # lengths: (1,)
         lengths = speech.new_full([1], dtype=torch.long, fill_value=speech.size(1))
-        batch = {"speech": speech, "speech_lengths": lengths}
+        batch = {"speech": speech, "speech_lengths": lengths, "langs":langs}
         logging.info("speech length: " + str(speech.size(1)))
 
         # a. To device

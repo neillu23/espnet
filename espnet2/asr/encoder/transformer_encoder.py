@@ -80,6 +80,10 @@ class TransformerEncoder(AbsEncoder):
         interctc_layer_idx: List[int] = [],
         interctc_use_conditioning: bool = False,
         layer_drop_rate: float = 0.0,
+        embed_condition: bool = False,
+        embed_condition_size: int = 0,
+        embed_condition_method: str = "FiLM",
+
     ):
         assert check_argument_types()
         super().__init__()
@@ -159,6 +163,9 @@ class TransformerEncoder(AbsEncoder):
                 dropout_rate,
                 normalize_before,
                 concat_after,
+                embed_condition=embed_condition,
+                embed_condition_size=embed_condition_size,
+                embed_condition_method=embed_condition_method,
             ),
             layer_drop_rate,
         )
@@ -170,6 +177,9 @@ class TransformerEncoder(AbsEncoder):
             assert 0 < min(interctc_layer_idx) and max(interctc_layer_idx) < num_blocks
         self.interctc_use_conditioning = interctc_use_conditioning
         self.conditioning_layer = None
+        self.embed_condition = embed_condition
+        self.embed_condition_size = embed_condition_size
+        self.embed_condition_method = embed_condition_method
 
     def output_size(self) -> int:
         return self._output_size
@@ -178,6 +188,7 @@ class TransformerEncoder(AbsEncoder):
         self,
         xs_pad: torch.Tensor,
         ilens: torch.Tensor,
+        condition_features: torch.Tensor = None,
         prev_states: torch.Tensor = None,
         ctc: CTC = None,
         return_all_hs: bool = False,
@@ -221,7 +232,7 @@ class TransformerEncoder(AbsEncoder):
         intermediate_outs = []
         if len(self.interctc_layer_idx) == 0:
             for layer_idx, encoder_layer in enumerate(self.encoders):
-                xs_pad, masks = encoder_layer(xs_pad, masks)
+                xs_pad, masks, condition_features = encoder_layer(xs_pad, masks, condition_features)
                 if return_all_hs:
                     if isinstance(xs_pad, tuple):
                         intermediate_outs.append(xs_pad[0])
@@ -229,7 +240,7 @@ class TransformerEncoder(AbsEncoder):
                         intermediate_outs.append(xs_pad)
         else:
             for layer_idx, encoder_layer in enumerate(self.encoders):
-                xs_pad, masks = encoder_layer(xs_pad, masks)
+                xs_pad, masks, condition_features = encoder_layer(xs_pad, masks, condition_features)
 
                 if layer_idx + 1 in self.interctc_layer_idx:
                     encoder_out = xs_pad

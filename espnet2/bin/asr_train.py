@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from espnet2.tasks.asr import ASRTask
 
+# import os
+# os.environ["TORCH_DISTRIBUTED_DEBUG"] = "INFO"
+
+
 
 def get_parser():
     parser = ASRTask.get_parser()

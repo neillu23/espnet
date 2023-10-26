@@ -21,6 +21,8 @@ class S3prlFrontend(AbsFrontend):
         download_dir: str = None,
         multilayer_feature: bool = False,
         layer: int = -1,
+        layer_selections: Optional[list] = None,
+        featurizer_num: int = 1,
     ):
         try:
             import s3prl
@@ -48,25 +50,31 @@ class S3prlFrontend(AbsFrontend):
             frontend_conf.get("upstream"),
             path_or_url=frontend_conf.get("path_or_url", None),
             normalize=frontend_conf.get("normalize", False),
+            embed_condition=frontend_conf.get("embed_condition", False),
             extra_conf=frontend_conf.get("extra_conf", None),
         )
         if getattr(upstream.upstream, "model", None):
             if getattr(upstream.upstream.model, "feature_grad_mult", None) is not None:
                 upstream.upstream.model.feature_grad_mult = 1.0
         upstream.eval()
-
-        if layer != -1:
+        if layer_selections is not None:
+            assert(layer == -1), "layer should be -1 when layer_selections is not None"
+            assert(multilayer_feature), "multilayer feature should be True when layer_selections is not None"
+        elif layer != -1:
             layer_selections = [layer]
             assert (
                 not multilayer_feature
             ), "multilayer feature will be deactivated, when specific layer used"
-        else:
-            layer_selections = None
+
         featurizer = Featurizer(upstream, layer_selections=layer_selections)
 
         self.multilayer_feature = multilayer_feature
         self.layer = layer
         self.upstream, self.featurizer = upstream, featurizer
+        self.featurizer_num = featurizer_num
+        if featurizer_num == 2:
+            self.featurizer2 = Featurizer(upstream, layer_selections=None)
+
         self.pretrained_params = copy.deepcopy(self.upstream.state_dict())
         self.frontend_type = "s3prl"
         self.hop_length = self.featurizer.downsample_rate
@@ -94,23 +102,28 @@ class S3prlFrontend(AbsFrontend):
         return self.featurizer.output_size
 
     def forward(
-        self, input: torch.Tensor, input_lengths: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        feats, feats_lens = self.upstream(input, input_lengths)
+        self, input: torch.Tensor, input_lengths: torch.Tensor, condition_features: torch.Tensor=None, split_forward: bool = False
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        feats, feats_lens = self.upstream(input, input_lengths, condition_features, split_forward=split_forward)
         if self.layer != -1:
             layer = self.layer
             feats, feats_lens = feats[layer], feats_lens[layer]
             return feats, feats_lens
 
         if self.multilayer_feature:
-            feats, feats_lens = self.featurizer(feats, feats_lens)
+            feats_fused, feats_lens_fused = self.featurizer(feats, feats_lens)
         else:
-            feats, feats_lens = self.featurizer(feats[-1:], feats_lens[-1:])
+            feats_fused, feats_lens_fused = self.featurizer(feats[-1:], feats_lens[-1:])
 
         if self.tile_factor != 1:
-            feats = self._tile_representations(feats)
-
-        return feats, feats_lens
+            feats_fused = self._tile_representations(feats_fused)
+        
+        
+        
+        if self.featurizer_num > 1:
+            return feats_fused, feats_lens_fused, feats, feats_lens
+        else:
+            return feats_fused, feats_lens_fused
 
     def reload_pretrained_parameters(self):
         self.upstream.load_state_dict(self.pretrained_params)

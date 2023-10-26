@@ -57,6 +57,7 @@ from espnet2.asr.frontend.whisper import WhisperFrontend
 from espnet2.asr.frontend.windowing import SlidingWindow
 from espnet2.asr.maskctc_model import MaskCTCModel
 from espnet2.asr.pit_espnet_model import ESPnetASRModel as PITESPnetModel
+from espnet2.asr.joint_asr_espnet_model import ESPnetJointASRModel
 from espnet2.asr.postencoder.abs_postencoder import AbsPostEncoder
 from espnet2.asr.postencoder.hugging_face_transformers_postencoder import (
     HuggingFaceTransformersPostEncoder,
@@ -81,6 +82,7 @@ from espnet2.train.preprocessor import (
     AbsPreprocessor,
     CommonPreprocessor,
     CommonPreprocessor_multi,
+    MutliTokenizerCommonPreprocessor,
 )
 from espnet2.train.trainer import Trainer
 from espnet2.utils.get_default_kwargs import get_default_kwargs
@@ -124,6 +126,7 @@ model_choices = ClassChoices(
         espnet=ESPnetASRModel,
         maskctc=MaskCTCModel,
         pit_espnet=PITESPnetModel,
+        joint_espnet=ESPnetJointASRModel
     ),
     type_check=AbsESPnetModel,
     default="espnet",
@@ -138,8 +141,44 @@ preencoder_choices = ClassChoices(
     default=None,
     optional=True,
 )
+
+preencoder_lid_choices = ClassChoices(
+    name="preencoder_lid",
+    classes=dict(
+        sinc=LightweightSincConvs,
+        linear=LinearProjection,
+    ),
+    type_check=AbsPreEncoder,
+    default=None,
+    optional=True,
+)
+
 encoder_choices = ClassChoices(
     "encoder",
+    classes=dict(
+        conformer=ConformerEncoder,
+        transformer=TransformerEncoder,
+        transformer_multispkr=TransformerEncoderMultiSpkr,
+        contextual_block_transformer=ContextualBlockTransformerEncoder,
+        contextual_block_conformer=ContextualBlockConformerEncoder,
+        vgg_rnn=VGGRNNEncoder,
+        rnn=RNNEncoder,
+        wav2vec2=FairSeqWav2Vec2Encoder,
+        hubert=FairseqHubertEncoder,
+        hubert_pretrain=FairseqHubertPretrainEncoder,
+        torchaudiohubert=TorchAudioHuBERTPretrainEncoder,
+        longformer=LongformerEncoder,
+        branchformer=BranchformerEncoder,
+        whisper=OpenAIWhisperEncoder,
+        e_branchformer=EBranchformerEncoder,
+        avhubert=FairseqAVHubertEncoder,
+    ),
+    type_check=AbsEncoder,
+    default="rnn",
+)
+
+encoder_lid_choices = ClassChoices(
+    "encoder_lid",
     classes=dict(
         conformer=ConformerEncoder,
         transformer=TransformerEncoder,
@@ -195,6 +234,7 @@ preprocessor_choices = ClassChoices(
     classes=dict(
         default=CommonPreprocessor,
         multi=CommonPreprocessor_multi,
+        multi_tokenizer=MutliTokenizerCommonPreprocessor,
     ),
     type_check=AbsPreprocessor,
     default="default",
@@ -217,8 +257,12 @@ class ASRTask(AbsTask):
         model_choices,
         # --preencoder and --preencoder_conf
         preencoder_choices,
+        # --preencoder_lid and --preencoder_lid_conf
+        preencoder_lid_choices,
         # --encoder and --encoder_conf
         encoder_choices,
+        # # --encoder_lid and --encoder_lid_conf
+        encoder_lid_choices,
         # --postencoder and --postencoder_conf
         postencoder_choices,
         # --decoder and --decoder_conf
@@ -245,6 +289,15 @@ class ASRTask(AbsTask):
             default=None,
             help="A text mapping int-id to token",
         )
+
+        group.add_argument(
+            "--lid_tokens",
+            type=str_or_none,
+            default=None,
+            help="A text mapping int-id to lid token",
+        )
+        
+        
         group.add_argument(
             "--init",
             type=lambda x: str_or_none(x.lower()),
@@ -458,6 +511,7 @@ class ASRTask(AbsTask):
         MAX_REFERENCE_NUM = 4
 
         retval = ["text_spk{}".format(n) for n in range(2, MAX_REFERENCE_NUM + 1)]
+        retval.append("langs")
         retval = tuple(retval)
 
         logging.info(f"Optional Data Names: {retval }")
@@ -477,6 +531,21 @@ class ASRTask(AbsTask):
             token_list = list(args.token_list)
         else:
             raise RuntimeError("token_list must be str or list")
+        
+        # for lid_tokens
+        if isinstance(args.lid_tokens, str):
+            with open(args.lid_tokens, encoding="utf-8") as f:
+                lid_tokens = [line.rstrip() for line in f]
+
+            # Overwriting lid_tokens to keep it as "portable".
+            args.lid_tokens = list(lid_tokens)
+            langs_num = len(lid_tokens)
+        elif isinstance(args.lid_tokens, (tuple, list)):
+            lid_tokens = list(args.lid_tokens)
+            langs_num = len(lid_tokens)
+        else:
+            lid_tokens= None
+            langs_num = 0
 
         # If use multi-blank transducer criterion,
         # big blank symbols are added just before the standard blank
@@ -490,10 +559,10 @@ class ASRTask(AbsTask):
 
         vocab_size = len(token_list)
         logging.info(f"Vocabulary size: {vocab_size }")
-
         # 1. frontend
         if args.input_size is None:
             # Extract features in the model
+            # import pdb; pdb.set_trace()
             frontend_class = frontend_choices.get_class(args.frontend)
             frontend = frontend_class(**args.frontend_conf)
             input_size = frontend.output_size()
@@ -526,6 +595,7 @@ class ASRTask(AbsTask):
             input_size = preencoder.output_size()
         else:
             preencoder = None
+
 
         # 4. Encoder
         encoder_class = encoder_choices.get_class(args.encoder)
@@ -581,20 +651,64 @@ class ASRTask(AbsTask):
             model_class = model_choices.get_class(args.model)
         except AttributeError:
             model_class = model_choices.get_class("espnet")
-        model = model_class(
-            vocab_size=vocab_size,
-            frontend=frontend,
-            specaug=specaug,
-            normalize=normalize,
-            preencoder=preencoder,
-            encoder=encoder,
-            postencoder=postencoder,
-            decoder=decoder,
-            ctc=ctc,
-            joint_network=joint_network,
-            token_list=token_list,
-            **args.model_conf,
-        )
+
+        if model_class == ESPnetJointASRModel:
+            if getattr(args, "preencoder_lid", None) is not None:
+                preencoder_lid_class = preencoder_choices.get_class(args.preencoder_lid)
+                preencoder_lid = preencoder_lid_class(**args.preencoder_lid_conf)
+                lid_input_size = preencoder_lid.output_size()
+            else:
+                preencoder_lid = None
+                if args.input_size is None:
+                    lid_input_size = frontend.output_size()
+                else:
+                    lid_input_size = args.input_size
+
+            encoder_lid_class = encoder_choices.get_class(args.encoder_lid)
+            encoder_lid = encoder_lid_class(input_size=lid_input_size, **args.encoder_lid_conf)
+            encoder_lid_output_size = encoder.output_size()
+
+            ctc_lid = CTC(
+                odim=langs_num, encoder_output_size=encoder_lid_output_size, **args.ctc_conf
+            )
+            model = model_class(
+                vocab_size=vocab_size,
+                frontend=frontend,
+                specaug=specaug,
+                normalize=normalize,
+                preencoder_lid=preencoder_lid,
+                preencoder=preencoder,
+                encoder_lid=encoder_lid,
+                encoder=encoder,
+                postencoder=postencoder,
+                decoder=decoder,
+                ctc=ctc,
+                ctc_lid=ctc_lid,
+                joint_network=joint_network,
+                token_list=token_list,
+                lid_tokens=lid_tokens,
+                langs_num=langs_num,
+                **args.model_conf,
+            )
+
+
+        else:
+            model = model_class(
+                vocab_size=vocab_size,
+                frontend=frontend,
+                specaug=specaug,
+                normalize=normalize,
+                preencoder=preencoder,
+                encoder=encoder,
+                postencoder=postencoder,
+                decoder=decoder,
+                ctc=ctc,
+                joint_network=joint_network,
+                token_list=token_list,
+                lid_tokens=lid_tokens,
+                langs_num=langs_num,
+                **args.model_conf,
+            )
 
         # FIXME(kamo): Should be done in model?
         # 8. Initialize
