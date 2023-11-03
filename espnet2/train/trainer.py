@@ -298,7 +298,35 @@ class Trainer:
                 logging.info(f"{iepoch}/{trainer_options.max_epoch}epoch started")
             set_all_random_seed(trainer_options.seed + iepoch)
 
+            if not (output_dir / "checkpoint.pth").exists():
+                reporter.set_epoch(0)
+            
+                # 4. Save/Update the checkpoint
+                if use_lora and save_lora_only:
+                    # Only the LoRA realted params are saved, not the whole model
+                    model_state_dict = lora.lora_state_dict(model)
+                else:
+                    # Save all params of the model
+                    model_state_dict = model.state_dict()
+                    
+                # save model at epoch 0 for the first time
+                torch.save(
+                    {
+                        "model": model_state_dict,
+                        "reporter": reporter.state_dict(),
+                        "optimizers": [o.state_dict() for o in optimizers],
+                        "schedulers": [
+                            s.state_dict() if s is not None else None
+                            for s in schedulers
+                        ],
+                        "scaler": scaler.state_dict() if scaler is not None else None,
+                    },
+                    output_dir / "checkpoint.pth",
+                )
+
+
             reporter.set_epoch(iepoch)
+
             # 1. Train and validation for one-epoch
             with reporter.observe("train") as sub_reporter:
                 all_steps_are_invalid = cls.train_one_epoch(
