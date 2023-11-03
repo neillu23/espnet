@@ -698,6 +698,14 @@ class AbsTask(ABC):
             help="Freeze parameters",
         )
 
+        group.add_argument(
+            "--unfreeze_param",
+            type=str,
+            default=[],
+            nargs="*",
+            help="Unfreeze parameters after freezing",
+        )
+
         group = parser.add_argument_group("BatchSampler related")
         group.add_argument(
             "--num_iters_per_epoch",
@@ -1225,9 +1233,17 @@ class AbsTask(ABC):
                         logging.info(f"Setting {k}.requires_grad = False")
                         p.requires_grad = False
 
+            for t in args.unfreeze_param:
+                for k, p in model.named_parameters():
+                    if t in k:
+                        logging.info(f"Setting {k}.requires_grad = True")
+                        p.requires_grad = True
+
             # Use LoRA to finetune the large pre-trained foundation models, like Whisper
             if getattr(args, "use_lora", False):
-                create_lora_adapter(model, **args.lora_conf)
+                model.frontend.upstream.enable_input_require_grads()
+                #TODO: add lora adapter for other models (here's only for frontend)
+                create_lora_adapter(model.frontend.upstream, **args.lora_conf)
 
             # 3. Build optimizer
             optimizers = cls.build_optimizers(args, model=model)
