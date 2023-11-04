@@ -5,7 +5,7 @@
 
 from typing import List, Optional, Tuple, Union
 
-
+import logging
 import numpy as np
 import torch
 import torch.nn as nn
@@ -384,6 +384,8 @@ class ResNetEncoder(AbsEncoder):
             )
 
         self._init_weights(hid_act)
+        logging.info("head_channels: %d" % self.head_channels)
+        logging.info("endpoint_channels: %d" % self.endpoint_channels)
         self._output_size = (
             self.head_channels if self.head_channels > 0 else self.endpoint_channels
         )
@@ -482,7 +484,7 @@ class ResNetEncoder(AbsEncoder):
         if x_mask is not None and x.size(-1) == x_mask.size(-1):
             return x_mask
 
-        return seq_lengths_to_mask(x_lengths, x.size(-1), time_dim=2)
+        return seq_lengths_to_mask(x_lengths, x.size(-1), dtype=torch.float32, time_dim=2)
 
         # return (~make_pad_mask(x_lengths)[:, None, :]).to(x.device)
 
@@ -526,16 +528,18 @@ class ResNetEncoder(AbsEncoder):
         x = torch.permute(xs_pad, (0, 2, 1))
         x_lengths = ilens
 
+        # logging.info(f"input x: {x.shape}")
+        # logging.info(f"input x_lengths: {x_lengths}")
         x_mask = self._update_mask(x, x_lengths)
         x = self.in_block(x, x_mask=x_mask)
         endpoints = []
 
         for i, superblock in enumerate(self.blocks):
             for j, block in enumerate(superblock):
-                logging.info(f"block {i} {j} x: {x.shape}")
+                # logging.info(f"block {i} {j} x: {x.shape}")
                 
-                logging.info(f"block {i} {j} x_mask: {x_mask.shape}")
-
+                # logging.info(f"block {i} {j} x_mask: {x_mask.shape}")
+                # logging.info(x_mask)
 
                 x_mask = self._update_mask(x, x_lengths, x_mask)
                 x = block(x, x_mask=x_mask)
@@ -566,7 +570,7 @@ class ResNetEncoder(AbsEncoder):
             x = self.head_block(x)
 
         olens = x_mask.squeeze(1).sum(1)
-        return xs_pad, olens, None
+        return x, olens, None
 
 
     def forward_hid_feats(self, x, x_lengths=None, layers=None, return_output=False):

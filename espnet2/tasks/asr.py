@@ -7,6 +7,11 @@ import torch
 from typeguard import check_argument_types, check_return_type
 
 from espnet2.asr.ctc import CTC
+from espnet2.spk.loss.aamsoftmax import AAMSoftmax
+from espnet2.spk.loss.abs_loss import AbsLoss
+from espnet2.spk.projector.abs_projector import AbsProjector
+from espnet2.spk.projector.rawnet3_projector import RawNet3Projector
+from espnet2.spk.pooling.abs_pooling import AbsPooling
 from espnet2.asr.decoder.abs_decoder import AbsDecoder
 from espnet2.asr.decoder.hugging_face_transformers_decoder import (  # noqa: H301
     HuggingFaceTransformersDecoder,
@@ -59,7 +64,9 @@ from espnet2.asr.frontend.windowing import SlidingWindow
 from espnet2.asr.maskctc_model import MaskCTCModel
 from espnet2.asr.pit_espnet_model import ESPnetASRModel as PITESPnetModel
 from espnet2.asr.joint_asr_espnet_model import ESPnetJointASRModel
+from espnet2.asr.lid_espnet_model import ESPnetLIDModel
 from espnet2.asr.postencoder.abs_postencoder import AbsPostEncoder
+from espnet2.asr.postencoder.chn_attn_stat_pooling import ChnAttnStatPooling
 from espnet2.asr.postencoder.hugging_face_transformers_postencoder import (
     HuggingFaceTransformersPostEncoder,
 )
@@ -127,7 +134,8 @@ model_choices = ClassChoices(
         espnet=ESPnetASRModel,
         maskctc=MaskCTCModel,
         pit_espnet=PITESPnetModel,
-        joint_espnet=ESPnetJointASRModel
+        joint_espnet=ESPnetJointASRModel,
+        lid_espnet=ESPnetLIDModel
     ),
     type_check=AbsESPnetModel,
     default="espnet",
@@ -208,6 +216,7 @@ postencoder_choices = ClassChoices(
     classes=dict(
         hugging_face_transformers=HuggingFaceTransformersPostEncoder,
         length_adaptor=LengthAdaptorPostEncoder,
+        chn_attn_stat=ChnAttnStatPooling,  # for LID
     ),
     type_check=AbsPostEncoder,
     default=None,
@@ -244,6 +253,27 @@ preprocessor_choices = ClassChoices(
 )
 
 
+projector_choices = ClassChoices(
+    name="projector",
+    classes=dict(
+        # TODO (Jee-weon): implement additional Projectors
+        # one_layer=OneLayerProjector,
+        rawnet3=RawNet3Projector,
+    ),
+    type_check=AbsProjector,
+    default="rawnet3",
+)
+
+loss_choices = ClassChoices(
+    name="loss",
+    classes=dict(
+        aamsoftmax=AAMSoftmax,
+    ),
+    type_check=AbsLoss,
+    default="aam",
+)
+
+
 class ASRTask(AbsTask):
     # If you need more than one optimizers, change this value
     num_optimizers: int = 1
@@ -272,6 +302,10 @@ class ASRTask(AbsTask):
         decoder_choices,
         # --preprocessor and --preprocessor_conf
         preprocessor_choices,
+        # --projector and --projector_conf
+        projector_choices,
+        # --loss and --loss_conf
+        loss_choices,
     ]
 
     # If you need to modify train() or eval() procedures, change Trainer class here
@@ -693,7 +727,32 @@ class ASRTask(AbsTask):
                 langs_num=langs_num,
                 **args.model_conf,
             )
+        elif model_class == ESPnetLIDModel:
 
+            projector_class = projector_choices.get_class(args.projector)
+            projector = projector_class(**args.projector_conf)
+
+            loss_class = loss_choices.get_class(args.loss)
+            loss = loss_class(**args.loss_conf)
+
+            model = model_class(
+                vocab_size=vocab_size,
+                frontend=frontend,
+                specaug=specaug,
+                normalize=normalize,
+                preencoder=preencoder,
+                encoder=encoder,
+                postencoder=postencoder,
+                projector=projector,
+                loss=loss,
+                decoder=decoder,
+                ctc=ctc,
+                joint_network=joint_network,
+                token_list=token_list,
+                lid_tokens=lid_tokens,
+                langs_num=langs_num,
+                **args.model_conf,
+            )
 
         else:
             model = model_class(
