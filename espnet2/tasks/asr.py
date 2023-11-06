@@ -222,6 +222,20 @@ postencoder_choices = ClassChoices(
     default=None,
     optional=True,
 )
+
+
+postencoder_lid_choices = ClassChoices(
+    name="postencoder_lid",
+    classes=dict(
+        hugging_face_transformers=HuggingFaceTransformersPostEncoder,
+        length_adaptor=LengthAdaptorPostEncoder,
+        chn_attn_stat=ChnAttnStatPooling,  # for LID
+    ),
+    type_check=AbsPostEncoder,
+    default=None,
+    optional=True,
+)
+
 decoder_choices = ClassChoices(
     "decoder",
     classes=dict(
@@ -298,6 +312,8 @@ class ASRTask(AbsTask):
         encoder_lid_choices,
         # --postencoder and --postencoder_conf
         postencoder_choices,
+        # # --postencoder_lid and --postencoder_lid_conf
+        postencoder_lid_choices,
         # --decoder and --decoder_conf
         decoder_choices,
         # --preprocessor and --preprocessor_conf
@@ -703,11 +719,23 @@ class ASRTask(AbsTask):
 
             encoder_lid_class = encoder_choices.get_class(args.encoder_lid)
             encoder_lid = encoder_lid_class(input_size=lid_input_size, **args.encoder_lid_conf)
-            encoder_lid_output_size = encoder.output_size()
+            encoder_lid_output_size = encoder_lid.output_size()
+            if getattr(args, "postencoder_lid", None) is not None:
+                postencoder_lid_class = postencoder_choices.get_class(args.postencoder_lid)
+                postencoder_lid = postencoder_lid_class(
+                    input_size=encoder_lid_output_size, **args.postencoder_lid_conf
+                )
+                encoder_lid_output_size = postencoder_lid.output_size()
 
-            ctc_lid = CTC(
-                odim=langs_num, encoder_output_size=encoder_lid_output_size, **args.ctc_conf
-            )
+            projector_class = projector_choices.get_class(args.projector)
+            projector = projector_class(**args.projector_conf)
+
+            loss_class = loss_choices.get_class(args.loss)
+            loss = loss_class(**args.loss_conf)
+
+            # ctc_lid = CTC(
+            #     odim=langs_num, encoder_output_size=encoder_lid_output_size, **args.ctc_conf
+            # )
             model = model_class(
                 vocab_size=vocab_size,
                 frontend=frontend,
@@ -718,15 +746,18 @@ class ASRTask(AbsTask):
                 encoder_lid=encoder_lid,
                 encoder=encoder,
                 postencoder=postencoder,
+                postencoder_lid=postencoder_lid,
+                projector=projector,
+                loss=loss,
                 decoder=decoder,
                 ctc=ctc,
-                ctc_lid=ctc_lid,
                 joint_network=joint_network,
                 token_list=token_list,
                 lid_tokens=lid_tokens,
                 langs_num=langs_num,
                 **args.model_conf,
             )
+                # ctc_lid=ctc_lid,
         elif model_class == ESPnetLIDModel:
 
             projector_class = projector_choices.get_class(args.projector)

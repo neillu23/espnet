@@ -16,8 +16,6 @@ from espnet2.asr.preencoder.abs_preencoder import AbsPreEncoder
 from espnet2.asr.specaug.abs_specaug import AbsSpecAug
 from espnet2.asr.transducer.error_calculator import ErrorCalculatorTransducer
 from espnet2.asr_transducer.utils import get_transducer_task_io
-from espnet2.spk.loss.abs_loss import AbsLoss
-from espnet2.spk.projector.abs_projector import AbsProjector
 from espnet2.layers.abs_normalize import AbsNormalize
 from espnet2.torch_utils.device_funcs import force_gatherable
 from espnet2.train.abs_espnet_model import AbsESPnetModel
@@ -53,10 +51,8 @@ class ESPnetJointASRModel(ESPnetASRModel):
         encoder_lid: AbsEncoder,
         postencoder: Optional[AbsPostEncoder],
         decoder: Optional[AbsDecoder],
-        postencoder_lid: Optional[AbsPostEncoder],
-        projector: Optional[AbsProjector],
-        loss: Optional[AbsLoss],
         ctc: CTC,
+        ctc_lid: CTC,
         joint_network: Optional[torch.nn.Module],
         lid_tokens: Union[Tuple[str, ...], List[str]] = None,
         langs_num: int = 0,
@@ -64,7 +60,6 @@ class ESPnetJointASRModel(ESPnetASRModel):
         embed_condition_size: int = 0,
         aux_ctc: dict = None,
         ctc_weight: float = 0.5,
-        lid_weight: float = 1.0,
         interctc_weight: float = 0.0,
         ignore_id: int = -1,
         lsm_weight: float = 0.0,
@@ -124,11 +119,7 @@ class ESPnetJointASRModel(ESPnetASRModel):
         )
         self.preencoder_lid = preencoder_lid
         self.encoder_lid = encoder_lid
-        # self.ctc_lid = ctc_lid
-        self.postencoder_lid = postencoder_lid
-        self.projector = projector
-        self.loss = loss
-        self.lid_weight = lid_weight
+        self.ctc_lid = ctc_lid
 
     def forward(
         self,
@@ -164,38 +155,18 @@ class ESPnetJointASRModel(ESPnetASRModel):
         text = text[:, : text_lengths.max()]
 
         # 1. Encoder
-        encoder_out, encoder_out_lens, lid_embd, encoder_lid_out_lens = self.encode(speech, speech_lengths, langs)
+        encoder_out, encoder_out_lens, encoder_lid_out, encoder_lid_out_lens = self.encode(speech, speech_lengths, langs)
         
         stats = dict()
-        loss_asr, stats = self.collect_stats(encoder_out, encoder_out_lens, text, text_lengths, self.ctc, batch_size, stats, "asr")
+        loss_asr, stats, weight = self.collect_stats(encoder_out, encoder_out_lens, text, text_lengths, self.ctc, batch_size, stats, "asr")
         # logging.info("langs:{}".format(langs))
-        # loss_lid, stats, weight = self.collect_stats(encoder_lid_out, encoder_lid_out_lens, langs, torch.ones_like(text_lengths), self.ctc_lid, batch_size, stats, "lid")
+        loss_lid, stats, weight = self.collect_stats(encoder_lid_out, encoder_lid_out_lens, langs, torch.ones_like(text_lengths), self.ctc_lid, batch_size, stats, "lid")
         
-        # if extract_embd:
-        #     return lid_embd
 
-        # 4. calculate loss
-        loss_lid = self.loss(lid_embd, langs)
-        stats["loss_lid"] = loss_lid.detach()
-
-
-        loss = loss_lid * self.lid_weight + loss_asr
-
-        stats["loss"] = loss.detach()
-
-        # force_gatherable: to-device and to-tensor if scalar for DataParallel
-        loss, stats, weight = force_gatherable((loss, stats, batch_size), loss.device)
+        loss = loss_lid * 100 + loss_asr
 
         return loss, stats, weight
         
-    def project_lid_embd(self, utt_level_feat: torch.Tensor) -> torch.Tensor:
-        if self.projector is not None:
-            lid_embd = self.projector(utt_level_feat)
-        else:
-            lid_embd = utt_level_feat
-
-        return lid_embd
-
     def collect_stats(
         self,
         encoder_out: torch.Tensor,
@@ -321,7 +292,10 @@ class ESPnetJointASRModel(ESPnetASRModel):
 
         # Collect total loss stats
         stats["loss_{}".format(name)] = loss.detach()
-        return loss, stats
+
+        # force_gatherable: to-device and to-tensor if scalar for DataParallel
+        loss, stats, weight = force_gatherable((loss, stats, batch_size), loss.device)
+        return loss, stats, weight
 
     def collect_feats(
         self,
@@ -389,28 +363,16 @@ class ESPnetJointASRModel(ESPnetASRModel):
 
         encoder_lid_out, encoder_lid_out_lens, _ = self.encoder_lid(feats_lid, feats_lengths)
 
-        # Post-encoder, e.g. NLU
-        if self.postencoder_lid is not None:
-            encoder_lid_out = self.postencoder_lid(
-                encoder_lid_out
-            )
 
 
 
-        # 3. (optionally) go through further projection(s)
-        lid_embd = self.project_lid_embd(encoder_lid_out)
-
-
-        # ys_hat = self.ctc_lid.argmax(encoder_lid_out).data
-        # first_non_zero_indices = ys_hat.argmax(1)
-        # first_non_zero_values = ys_hat[torch.arange(ys_hat.size(0)), first_non_zero_indices].unsqueeze(1)
+        ys_hat = self.ctc_lid.argmax(encoder_lid_out).data
+        first_non_zero_indices = ys_hat.argmax(1)
+        first_non_zero_values = ys_hat[torch.arange(ys_hat.size(0)), first_non_zero_indices].unsqueeze(1)
 
         if self.embed_condition:
             # condition_features = self.lang_embedding(langs)
-            # condition_features = self.lang_embedding(first_non_zero_values)
-            condition_features = lid_embd.unsqueeze(1)
-            # logging.info("lid_embd shape:{}".format(lid_embd.shape))
-            # logging.info("condition_features shape:{}".format(condition_features.shape))
+            condition_features = self.lang_embedding(first_non_zero_values)
         
         with autocast(False):
             feats_layers_new, feats_lengths_new = self.frontend.upstream(speech, speech_lengths, condition_features, split_forward=True, second_forward=True, last_layer_result=self.intermediate_outputs)
@@ -493,7 +455,7 @@ class ESPnetJointASRModel(ESPnetASRModel):
         if intermediate_outs is not None:
             return (encoder_out, intermediate_outs), encoder_out_lens
 
-        return encoder_out, encoder_out_lens, lid_embd, encoder_lid_out_lens
+        return encoder_out, encoder_out_lens, encoder_lid_out, encoder_lid_out_lens
 
     def _extract_feats(
         self, speech: torch.Tensor, speech_lengths: torch.Tensor, condition_features: torch.Tensor = None
