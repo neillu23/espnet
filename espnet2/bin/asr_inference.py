@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 import torch
 import torch.quantization
+import torch.nn.functional as F
+
 from typeguard import check_argument_types, check_return_type
 
 from espnet2.asr.decoder.hugging_face_transformers_decoder import (
@@ -101,6 +103,7 @@ class Speech2Text:
         nbest: int = 1,
         streaming: bool = False,
         enh_s2t_task: bool = False,
+        lid_task: bool = False,
         quantize_asr_model: bool = False,
         quantize_lm: bool = False,
         quantize_modules: List[str] = ["Linear"],
@@ -423,6 +426,7 @@ class Speech2Text:
         self.dtype = dtype
         self.nbest = nbest
         self.enh_s2t_task = enh_s2t_task
+        self.lid_task = lid_task
         self.multi_asr = multi_asr
 
     @torch.no_grad()
@@ -463,6 +467,7 @@ class Speech2Text:
 
         # b. Forward Encoder
         enc, enc_olens = self.asr_model.encode(**batch)
+        # logging.info("encoder shape:" + str(enc.shape))
         if self.multi_asr:
             enc = enc.unbind(dim=1)  # (batch, num_inf, ...) -> num_inf x [batch, ...]
         if self.enh_s2t_task or self.multi_asr:
@@ -485,17 +490,52 @@ class Speech2Text:
                 assert check_return_type(ret)
                 results.append(ret)
 
+        elif self.lid_task: # LID
+            enc, enc_olens = self.asr_model.encode(**batch)
+            # Compute cosine similarity
+            cosine = F.linear(F.normalize(enc), F.normalize(self.asr_model.loss.weight))
+            
+            # Get the predicted speaker index
+            cosine_similarity = torch.max(cosine, dim=1).values.item()
+            langs_token = torch.argmax(cosine, dim=1)
+            # import pdb;pdb.set_trace()
+            langs = self.converter.ids2tokens(langs_token)
+            
+            logging.info(f"Cosine Similarity: {cosine_similarity:.2f}")
+            logging.info(
+                "best hypo: " + "".join(langs) + "\n"
+            )
+
+            # import pdb;pdb.set_trace()
+            topk_cosine = torch.topk(cosine, self.nbest, dim=1)
+            results = []
+            # import pdb;pdb.set_trace()
+            for i in range(self.nbest):
+                langs_token = topk_cosine.indices.view(-1,1)[i]
+                cosine_similarity = topk_cosine.values.view(-1,1)[i].item()
+                langs = self.converter.ids2tokens(langs_token)
+                hyp = Hypothesis(score=cosine_similarity, yseq=langs_token)
+                # import pdb;pdb.set_trace()
+                results.append((langs[0], langs, langs_token, hyp))
+        
+            return results
+
         else:
             # Normal ASR
             intermediate_outs = None
             if isinstance(enc, tuple):
                 intermediate_outs = enc[1]
                 enc = enc[0]
-            assert len(enc) == 1, len(enc)
+            # assert len(enc) == 1, len(enc)
 
             # c. Passed the encoder result and the beam search
             results = self._decode_single_sample(enc[0])
-
+            # logging.info("encoder shape:" + str(enc.shape))
+            # logging.info("result 1")
+            # results_1 = self._decode_single_sample(enc[0])
+            # logging.info("result 2")
+            # results_2 = self._decode_single_sample(enc[1])
+            # results = results_1
             # Encoder intermediate CTC predictions
             if intermediate_outs is not None:
                 encoder_interctc_res = self._decode_interctc(intermediate_outs)
@@ -681,6 +721,7 @@ def inference(
     transducer_conf: Optional[dict],
     streaming: bool,
     enh_s2t_task: bool,
+    lid_task: bool,
     quantize_asr_model: bool,
     quantize_lm: bool,
     quantize_modules: List[str],
@@ -733,6 +774,7 @@ def inference(
         nbest=nbest,
         streaming=streaming,
         enh_s2t_task=enh_s2t_task,
+        lid_task=lid_task,
         multi_asr=multi_asr,
         quantize_asr_model=quantize_asr_model,
         quantize_lm=quantize_lm,
@@ -927,6 +969,15 @@ def get_parser():
         default=False,
         help="Whether we are using an enhancement and ASR joint model",
     )
+
+    group.add_argument(
+        "--lid_task",
+        type=str2bool,
+        default=False,
+        help="Whether we are using a language identification model",
+    )
+
+
     group.add_argument(
         "--multi_asr",
         type=str2bool,

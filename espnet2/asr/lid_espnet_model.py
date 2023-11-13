@@ -298,14 +298,11 @@ class ESPnetLIDModel(ESPnetASRModel):
             encoder_out = encoder_out[0]
 
 
-        # 3. (optionally) go through further projection(s)
-        lid_embd = self.project_lid_embd(encoder_out)
-
         # if extract_embd:
         #     return lid_embd
 
         # 4. calculate loss
-        loss = self.loss(lid_embd, text)
+        loss = self.loss(encoder_out, text)
 
         stats = dict(loss=loss.detach())
 
@@ -537,7 +534,11 @@ class ESPnetLIDModel(ESPnetASRModel):
         if intermediate_outs is not None:
             return (encoder_out, intermediate_outs), encoder_out_lens
 
-        return encoder_out, encoder_out_lens
+        # 3. (optionally) go through further projection(s)
+        lid_embd = self.project_lid_embd(encoder_out)
+
+
+        return lid_embd, encoder_out_lens
 
     def _extract_feats(
         self, speech: torch.Tensor, speech_lengths: torch.Tensor, condition_features: torch.Tensor = None
