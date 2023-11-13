@@ -111,6 +111,8 @@ num_inf=    # Number of inferences output by the model
             # Note that if it is not specified, it will be the same as num_ref. Otherwise, it will be overwritten.
             # In MixIT, number of outputs is larger than that of references.
 sot_asr=false   # Whether to use Serialized Output Training (SOT)
+lid_task=false # Whether doing LID task
+
 
 # Upload model related
 hf_repo=
@@ -1548,6 +1550,8 @@ if [ ${stage} -le 12 ] && [ ${stop_stage} -ge 12 ] && ! [[ " ${skip_stages} " =~
             _opts+="--data_path_and_name_and_type ${_data}/langs_idx,langs,text "
             # _opts+="--lid_tokens ${_asr_train_dir}/all_langs "
         fi
+
+        _opts+="--lid_task ${lid_task} "
 
         # 1. Split the key file
         key_file=${_data}/${_scp}
