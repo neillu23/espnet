@@ -61,6 +61,7 @@ class ESPnetLIDModel(ESPnetASRModel):
         embed_condition_size: int = 0,
         aux_ctc: dict = None,
         ctc_weight: float = 0.5,
+        lid_audio_length: int = 0,
         interctc_weight: float = 0.0,
         ignore_id: int = -1,
         lsm_weight: float = 0.0,
@@ -114,6 +115,7 @@ class ESPnetLIDModel(ESPnetASRModel):
         )
         self.projector = projector
         self.loss = loss
+        self.lid_audio_length = lid_audio_length
 
         # assert check_argument_types()
         # assert 0.0 <= ctc_weight <= 1.0, ctc_weight
@@ -286,6 +288,7 @@ class ESPnetLIDModel(ESPnetASRModel):
         batch_size = speech.shape[0]
 
         text[text == -1] = self.ignore_id
+        # logging.info("speech length:{}".format(speech_lengths))
 
         # for data-parallel
         text = text[:, : text_lengths.max()]
@@ -328,120 +331,6 @@ class ESPnetLIDModel(ESPnetASRModel):
 
 
 
-        # loss_att, acc_att, cer_att, wer_att = None, None, None, None
-        # loss_ctc, cer_ctc = None, None
-        # loss_transducer, cer_transducer, wer_transducer = None, None, None
-        # stats = dict()
-
-        # # 1. CTC branch
-        # if self.ctc_weight != 0.0:
-        #     loss_ctc, cer_ctc = self._calc_ctc_loss(
-        #         encoder_out, encoder_out_lens, text, text_lengths
-        #     )
-
-        #     # Collect CTC branch stats
-        #     stats["loss_ctc"] = loss_ctc.detach() if loss_ctc is not None else None
-        #     stats["cer_ctc"] = cer_ctc
-
-        # # Intermediate CTC (optional)
-        # loss_interctc = 0.0
-        # if self.interctc_weight != 0.0 and intermediate_outs is not None:
-        #     for layer_idx, intermediate_out in intermediate_outs:
-        #         # we assume intermediate_out has the same length & padding
-        #         # as those of encoder_out
-
-        #         # use auxillary ctc data if specified
-        #         loss_ic = None
-        #         if self.aux_ctc is not None:
-        #             idx_key = str(layer_idx)
-        #             if idx_key in self.aux_ctc:
-        #                 aux_data_key = self.aux_ctc[idx_key]
-        #                 aux_data_tensor = kwargs.get(aux_data_key, None)
-        #                 aux_data_lengths = kwargs.get(aux_data_key + "_lengths", None)
-
-        #                 if aux_data_tensor is not None and aux_data_lengths is not None:
-        #                     loss_ic, cer_ic = self._calc_ctc_loss(
-        #                         intermediate_out,
-        #                         encoder_out_lens,
-        #                         aux_data_tensor,
-        #                         aux_data_lengths,
-        #                     )
-        #                 else:
-        #                     raise Exception(
-        #                         "Aux. CTC tasks were specified but no data was found"
-        #                     )
-        #         if loss_ic is None:
-        #             loss_ic, cer_ic = self._calc_ctc_loss(
-        #                 intermediate_out, encoder_out_lens, text, text_lengths
-        #             )
-        #         loss_interctc = loss_interctc + loss_ic
-
-        #         # Collect Intermedaite CTC stats
-        #         stats["loss_interctc_layer{}".format(layer_idx)] = (
-        #             loss_ic.detach() if loss_ic is not None else None
-        #         )
-        #         stats["cer_interctc_layer{}".format(layer_idx)] = cer_ic
-
-        #     loss_interctc = loss_interctc / len(intermediate_outs)
-
-        #     # calculate whole encoder loss
-        #     loss_ctc = (
-        #         1 - self.interctc_weight
-        #     ) * loss_ctc + self.interctc_weight * loss_interctc
-
-        # if self.use_transducer_decoder:
-        #     # 2a. Transducer decoder branch
-        #     (
-        #         loss_transducer,
-        #         cer_transducer,
-        #         wer_transducer,
-        #     ) = self._calc_transducer_loss(
-        #         encoder_out,
-        #         encoder_out_lens,
-        #         text,
-        #     )
-
-        #     if loss_ctc is not None:
-        #         loss = loss_transducer + (self.ctc_weight * loss_ctc)
-        #     else:
-        #         loss = loss_transducer
-
-        #     # Collect Transducer branch stats
-        #     stats["loss_transducer"] = (
-        #         loss_transducer.detach() if loss_transducer is not None else None
-        #     )
-        #     stats["cer_transducer"] = cer_transducer
-        #     stats["wer_transducer"] = wer_transducer
-
-        # else:
-        #     # logging.info("text",text)
-        #     # logging.info("text_lengths",text_lengths)
-        #     # 2b. Attention decoder branch
-        #     if self.ctc_weight != 1.0:
-        #         loss_att, acc_att, cer_att, wer_att = self._calc_att_loss(
-        #             encoder_out, encoder_out_lens, text, text_lengths
-        #         )
-
-        #     # 3. CTC-Att loss definition
-        #     if self.ctc_weight == 0.0:
-        #         loss = loss_att
-        #     elif self.ctc_weight == 1.0:
-        #         loss = loss_ctc
-        #     else:
-        #         loss = self.ctc_weight * loss_ctc + (1 - self.ctc_weight) * loss_att
-
-        #     # Collect Attn branch stats
-        #     stats["loss_att"] = loss_att.detach() if loss_att is not None else None
-        #     stats["acc"] = acc_att
-        #     stats["cer"] = cer_att
-        #     stats["wer"] = wer_att
-
-        # # Collect total loss stats
-        # stats["loss"] = loss.detach()
-
-        # # force_gatherable: to-device and to-tensor if scalar for DataParallel
-        # loss, stats, weight = force_gatherable((loss, stats, batch_size), loss.device)
-        # return loss, stats, weight
 
     def project_lid_embd(self, utt_level_feat: torch.Tensor) -> torch.Tensor:
         if self.projector is not None:
@@ -482,6 +371,13 @@ class ESPnetLIDModel(ESPnetASRModel):
             if self.embed_condition:
                 condition_features = self.lang_embedding(langs)
 
+            if self.lid_audio_length > 0:
+                # Random cropping
+                if speech_lengths.min() > self.lid_audio_length:
+                    lid_start = torch.randint(0, speech_lengths.min() - self.lid_audio_length + 1, (1,)).item()
+                    speech = speech[:, lid_start: lid_start + self.lid_audio_length]
+                    speech_lengths = speech.new_full(speech_lengths.shape, self.lid_audio_length, dtype=int)   
+            
             # 1. Extract feats
             feats, feats_lengths = self._extract_feats(speech, speech_lengths, condition_features)
 
