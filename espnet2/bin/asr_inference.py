@@ -104,6 +104,8 @@ class Speech2Text:
         streaming: bool = False,
         enh_s2t_task: bool = False,
         lid_task: bool = False,
+        lid_asr_joint_task: bool = False,
+        lid_token_list: str = "",
         quantize_asr_model: bool = False,
         quantize_lm: bool = False,
         quantize_modules: List[str] = ["Linear"],
@@ -411,6 +413,14 @@ class Speech2Text:
             )
         logging.info(f"Text tokenizer: {tokenizer}")
 
+        if lid_asr_joint_task:
+            with open(lid_token_list, encoding="utf-8") as f:
+                lid_token_list = [line.rstrip() for line in f]
+            converter_lid = TokenIDConverter(token_list=list(lid_token_list))
+            self.converter_lid = converter_lid
+
+
+
         self.asr_model = asr_model
         self.asr_train_args = asr_train_args
         self.converter = converter
@@ -427,6 +437,7 @@ class Speech2Text:
         self.nbest = nbest
         self.enh_s2t_task = enh_s2t_task
         self.lid_task = lid_task
+        self.lid_asr_joint_task = lid_asr_joint_task
         self.multi_asr = multi_asr
 
     @torch.no_grad()
@@ -465,8 +476,10 @@ class Speech2Text:
         # a. To device
         batch = to_device(batch, device=self.device)
 
-        # b. Forward Encoder
-        enc, enc_olens = self.asr_model.encode(**batch)
+        if not self.lid_asr_joint_task:
+            # b. Forward Encoder
+            enc, enc_olens = self.asr_model.encode(**batch)
+
         # logging.info("encoder shape:" + str(enc.shape))
         if self.multi_asr:
             enc = enc.unbind(dim=1)  # (batch, num_inf, ...) -> num_inf x [batch, ...]
@@ -517,8 +530,79 @@ class Speech2Text:
                 hyp = Hypothesis(score=cosine_similarity, yseq=langs_token)
                 # import pdb;pdb.set_trace()
                 results.append((langs[0], langs, langs_token, hyp))
+                # show nbest hypo
+                # logging.info(
+                #     f"nbest {i}: "
+                #     + "".join(langs)
+                #     + f" score:{cosine_similarity:.2f}"
+                #     + "\n"
+                # )
         
             return results
+
+
+        elif self.lid_asr_joint_task: # LID + ASR Joint
+            enc, enc_olens, lid_embd, enc_lid_olens = self.asr_model.encode(**batch)
+            
+            # Compute cosine similarity
+            cosine = F.linear(F.normalize(lid_embd), F.normalize(self.asr_model.loss.weight))
+            
+            # Get the predicted speaker index
+            cosine_similarity = torch.max(cosine, dim=1).values.item()
+            langs_token = torch.argmax(cosine, dim=1)
+            # import pdb;pdb.set_trace()
+            langs = self.converter_lid.ids2tokens(langs_token)
+            
+            logging.info(f"Cosine Similarity: {cosine_similarity:.2f}")
+            logging.info(
+                "best hypo: " + "".join(langs) + "\n"
+            )
+
+            # import pdb;pdb.set_trace()
+            topk_cosine = torch.topk(cosine, self.nbest, dim=1)
+            lid_results = []
+            # import pdb;pdb.set_trace()
+            for i in range(self.nbest):
+                langs_token = topk_cosine.indices.view(-1,1)[i]
+                cosine_similarity = topk_cosine.values.view(-1,1)[i].item()
+                langs = self.converter_lid.ids2tokens(langs_token)
+                hyp = Hypothesis(score=cosine_similarity, yseq=langs_token)
+                # import pdb;pdb.set_trace()
+                lid_results.append((langs[0], langs, langs_token, hyp))
+        
+            # ASR part
+            intermediate_outs = None
+            if isinstance(enc, tuple):
+                intermediate_outs = enc[1]
+                enc = enc[0]
+            # assert len(enc) == 1, len(enc)
+
+            # c. Passed the encoder result and the beam search
+            asr_results = self._decode_single_sample(enc[0])
+            # logging.info("encoder shape:" + str(enc.shape))
+            # logging.info("result 1")
+            # results_1 = self._decode_single_sample(enc[0])
+            # logging.info("result 2")
+            # results_2 = self._decode_single_sample(enc[1])
+            # results = results_1
+            # Encoder intermediate CTC predictions
+            if intermediate_outs is not None:
+                encoder_interctc_res = self._decode_interctc(intermediate_outs)
+                asr_results = (asr_results, encoder_interctc_res)
+            assert check_return_type(asr_results)
+
+
+            # combine lid text into ASR text
+            #(text, token, token_int, hyp)
+            results = []
+            for i in range(self.nbest):
+                results_text = lid_results[i][0] + " " + asr_results[i][0]
+                results.append((results_text, asr_results[i][1], asr_results[i][2], asr_results[i][3]))
+            
+            return results
+
+            # return (asr_results, lid_results)
+
 
         else:
             # Normal ASR
@@ -722,6 +806,8 @@ def inference(
     streaming: bool,
     enh_s2t_task: bool,
     lid_task: bool,
+    lid_asr_joint_task: bool,
+    lid_token_list: str,
     quantize_asr_model: bool,
     quantize_lm: bool,
     quantize_modules: List[str],
@@ -775,6 +861,8 @@ def inference(
         streaming=streaming,
         enh_s2t_task=enh_s2t_task,
         lid_task=lid_task,
+        lid_asr_joint_task=lid_asr_joint_task,
+        lid_token_list=lid_token_list,
         multi_asr=multi_asr,
         quantize_asr_model=quantize_asr_model,
         quantize_lm=quantize_lm,
@@ -843,6 +931,35 @@ def inference(
 
                         if text is not None:
                             ibest_writer[f"text_spk{spk}"][key] = text
+
+            # elif lid_asr_joint_task:
+            #     # LID + ASR joint task
+            #     encoder_interctc_res = None
+            #     if isinstance(results, tuple):
+            #         asr_results, lid_results = results
+
+            #     for n, (text, token, token_int, hyp) in zip(
+            #         range(1, nbest + 1), results
+            #     ):
+            #         # Create a directory: outdir/{n}best_recog
+            #         ibest_writer = writer[f"{n}best_recog"]
+
+            #         # Write the result to each file
+            #         ibest_writer["token"][key] = " ".join(token)
+            #         ibest_writer["token_int"][key] = " ".join(map(str, token_int))
+            #         ibest_writer["score"][key] = str(hyp.score)
+
+            #         if text is not None:
+            #             ibest_writer["text"][key] = text
+
+            #     # Write intermediate predictions to
+            #     # encoder_interctc_layer<layer_idx>.txt
+            #     ibest_writer = writer[f"1best_recog"]
+            #     if encoder_interctc_res is not None:
+            #         for idx, text in encoder_interctc_res.items():
+            #             ibest_writer[f"encoder_interctc_layer{idx}.txt"][
+            #                 key
+            #             ] = " ".join(text)
 
             else:
                 # Normal ASR
@@ -975,6 +1092,20 @@ def get_parser():
         type=str2bool,
         default=False,
         help="Whether we are using a language identification model",
+    )
+
+    group.add_argument(
+        "--lid_asr_joint_task",
+        type=str2bool,
+        default=False,
+        help="Whether we are using a language identification and ASR joint model",
+    )
+
+    group.add_argument(
+        "--lid_token_list",
+        type=str,
+        default="",
+        help="The token list for the language identification model",
     )
 
 
