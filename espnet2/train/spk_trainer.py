@@ -89,6 +89,7 @@ class SpkTrainer(Trainer):
         # fill dictionary with speech samples
         utt_id_list = []
         speech_list = []
+        lang_list = []
         task_token = None
         for utt_id, batch in iterator:
             bs = max(bs, len(utt_id))
@@ -96,26 +97,49 @@ class SpkTrainer(Trainer):
                 task_token = batch["task_tokens"][0]
 
             assert isinstance(batch, dict), type(batch)
-            for _utt_id, _speech, _speech2 in zip(
-                utt_id, batch["speech"], batch["speech2"]
-            ):
-                _utt_id_1, _utt_id_2 = _utt_id.split("*")
-                if _utt_id_1 not in utt_id_list:
-                    utt_id_list.append(_utt_id_1)
-                    speech_list.append(
-                        to_device(_speech, "cuda" if ngpu > 0 else "cpu")
-                    )
-                if _utt_id_2 not in utt_id_list:
-                    utt_id_list.append(_utt_id_2)
-                    speech_list.append(
-                        to_device(_speech2, "cuda" if ngpu > 0 else "cpu")
-                    )
+            if model.embed_condition:
+                for _utt_id, _speech, _speech2, _langs, _langs2 in zip(
+                    utt_id, batch["speech"], batch["speech2"], batch["langs"], batch["langs2"]
+                ):
+                    _utt_id_1, _utt_id_2 = _utt_id.split("*")
+                    if _utt_id_1 not in utt_id_list:
+                        utt_id_list.append(_utt_id_1)
+                        speech_list.append(
+                            to_device(_speech, "cuda" if ngpu > 0 else "cpu")
+                        )
+                        lang_list.append(
+                            to_device(_langs, "cuda" if ngpu > 0 else "cpu")
+                        )
+                    if _utt_id_2 not in utt_id_list:
+                        utt_id_list.append(_utt_id_2)
+                        speech_list.append(
+                            to_device(_speech2, "cuda" if ngpu > 0 else "cpu")
+                        )
+                        lang_list.append(
+                            to_device(_langs2, "cuda" if ngpu > 0 else "cpu")
+                        )
+            else:
+                for _utt_id, _speech, _speech2 in zip(
+                    utt_id, batch["speech"], batch["speech2"]
+                ):
+                    _utt_id_1, _utt_id_2 = _utt_id.split("*")
+                    if _utt_id_1 not in utt_id_list:
+                        utt_id_list.append(_utt_id_1)
+                        speech_list.append(
+                            to_device(_speech, "cuda" if ngpu > 0 else "cpu")
+                        )
+                    if _utt_id_2 not in utt_id_list:
+                        utt_id_list.append(_utt_id_2)
+                        speech_list.append(
+                            to_device(_speech2, "cuda" if ngpu > 0 else "cpu")
+                        )
 
         # extract speaker embeddings.
         n_utt = len(utt_id_list)
         for ii in range(0, n_utt, bs):
             _utt_ids = utt_id_list[ii : ii + bs]
             _speechs = speech_list[ii : ii + bs]
+            num_eval = _speechs[0].shape[0] # torch.Size([5, 48000])
             _speechs = torch.stack(_speechs, dim=0)
             org_shape = (_speechs.size(0), _speechs.size(1))
             _speechs = _speechs.flatten(0, 1)
@@ -127,12 +151,27 @@ class SpkTrainer(Trainer):
                 task_tokens = to_device(
                     task_token.repeat(_speechs.size(0)), "cuda" if ngpu > 0 else "cpu"
                 ).unsqueeze(1)
-            spk_embds = model(
-                speech=_speechs,
-                spk_labels=None,
-                extract_embd=True,
-                task_tokens=task_tokens,
-            )
+            if model.embed_condition:
+                _langs = lang_list[ii : ii + bs]
+                # expand dim[0] for each _langs[0] to num_eval
+                _langs = [_lang.expand(num_eval, 1) for _lang in _langs]
+                _langs = torch.stack(_langs, dim=1)
+                _langs = _langs.flatten(0, 1)
+                _langs = to_device(_langs, "cuda" if ngpu > 0 else "cpu")
+                spk_embds = model(
+                    speech=_speechs,
+                    spk_labels=None,
+                    extract_embd=True,
+                    task_tokens=task_tokens,
+                    langs=_langs,
+                )
+            else:
+                spk_embds = model(
+                    speech=_speechs,
+                    spk_labels=None,
+                    extract_embd=True,
+                    task_tokens=task_tokens,
+                )
             spk_embds = F.normalize(spk_embds, p=2, dim=1)
             spk_embds = spk_embds.view(org_shape[0], org_shape[1], -1)
 
