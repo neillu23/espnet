@@ -290,7 +290,7 @@ class SpeakerTask(AbsTask):
         # When calculating EER, we need trials where each trial has two
         # utterances. speech2 corresponds to the second utterance of each
         # trial pair in the validation/inference phase.
-        retval = ("speech2", "trial", "spk_labels", "task_tokens", "langs")
+        retval = ("speech2", "trial", "spk_labels", "task_tokens", "langs", "langs2")
 
         assert check_return_type(retval)
         return retval

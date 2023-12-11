@@ -2132,6 +2132,9 @@ class SpkPreprocessor(CommonPreprocessor):
         if "langs" in data:
             data["langs"] = np.array([data["langs"]], dtype=np.int64)
 
+        if "langs2" in data:
+            data["langs2"] = np.array([data["langs2"]], dtype=np.int64)
+
         return data
 
     def __call__(
