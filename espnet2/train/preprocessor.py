@@ -2129,6 +2129,9 @@ class SpkPreprocessor(CommonPreprocessor):
         if "task_tokens" in data:
             data["task_tokens"] = np.asarray([int(data["task_tokens"])])
 
+        if "langs" in data:
+            data["langs"] = np.array([data["langs"]], dtype=np.int64)
+
         return data
 
     def __call__(

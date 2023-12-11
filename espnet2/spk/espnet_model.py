@@ -1,7 +1,7 @@
 # Copyright 2023 Jee-weon Jung
 #  Apache 2.0  (http://www.apache.org/licenses/LICENSE-2.0)
 
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 from typeguard import check_argument_types
@@ -48,6 +48,10 @@ class ESPnetSpeakerModel(AbsESPnetModel):
         pooling: Optional[AbsPooling],
         projector: Optional[AbsProjector],
         loss: Optional[AbsLoss],
+        lid_tokens: Union[Tuple[str, ...], List[str]] = None,
+        langs_num: int = 0,
+        embed_condition: bool = False,
+        embed_condition_size: int = 0,
     ):
         assert check_argument_types()
 
@@ -60,6 +64,12 @@ class ESPnetSpeakerModel(AbsESPnetModel):
         self.pooling = pooling
         self.projector = projector
         self.loss = loss
+        self.embed_condition = embed_condition
+        self.embed_condition_size = embed_condition_size
+        if embed_condition:
+            self.langs_num = langs_num
+            self.lang_embedding = torch.nn.Embedding(langs_num, embed_condition_size)
+
 
     def forward(
         self,
@@ -67,6 +77,7 @@ class ESPnetSpeakerModel(AbsESPnetModel):
         spk_labels: torch.Tensor,
         task_tokens: torch.Tensor = None,
         extract_embd: bool = False,
+        langs: torch.Tensor = None,
         **kwargs,
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor], torch.Tensor]:
         """
@@ -95,9 +106,13 @@ class ESPnetSpeakerModel(AbsESPnetModel):
             )
         batch_size = speech.shape[0]
 
+        condition_features = None
+        if self.embed_condition:
+            condition_features = self.lang_embedding(langs)
+
         # 1. extract low-level feats (e.g., mel-spectrogram or MFCC)
         # Will do nothing for raw waveform-based models (e.g., RawNets)
-        feats, _ = self.extract_feats(speech, None)
+        feats, _ = self.extract_feats(speech, None, condition_features)
 
         frame_level_feats = self.encode_frame(feats)
 
@@ -119,7 +134,7 @@ class ESPnetSpeakerModel(AbsESPnetModel):
         return loss, stats, weight
 
     def extract_feats(
-        self, speech: torch.Tensor, speech_lengths: torch.Tensor
+        self, speech: torch.Tensor, speech_lengths: torch.Tensor, condition_features: torch.Tensor = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         batch_size = speech.shape[0]
         speech_lengths = (
@@ -130,7 +145,11 @@ class ESPnetSpeakerModel(AbsESPnetModel):
 
         # 1. extract feats
         if self.frontend is not None:
-            feats, feat_lengths = self.frontend(speech, speech_lengths)
+
+            if self.embed_condition:
+                feats, feat_lengths = self.frontend(speech, speech_lengths, condition_features=condition_features)
+            else:
+                feats, feat_lengths = self.frontend(speech, speech_lengths)
         else:
             feats = speech
             feat_lengths = None
@@ -168,7 +187,13 @@ class ESPnetSpeakerModel(AbsESPnetModel):
         speech: torch.Tensor,
         speech_lengths: torch.Tensor,
         spk_labels: torch.Tensor = None,
+        langs: torch.Tensor = None,
         **kwargs,
     ) -> Dict[str, torch.Tensor]:
-        feats, feats_lengths = self.extract_feats(speech, speech_lengths)
+
+        condition_features = None
+        if self.embed_condition:
+            condition_features = self.lang_embedding(langs)
+            
+        feats, feats_lengths = self.extract_feats(speech, speech_lengths, condition_features)
         return {"feats": feats}
