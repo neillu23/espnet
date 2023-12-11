@@ -13,7 +13,7 @@ test_set="${train_dev} test_$(echo ${lang} | tr - _)"
 
 nlsyms_txt=data/nlsyms.txt
 monolingual_asr_config=conf/train_asr.yaml
-multilingual_asr_config=conf/tuning/train_asr_conformer_hier_lid_utt.yaml
+multilingual_asr_config=conf/tuning/train_asr_conformer_scctc.yaml
 lm_config=conf/train_lm.yaml
 inference_config=conf/decode_lid.yaml
 
@@ -31,9 +31,9 @@ fi
 
 if [[ "all" == *"${lang}"* ]]; then
   ./asr.sh \
+      --ngpu 2 \
       --lang "${lang}" \
-      --auxiliary_data_tags "lid_utt " \
-      --local_data_opts "--stage 0 --lang ${lang} --nlsyms_txt ${nlsyms_txt}" \
+      --local_data_opts "--stage 2 --stop_stage 2 --lang ${lang} --nlsyms_txt ${nlsyms_txt}" \
       --post_process_local_data_opts "--stage 2 --lang ${lang} --nlsyms_txt ${nlsyms_txt}" \
       --audio_format "wav" \
       --use_lm false \
@@ -52,6 +52,7 @@ if [[ "all" == *"${lang}"* ]]; then
       --bpe_train_text "data/${train_set}/text" \
       --local_score_opts "--score_lang_id true" "$@" \
       --lm_train_text "data/${train_set}/text" "$@"
+      # --auxiliary_data_tags "lid_utt " \
 else
   ./asr.sh \
       --lang "${lang}" \

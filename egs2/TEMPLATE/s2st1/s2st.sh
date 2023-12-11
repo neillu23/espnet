@@ -78,9 +78,10 @@ tgt_bpe_char_cover=1.0  # character coverage when modeling BPE for target langua
 
 # Discrete unit-related
 use_discrete_unit=false         # Whether to use discrete unit
-clustering_stage=1              # clustering stage
+use_discrete_unit_not_unique=false # Whether to use discrete unit, non unique
+clustering_stage=2              # clustering stage
 clustering_stop_stage=100       # clustering stop stage
-clustering_num_threads=20       # Number of threads used for kmeans clustering
+clustering_num_threads=8       # Number of threads used for kmeans clustering
 feature_dir="dump/feats"        # Feature directory for dumped feature
 km_tag=                         # KMeans tagging
 use_gpu_feat_extract=true       # Whether to use gpu for feature extraction
@@ -1111,7 +1112,10 @@ if ! "${skip_train}"; then
             _opts+="--frontend_conf fs=${fs} "
 
             # tgt related
-            if "${use_discrete_unit}"; then
+            if "${use_discrete_unit_not_unique}"; then
+                _tgt_scp=text.km.${km_tag}.${tgt_lang}
+                _tgt_type=text
+            elif "${use_discrete_unit}"; then
                 _tgt_scp=text.km.${km_tag}.${tgt_lang}.unique
                 _tgt_type=text
             else

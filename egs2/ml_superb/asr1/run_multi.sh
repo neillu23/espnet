@@ -19,7 +19,7 @@ lid=false # whether to add joint LID task in multiligual ASR
 
 # Model/Inference Configs
 inference_config=conf/decode_asr.yaml
-asr_config=conf/tuning/train_asr_fbank_${duration}.yaml
+asr_config=conf/tuning/train_asr_wav2vec2_xlsr_${duration}.yaml
 
 . utils/parse_options.sh || exit 1
 

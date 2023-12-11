@@ -7,7 +7,7 @@ stage=1
 stop_stage=100
 n_proc=8
 
-data_dir_prefix= # root dir to save datasets.
+data_dir_prefix=downloads # root dir to save datasets.
 
 trg_dir=data
 

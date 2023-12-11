@@ -6,7 +6,7 @@ set -u
 set -o pipefail
 
 # language related
-src_lang=es # ar ca cy de et es fa fr id it ja lv mn nl pt ru sl sv ta tr zh
+src_lang=zh # ar ca cy de et es fa fr id it ja lv mn nl pt ru sl sv ta tr zh
 version=c # c or t (please refer to cvss paper for details)
 
 # kmeans related
@@ -26,7 +26,7 @@ vocoder_file=
 score_asr_model_tag=
 
 ./s2st.sh \
-    --ngpu 2 \
+    --ngpu 1 \
     --nj 64 \
     --inference_nj 64 \
     --use_discrete_unit true \
@@ -41,7 +41,7 @@ score_asr_model_tag=
     --feature_layer ${feature_layer} \
     --s3prl_upstream_name hubert \
     --storage_save_mode false \
-    --clustering_num_threads 60 \
+    --clustering_num_threads 8 \
     --clustering_portion ${clustering_portion} \
     --feature_num_clusters ${clustering_num_clusters} \
     --src_token_type "char" \
@@ -53,3 +53,5 @@ score_asr_model_tag=
     --train_set "${train_set}" \
     --valid_set "${train_dev}" \
     --test_sets "${test_sets}" "$@"
+    # --use_discrete_unit_not_unique true \
+    # --km_tag mhubert_base \

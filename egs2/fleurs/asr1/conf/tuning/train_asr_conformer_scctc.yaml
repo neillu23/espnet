@@ -7,6 +7,9 @@ patience: none
 init: xavier_uniform
 best_model_criterion:
 -   - valid
+    - cer_ctc
+    - min
+-   - valid
     - acc
     - max
 keep_nbest_models: 3

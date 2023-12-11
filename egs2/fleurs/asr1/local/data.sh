@@ -9,7 +9,7 @@
 
 # general configuration
 stage=0       # start from 0 if you need to start from data preparation
-stop_stage=1 # only run stage 2 if specified
+stop_stage=2 # only run stage 2 if specified
 nlsyms_txt=data/nlsyms.txt
 SECONDS=0
 lang=af_za # see https://huggingface.co/datasets/google/fleurs#dataset-structure for list of all langs
@@ -64,7 +64,9 @@ fi
 if [ ${stage} -eq 2 ] && [ ${stop_stage} -ge 2 ]; then
     log "stage3: Additional data processing - This should only be called after ASR stage 4"
     # create file of lids for self-conditioning
-    python local/create_lids.py --data_dir ${asr_data_dir}
+    python local/create_lids.py --data_dir data/${train_set}_sp/ #${asr_data_dir}
+    python local/create_lids.py --data_dir data/${train_set}_sp0.9/ #${asr_data_dir}
+    python local/create_lids.py --data_dir data/${train_set}_sp1.1/ #${asr_data_dir}
 fi
 
 log "Successfully finished. [elapsed=${SECONDS}s]"

@@ -535,6 +535,7 @@ class ESPnetS2STModel(AbsESPnetModel):
 
             # st_ctc
             if self.st_ctc is not None and "st_ctc" in self.losses:
+                logging.info("tgt_text:{}".format(tgt_text))
                 st_ctc_loss, cer_st_ctc = self._calc_ctc_loss(
                     syn_hidden[unit_decoder_layer_for_st],
                     tgt_speech_lengths + 1,
