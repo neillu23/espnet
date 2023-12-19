@@ -347,6 +347,17 @@ def get_parser():
         type=str,
         help="SPK model parameter file",
     )
+
+
+
+
+    group.add_argument(
+        "--lid_tokens",
+        type=str,
+        default="",
+        help="The token list for the language identification model",
+    )
+
     group.add_argument(
         "--model_tag",
         type=str,

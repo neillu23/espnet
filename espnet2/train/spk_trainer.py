@@ -77,6 +77,13 @@ class SpkTrainer(Trainer):
 
         model.eval()
 
+        embed_condition = False
+        if hasattr(model, "embed_condition"):
+            embed_condition = model.embed_condition
+        else:
+            embed_condition = model.module.embed_condition
+        logging.info(f"embed_condition: {embed_condition}")
+
         scores = []
         labels = []
         spk_embd_dic = {}
@@ -97,7 +104,7 @@ class SpkTrainer(Trainer):
                 task_token = batch["task_tokens"][0]
 
             assert isinstance(batch, dict), type(batch)
-            if model.embed_condition:
+            if embed_condition:
                 for _utt_id, _speech, _speech2, _langs, _langs2 in zip(
                     utt_id, batch["speech"], batch["speech2"], batch["langs"], batch["langs2"]
                 ):
@@ -303,6 +310,13 @@ class SpkTrainer(Trainer):
 
         model.eval()
 
+        embed_condition = False
+        if hasattr(model, "embed_condition"):
+            embed_condition = model.embed_condition
+        else:
+            embed_condition = model.module.embed_condition
+        logging.info(f"embed_condition: {embed_condition}")
+
         scores = []
         labels = []
         spk_embd_dic = {}
@@ -315,6 +329,7 @@ class SpkTrainer(Trainer):
         utt_id_list = []
         utt_id_whole_list = []
         speech_list = []
+        langs_list = []
         task_token_list = []
         task_token = None
         if distributed:
@@ -329,96 +344,218 @@ class SpkTrainer(Trainer):
                 task_token = batch["task_tokens"][0]
 
             assert isinstance(batch, dict), type(batch)
-            for _utt_id, _speech, _speech2 in zip(
-                utt_id, batch["speech"], batch["speech2"]
-            ):
-                _utt_id_1, _utt_id_2 = _utt_id.split("*")
-                if _utt_id_1 not in utt_id_whole_list:
-                    utt_id_whole_list.append(_utt_id_1)
-                    if idx % world_size == rank:
-                        utt_id_list.append(_utt_id_1)
-                        speech_list.append(_speech)
 
-                    if len(utt_id_list) == custom_bs:
-                        speech_list = torch.stack(speech_list, dim=0)
-                        org_shape = (speech_list.size(0), speech_list.size(1))
-                        speech_list = speech_list.flatten(0, 1)
-                        speech_list = to_device(
-                            speech_list, "cuda" if ngpu > 0 else "cpu"
-                        )
-                        if task_token is None:
-                            task_tokens = None
-                        else:
-                            task_tokens = to_device(
-                                task_token.repeat(speech_list.size(0)),
-                                "cuda" if ngpu > 0 else "cpu",
-                            ).unsqueeze(1)
-                        spk_embds = model(
-                            speech=speech_list,
-                            spk_labels=None,
-                            extract_embd=True,
-                            task_tokens=task_tokens,
-                        )
-                        # removed to be use magnitude in qmf
-                        # spk_embds = F.normalize(spk_embds, p=2, dim=1)
-                        spk_embds = spk_embds.view(org_shape[0], org_shape[1], -1)
+            if embed_condition:
+                for _utt_id, _speech, _speech2, _langs, _langs2 in zip(
+                    utt_id, batch["speech"], batch["speech2"], batch["langs"], batch["langs2"]
+                ):
+                    _utt_id_1, _utt_id_2 = _utt_id.split("*")
+                    if _utt_id_1 not in utt_id_whole_list:
+                        utt_id_whole_list.append(_utt_id_1)
+                        if idx % world_size == rank:
+                            utt_id_list.append(_utt_id_1)
+                            speech_list.append(_speech)
+                            task_token_list.append(task_token)
+                            langs_list.append(_langs)
 
-                        for uid, _spk_embd in zip(utt_id_list, spk_embds):
-                            if average:
-                                spk_embd_dic[uid] = (
-                                    _spk_embd.mean(0).detach().cpu().numpy()
-                                )
+                        if len(utt_id_list) == custom_bs:
+                            num_eval = speech_list[0].shape[0] 
+                            speech_list = torch.stack(speech_list, dim=0)
+                            org_shape = (speech_list.size(0), speech_list.size(1))
+                            speech_list = speech_list.flatten(0, 1)
+                            speech_list = to_device(
+                                speech_list, "cuda" if ngpu > 0 else "cpu"
+                            )
+                            if task_token is None:
+                                task_tokens = None
                             else:
-                                spk_embd_dic[uid] = _spk_embd.detach().cpu().numpy()
+                                task_tokens = to_device(
+                                    task_token.repeat(speech_list.size(0)),
+                                    "cuda" if ngpu > 0 else "cpu",
+                                ).unsqueeze(1)
 
-                        utt_id_list = []
-                        speech_list = []
+                            langs_list = [_lang.expand(num_eval, 1) for _lang in langs_list]
+                            langs_list = torch.stack(langs_list, dim=1)
+                            langs_list = langs_list.flatten(0, 1)
+                            langs_list = to_device(langs_list, "cuda" if ngpu > 0 else "cpu")
+                            # logging.info(f"_langs: {_langs.shape}")
+                            spk_embds = model(
+                                speech=speech_list,
+                                spk_labels=None,
+                                extract_embd=True,
+                                task_tokens=task_tokens,
+                                langs=langs_list,
+                            )
+                            # removed to be use magnitude in qmf
+                            # spk_embds = F.normalize(spk_embds, p=2, dim=1)
+                            spk_embds = spk_embds.view(
+                                org_shape[0], org_shape[1], -1
+                            )
 
-                    idx += 1
-                if _utt_id_2 not in utt_id_whole_list:
-                    utt_id_whole_list.append(_utt_id_2)
-                    if idx % world_size == rank:
-                        utt_id_list.append(_utt_id_2)
-                        speech_list.append(_speech2)
+                            for uid, _spk_embd in zip(utt_id_list, spk_embds):
+                                if average:
+                                    spk_embd_dic[uid] = (
+                                        _spk_embd.mean(0).detach().cpu().numpy()
+                                    )
+                                else:
+                                    spk_embd_dic[uid] = _spk_embd.detach().cpu().numpy()
+                            
+                            utt_id_list = []
+                            speech_list = []
+                            langs_list = []
 
-                    if len(utt_id_list) == custom_bs:
-                        speech_list = torch.stack(speech_list, dim=0)
-                        org_shape = (speech_list.size(0), speech_list.size(1))
-                        speech_list = speech_list.flatten(0, 1)
-                        speech_list = to_device(
-                            speech_list, "cuda" if ngpu > 0 else "cpu"
-                        )
-                        if task_token is None:
-                            task_tokens = None
-                        else:
-                            task_tokens = to_device(
-                                task_token.repeat(speech_list.size(0)),
-                                "cuda" if ngpu > 0 else "cpu",
-                            ).unsqueeze(1)
-                        spk_embds = model(
-                            speech=speech_list,
-                            spk_labels=None,
-                            extract_embd=True,
-                            task_tokens=task_tokens,
-                        )
-                        # removed to be use magnitude in qmf
-                        # spk_embds = F.normalize(spk_embds, p=2, dim=1)
-                        spk_embds = spk_embds.view(org_shape[0], org_shape[1], -1)
+                 
+                        idx += 1      
 
-                        for uid, _spk_embd in zip(utt_id_list, spk_embds):
-                            if average:
-                                spk_embd_dic[uid] = (
-                                    _spk_embd.mean(0).detach().cpu().numpy()
-                                )
+                    if _utt_id_2 not in utt_id_whole_list:
+                        utt_id_whole_list.append(_utt_id_2)
+                        if idx % world_size == rank:
+                            utt_id_list.append(_utt_id_2)
+                            speech_list.append(_speech2)
+                            task_token_list.append(task_token)
+                            langs_list.append(_langs2)
+                            
+
+                        if len(utt_id_list) == custom_bs:
+                            num_eval = speech_list[0].shape[0] 
+                            speech_list = torch.stack(speech_list, dim=0)
+                            org_shape = (speech_list.size(0), speech_list.size(1))
+                            speech_list = speech_list.flatten(0, 1)
+                            speech_list = to_device(
+                                speech_list, "cuda" if ngpu > 0 else "cpu"
+                            )
+                            if task_token is None:
+                                task_tokens = None
                             else:
-                                spk_embd_dic[uid] = _spk_embd.detach().cpu().numpy()
+                                task_tokens = to_device(
+                                    task_token.repeat(speech_list.size(0)),
+                                    "cuda" if ngpu > 0 else "cpu",
+                                ).unsqueeze(1)
 
-                        utt_id_list = []
-                        speech_list = []
 
-                    idx += 1
+
+                            langs_list = [_lang.expand(num_eval, 1) for _lang in langs_list]
+                            langs_list = torch.stack(langs_list, dim=1)
+                            langs_list = langs_list.flatten(0, 1)
+                            langs_list = to_device(langs_list, "cuda" if ngpu > 0 else "cpu")
+                            spk_embds = model(
+                                speech=speech_list,
+                                spk_labels=None,
+                                extract_embd=True,
+                                task_tokens=task_tokens,
+                                langs=langs_list,
+                            )
+                            # removed to be use magnitude in qmf
+                            # spk_embds = F.normalize(spk_embds, p=2, dim=1)
+                            spk_embds = spk_embds.view(
+                                org_shape[0], org_shape[1], -1
+                            )
+
+                            for uid, _spk_embd in zip(utt_id_list, spk_embds):
+                                if average:
+                                    spk_embd_dic[uid] = (
+                                        _spk_embd.mean(0).detach().cpu().numpy()
+                                    )
+                                else:
+                                    spk_embd_dic[uid] = _spk_embd.detach().cpu().numpy()
+                            
+                            utt_id_list = []
+                            speech_list = []
+                            langs_list = []
+
+                        idx += 1
+            else:
+                for _utt_id, _speech, _speech2 in zip(
+                    utt_id, batch["speech"], batch["speech2"]
+                ):
+                    _utt_id_1, _utt_id_2 = _utt_id.split("*")
+                    if _utt_id_1 not in utt_id_whole_list:
+                        utt_id_whole_list.append(_utt_id_1)
+                        if idx % world_size == rank:
+                            utt_id_list.append(_utt_id_1)
+                            speech_list.append(_speech)
+
+                        if len(utt_id_list) == custom_bs:
+                            speech_list = torch.stack(speech_list, dim=0)
+                            org_shape = (speech_list.size(0), speech_list.size(1))
+                            speech_list = speech_list.flatten(0, 1)
+                            speech_list = to_device(
+                                speech_list, "cuda" if ngpu > 0 else "cpu"
+                            )
+                            if task_token is None:
+                                task_tokens = None
+                            else:
+                                task_tokens = to_device(
+                                    task_token.repeat(speech_list.size(0)),
+                                    "cuda" if ngpu > 0 else "cpu",
+                                ).unsqueeze(1)
+                            spk_embds = model(
+                                speech=speech_list,
+                                spk_labels=None,
+                                extract_embd=True,
+                                task_tokens=task_tokens,
+                            )
+                            # removed to be use magnitude in qmf
+                            # spk_embds = F.normalize(spk_embds, p=2, dim=1)
+                            spk_embds = spk_embds.view(org_shape[0], org_shape[1], -1)
+
+                            for uid, _spk_embd in zip(utt_id_list, spk_embds):
+                                if average:
+                                    spk_embd_dic[uid] = (
+                                        _spk_embd.mean(0).detach().cpu().numpy()
+                                    )
+                                else:
+                                    spk_embd_dic[uid] = _spk_embd.detach().cpu().numpy()
+
+                            utt_id_list = []
+                            speech_list = []
+
+                        idx += 1
+                    if _utt_id_2 not in utt_id_whole_list:
+                        utt_id_whole_list.append(_utt_id_2)
+                        if idx % world_size == rank:
+                            utt_id_list.append(_utt_id_2)
+                            speech_list.append(_speech2)
+
+                        if len(utt_id_list) == custom_bs:
+                            speech_list = torch.stack(speech_list, dim=0)
+                            org_shape = (speech_list.size(0), speech_list.size(1))
+                            speech_list = speech_list.flatten(0, 1)
+                            speech_list = to_device(
+                                speech_list, "cuda" if ngpu > 0 else "cpu"
+                            )
+                            if task_token is None:
+                                task_tokens = None
+                            else:
+                                task_tokens = to_device(
+                                    task_token.repeat(speech_list.size(0)),
+                                    "cuda" if ngpu > 0 else "cpu",
+                                ).unsqueeze(1)
+                            spk_embds = model(
+                                speech=speech_list,
+                                spk_labels=None,
+                                extract_embd=True,
+                                task_tokens=task_tokens,
+                            )
+                            # removed to be use magnitude in qmf
+                            # spk_embds = F.normalize(spk_embds, p=2, dim=1)
+                            spk_embds = spk_embds.view(org_shape[0], org_shape[1], -1)
+
+                            for uid, _spk_embd in zip(utt_id_list, spk_embds):
+                                if average:
+                                    spk_embd_dic[uid] = (
+                                        _spk_embd.mean(0).detach().cpu().numpy()
+                                    )
+                                else:
+                                    spk_embd_dic[uid] = _spk_embd.detach().cpu().numpy()
+
+                            utt_id_list = []
+                            speech_list = []
+
+                        idx += 1
 
         if len(utt_id_list) != 0:
+            num_eval = speech_list[0].shape[0]
             speech_list = torch.stack(speech_list, dim=0)
             org_shape = (speech_list.size(0), speech_list.size(1))
             speech_list = speech_list.flatten(0, 1)
@@ -430,11 +567,21 @@ class SpkTrainer(Trainer):
                     task_token.repeat(speech_list.size(0)),
                     "cuda" if ngpu > 0 else "cpu",
                 ).unsqueeze(1)
+
+            if embed_condition:
+                langs_list = [_lang.expand(num_eval, 1) for _lang in langs_list]
+                langs_list = torch.stack(langs_list, dim=1)
+                langs_list = langs_list.flatten(0, 1)
+                langs_list = to_device(langs_list, "cuda" if ngpu > 0 else "cpu")
+            else:
+                langs_list = None
+            
             spk_embds = model(
                 speech=speech_list,
                 spk_labels=None,
                 extract_embd=True,
                 task_tokens=task_tokens,
+                langs=langs_list,
             )
             spk_embds = F.normalize(spk_embds, p=2, dim=1)
             spk_embds = spk_embds.view(org_shape[0], org_shape[1], -1)
