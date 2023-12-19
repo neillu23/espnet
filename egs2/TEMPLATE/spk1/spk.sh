@@ -491,10 +491,11 @@ if [ ${stage} -le 6 ] && [ ${stop_stage} -ge 6 ]; then
     _opts=""
     #For Conditional ASR
     if [ "${use_lid_asr}" = true ]; then
-        _opts+="--data_path_and_name_and_type ${_inference_dir}/langs_idx,langs,text "
+        _opts+="--data_path_and_name_and_type ${_inference_dir}/langs_idx_1,langs,text "
+        _opts+="--data_path_and_name_and_type ${_inference_dir}/langs_idx_2,langs2,text "
         # _opts+="--lid_tokens ${_spk_train_dir}/all_langs "
         # _opts+="--lid_asr_joint_task ${lid_asr_joint_task} "
-        _opts+="--lid_token_list ${_inference_dir}/all_langs "
+        _opts+="--lid_tokens ${_inference_dir}/all_langs "
     fi
 
     ${python} -m espnet2.bin.launch \
