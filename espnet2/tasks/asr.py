@@ -64,6 +64,7 @@ from espnet2.asr.frontend.windowing import SlidingWindow
 from espnet2.asr.maskctc_model import MaskCTCModel
 from espnet2.asr.pit_espnet_model import ESPnetASRModel as PITESPnetModel
 from espnet2.asr.joint_asr_espnet_model import ESPnetJointASRModel
+from espnet2.asr.hier_asr_espnet_model import ESPnetHierASRModel
 from espnet2.asr.lid_espnet_model import ESPnetLIDModel
 from espnet2.asr.postencoder.abs_postencoder import AbsPostEncoder
 from espnet2.asr.postencoder.chn_attn_stat_pooling import ChnAttnStatPooling
@@ -135,6 +136,7 @@ model_choices = ClassChoices(
         maskctc=MaskCTCModel,
         pit_espnet=PITESPnetModel,
         joint_espnet=ESPnetJointASRModel,
+        joint_hier_espnet=ESPnetHierASRModel,
         lid_espnet=ESPnetLIDModel
     ),
     type_check=AbsESPnetModel,
@@ -648,6 +650,8 @@ class ASRTask(AbsTask):
             # Extract features in the model
             # import pdb; pdb.set_trace()
             frontend_class = frontend_choices.get_class(args.frontend)
+            if "extra_conf" in args.frontend_conf:
+                args.frontend_conf["frontend_conf"]["extra_conf"]["langs_num"] = langs_num
             frontend = frontend_class(**args.frontend_conf)
             input_size = frontend.output_size()
         else:
@@ -736,17 +740,25 @@ class ASRTask(AbsTask):
         except AttributeError:
             model_class = model_choices.get_class("espnet")
 
-        if model_class == ESPnetJointASRModel:
-            if getattr(args, "preencoder_lid", None) is not None:
+        if model_class == ESPnetJointASRModel or model_class == ESPnetHierASRModel:
+                
+            preencoder_lid_nums = args.model_conf.get("preencoder_lid_nums", 1)
+            if preencoder_lid_nums > 1:
                 preencoder_lid_class = preencoder_choices.get_class(args.preencoder_lid)
-                preencoder_lid = preencoder_lid_class(**args.preencoder_lid_conf)
-                lid_input_size = preencoder_lid.output_size()
+                preencoder_lid = torch.nn.ModuleList([preencoder_lid_class(**args.preencoder_lid_conf) for i in range(preencoder_lid_nums)])
+
+                lid_input_size = preencoder_lid[0].output_size()
             else:
-                preencoder_lid = None
-                if args.input_size is None:
-                    lid_input_size = frontend.output_size()
+                if getattr(args, "preencoder_lid", None) is not None:
+                    preencoder_lid_class = preencoder_choices.get_class(args.preencoder_lid)
+                    preencoder_lid = preencoder_lid_class(**args.preencoder_lid_conf)
+                    lid_input_size = preencoder_lid.output_size()
                 else:
-                    lid_input_size = args.input_size
+                    preencoder_lid = None
+                    if args.input_size is None:
+                        lid_input_size = frontend.output_size()
+                    else:
+                        lid_input_size = args.input_size
 
             encoder_lid_class = encoder_choices.get_class(args.encoder_lid)
             encoder_lid = encoder_lid_class(input_size=lid_input_size, **args.encoder_lid_conf)

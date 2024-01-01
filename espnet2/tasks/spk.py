@@ -174,6 +174,14 @@ class SpeakerTask(AbsTask):
         )
 
         group.add_argument(
+            "--lid_tokens",
+            type=str_or_none,
+            default=None,
+            help="A text mapping int-id to lid token",
+        )
+        
+
+        group.add_argument(
             "--input_size",
             type=int_or_none,
             default=None,
@@ -284,7 +292,7 @@ class SpeakerTask(AbsTask):
         # When calculating EER, we need trials where each trial has two
         # utterances. speech2 corresponds to the second utterance of each
         # trial pair in the validation/inference phase.
-        retval = ("speech2", "trial", "spk_labels", "task_tokens")
+        retval = ("speech2", "trial", "spk_labels", "task_tokens", "langs", "langs2")
 
         assert check_return_type(retval)
         return retval
@@ -314,6 +322,23 @@ class SpeakerTask(AbsTask):
         else:
             normalize = None
 
+
+        # for lid_tokens
+        if isinstance(args.lid_tokens, str):
+            with open(args.lid_tokens, encoding="utf-8") as f:
+                lid_tokens = [line.rstrip() for line in f]
+
+            # Overwriting lid_tokens to keep it as "portable".
+            args.lid_tokens = list(lid_tokens)
+            langs_num = len(lid_tokens)
+        elif isinstance(args.lid_tokens, (tuple, list)):
+            lid_tokens = list(args.lid_tokens)
+            langs_num = len(lid_tokens)
+        else:
+            lid_tokens= None
+            langs_num = 0
+
+
         encoder_class = encoder_choices.get_class(args.encoder)
         encoder = encoder_class(input_size=input_size, **args.encoder_conf)
         encoder_output_size = encoder.output_size()
@@ -341,7 +366,9 @@ class SpeakerTask(AbsTask):
             pooling=pooling,
             projector=projector,
             loss=loss,
-            # **args.model_conf, # uncomment when model_conf exists
+            lid_tokens=lid_tokens,
+            langs_num=langs_num,
+            **args.model_conf, # uncomment when model_conf exists
         )
 
         if args.init is not None:
