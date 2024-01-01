@@ -37,6 +37,9 @@ else:
     def autocast(enabled=True):
         yield
 
+def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True, export=False):
+    return torch.nn.LayerNorm(normalized_shape, eps, elementwise_affine)
+
 
 class ESPnetJointASRModel(ESPnetASRModel):
     """CTC-attention hybrid Encoder-Decoder model"""
@@ -63,11 +66,14 @@ class ESPnetJointASRModel(ESPnetASRModel):
         langs_num: int = 0,
         embed_condition: bool = False,
         embed_condition_size: int = 0,
-        lid_condtion_feature: str = "soft",
+        lid_condition_feature: str = "soft",
+        lid_condition_activate: Optional[str] = None,
+        droprate: float = 0.3,
         aux_ctc: dict = None,
         ctc_weight: float = 0.5,
         lid_weight: float = 1.0,
         lid_audio_length: int = 0,
+        lid_start_begin: bool = False,
         separate_forward: bool = True,
         interctc_weight: float = 0.0,
         ignore_id: int = -1,
@@ -106,6 +112,7 @@ class ESPnetJointASRModel(ESPnetASRModel):
             langs_num=langs_num,
             embed_condition=embed_condition,
             embed_condition_size=embed_condition_size,
+            lid_condition_feature=lid_condition_feature,
             aux_ctc=aux_ctc,
             ctc_weight=ctc_weight,
             interctc_weight=interctc_weight,
@@ -133,8 +140,20 @@ class ESPnetJointASRModel(ESPnetASRModel):
         self.loss = loss
         self.lid_weight = lid_weight
         self.lid_audio_length = lid_audio_length
+        self.lid_start_begin = lid_start_begin
         self.separate_forward = separate_forward
-        self.lid_condtion_feature = lid_condtion_feature
+        self.lid_condition_feature = lid_condition_feature
+        self.lid_condition_activate = lid_condition_activate
+        # if 
+        if self.embed_condition and lid_condition_feature == "soft":
+            self.lang_embedding = torch.nn.Linear(embed_condition_size, embed_condition_size)
+
+            if self.lid_condition_activate == "bndrop":
+                self.ln = LayerNorm(embed_condition_size, export=False)
+                self.activation_fn = torch.nn.PReLU()
+                self.dropout = torch.nn.Dropout(p=droprate)
+
+        
     def forward(
         self,
         speech: torch.Tensor,
@@ -358,10 +377,18 @@ class ESPnetJointASRModel(ESPnetASRModel):
             if self.lid_audio_length > 0 and not self.separate_forward:
                 # Random cropping
                 if speech_lengths.min() > self.lid_audio_length:
-                    lid_start = torch.randint(0, speech_lengths.min() - self.lid_audio_length + 1, (1,)).item()
-                    lid_speech = speech[:, lid_start: lid_start + self.lid_audio_length]
-                    lid_speech_lengths = lid_speech.new_full(lid_speech_lengths.shape, self.lid_audio_length, dtype=int)   
+                    if self.lid_start_begin:
+                        speech = speech[:, : self.lid_audio_length]
+                        speech_lengths = speech.new_full(speech_lengths.shape, self.lid_audio_length, dtype=int)
+                    else:
+                        lid_start = torch.randint(0, speech_lengths.min() - self.lid_audio_length + 1, (1,)).item()
+                        lid_speech = speech[:, lid_start: lid_start + self.lid_audio_length]
+                        lid_speech_lengths = lid_speech.new_full(lid_speech_lengths.shape, self.lid_audio_length, dtype=int)   
+            
             feats_lid, feats_lengths, feats_layers, feats_lengths_layers = self._extract_feats(lid_speech, lid_speech_lengths, condition_features)
+            
+            # import pdb; pdb.set_trace()
+
             # 2. Data augmentation
             if self.specaug is not None and self.training:
                 feats_lid, feats_lengths = self.specaug(feats_lid, feats_lengths)
@@ -396,9 +423,9 @@ class ESPnetJointASRModel(ESPnetASRModel):
         # ys_hat = self.ctc_lid.argmax(encoder_lid_out).data
         # first_non_zero_indices = ys_hat.argmax(1)
         # first_non_zero_values = ys_hat[torch.arange(ys_hat.size(0)), first_non_zero_indices].unsqueeze(1)
-
+        # import pdb; pdb.set_trace()
         if self.embed_condition:
-            if self.lid_condtion_feature == "hard":
+            if self.lid_condition_feature == "hard":
                 # Compute cosine similarity
                 cosine = F.linear(F.normalize(lid_embd), F.normalize(self.loss.weight))
                 
@@ -408,9 +435,21 @@ class ESPnetJointASRModel(ESPnetASRModel):
 
             # condition_features = self.lang_embedding(langs)
                 condition_features = self.lang_embedding(langs_token).unsqueeze(1)
-            else:
-                condition_features = lid_embd.unsqueeze(1)
-            # condition_features = lid_embd.unsqueeze(1)
+            elif self.lid_condition_feature == "GT":
+                condition_features = self.lang_embedding(langs)
+            elif self.lid_condition_feature == "soft":
+                if self.lid_condition_activate == "LeakyReLU":
+                    # import pdb; pdb.set_trace()
+                    condition_features = self.lang_embedding(lid_embd).unsqueeze(1)
+                    condition_features = torch.nn.LeakyReLU()(condition_features)
+                elif self.lid_condition_activate == "bndrop":
+                    # import pdb; pdb.set_trace()
+                    condition_features = self.lang_embedding(lid_embd)
+                    condition_features = self.ln(condition_features)
+                    condition_features = condition_features.unsqueeze(1)
+                    condition_features = self.activation_fn(condition_features)
+                    condition_features = self.dropout(condition_features)
+
 
             # logging.info("lid_embd shape:{}".format(lid_embd.shape))
           

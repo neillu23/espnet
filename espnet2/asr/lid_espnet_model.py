@@ -62,6 +62,7 @@ class ESPnetLIDModel(ESPnetASRModel):
         aux_ctc: dict = None,
         ctc_weight: float = 0.5,
         lid_audio_length: int = 0,
+        lid_start_begin: bool = False,
         interctc_weight: float = 0.0,
         ignore_id: int = -1,
         lsm_weight: float = 0.0,
@@ -116,6 +117,7 @@ class ESPnetLIDModel(ESPnetASRModel):
         self.projector = projector
         self.loss = loss
         self.lid_audio_length = lid_audio_length
+        self.lid_start_begin = lid_start_begin
 
         # assert check_argument_types()
         # assert 0.0 <= ctc_weight <= 1.0, ctc_weight
@@ -372,11 +374,15 @@ class ESPnetLIDModel(ESPnetASRModel):
                 condition_features = self.lang_embedding(langs)
 
             if self.lid_audio_length > 0:
-                # Random cropping
                 if speech_lengths.min() > self.lid_audio_length:
-                    lid_start = torch.randint(0, speech_lengths.min() - self.lid_audio_length + 1, (1,)).item()
-                    speech = speech[:, lid_start: lid_start + self.lid_audio_length]
-                    speech_lengths = speech.new_full(speech_lengths.shape, self.lid_audio_length, dtype=int)   
+                    if self.lid_start_begin:
+                        speech = speech[:, : self.lid_audio_length]
+                        speech_lengths = speech.new_full(speech_lengths.shape, self.lid_audio_length, dtype=int)
+                    # Random cropping
+                    else:
+                        lid_start = torch.randint(0, speech_lengths.min() - self.lid_audio_length + 1, (1,)).item()
+                        speech = speech[:, lid_start: lid_start + self.lid_audio_length]
+                        speech_lengths = speech.new_full(speech_lengths.shape, self.lid_audio_length, dtype=int)   
             
             # 1. Extract feats
             feats, feats_lengths = self._extract_feats(speech, speech_lengths, condition_features)

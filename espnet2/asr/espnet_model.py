@@ -54,8 +54,11 @@ class ESPnetASRModel(AbsESPnetModel):
         langs_num: int = 0,
         embed_condition: bool = False,
         embed_condition_size: int = 0,
+        lid_condition_feature: str = "hard",
+        self_condition: bool = False,
         aux_ctc: dict = None,
         ctc_weight: float = 0.5,
+        self_condition_weight: float = 0.0,
         interctc_weight: float = 0.0,
         ignore_id: int = -1,
         lsm_weight: float = 0.0,
@@ -111,8 +114,11 @@ class ESPnetASRModel(AbsESPnetModel):
         self.encoder = encoder
         self.embed_condition = embed_condition
         self.embed_condition_size = embed_condition_size
+        self.self_condition = self_condition
+        self.self_condition_weight = self_condition_weight
+        self.lid_condition_feature = lid_condition_feature
 
-        if embed_condition:
+        if embed_condition and lid_condition_feature == "hard":
             self.langs_num = langs_num
             self.lang_embedding = torch.nn.Embedding(langs_num, embed_condition_size)
 
@@ -249,7 +255,7 @@ class ESPnetASRModel(AbsESPnetModel):
         text = text[:, : text_lengths.max()]
 
         # 1. Encoder
-        encoder_out, encoder_out_lens = self.encode(speech, speech_lengths, langs)
+        encoder_out, encoder_out_lens, self_condition_loss = self.encode(speech, speech_lengths, langs)
         intermediate_outs = None
         if isinstance(encoder_out, tuple):
             intermediate_outs = encoder_out[1]
@@ -267,6 +273,14 @@ class ESPnetASRModel(AbsESPnetModel):
         loss_ctc, cer_ctc = None, None
         loss_transducer, cer_transducer, wer_transducer = None, None, None
         stats = dict()
+
+        if self.self_condition_weight > 0.0:
+            loss_self_condition = self_condition_loss * self.self_condition_weight
+            stats["loss_self_condition"] = loss_self_condition.detach()
+            # loss = loss_self_condition
+            # return loss, stats, batch_size
+
+
 
         # 1. CTC branch
         if self.ctc_weight != 0.0:
@@ -374,6 +388,9 @@ class ESPnetASRModel(AbsESPnetModel):
         # Collect total loss stats
         stats["loss"] = loss.detach()
 
+        if self.self_condition_weight > 0.0:
+            loss = loss + loss_self_condition
+
         # force_gatherable: to-device and to-tensor if scalar for DataParallel
         loss, stats, weight = force_gatherable((loss, stats, batch_size), loss.device)
         return loss, stats, weight
@@ -392,7 +409,7 @@ class ESPnetASRModel(AbsESPnetModel):
         if self.embed_condition:
             condition_features = self.lang_embedding(langs)
             
-        feats, feats_lengths = self._extract_feats(speech, speech_lengths, condition_features)
+        feats, feats_lengths, _ = self._extract_feats(speech, speech_lengths, condition_features, langs)
         return {"feats": feats, "feats_lengths": feats_lengths}
 
     def encode(
@@ -404,13 +421,14 @@ class ESPnetASRModel(AbsESPnetModel):
             speech: (Batch, Length, ...)
             speech_lengths: (Batch, )
         """
+        self_condition_loss = None
         with autocast(False):
             condition_features = None
             if self.embed_condition:
                 condition_features = self.lang_embedding(langs)
 
             # 1. Extract feats
-            feats, feats_lengths = self._extract_feats(speech, speech_lengths, condition_features)
+            feats, feats_lengths, self_condition_loss = self._extract_feats(speech, speech_lengths, condition_features, langs)
 
             # 2. Data augmentation
             if self.specaug is not None and self.training:
@@ -462,15 +480,18 @@ class ESPnetASRModel(AbsESPnetModel):
         if intermediate_outs is not None:
             return (encoder_out, intermediate_outs), encoder_out_lens
 
-        return encoder_out, encoder_out_lens
+        return encoder_out, encoder_out_lens, self_condition_loss
 
     def _extract_feats(
-        self, speech: torch.Tensor, speech_lengths: torch.Tensor, condition_features: torch.Tensor = None
+        self, speech: torch.Tensor, speech_lengths: torch.Tensor, condition_features: torch.Tensor = None, 
+        langs: torch.Tensor = None #, langs_lens: torch.Tensor = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         assert speech_lengths.dim() == 1, speech_lengths.shape
 
         # for data-parallel
         speech = speech[:, : speech_lengths.max()]
+
+        self_condition_loss = None
 
         if self.frontend is not None:
             # Frontend
@@ -480,12 +501,15 @@ class ESPnetASRModel(AbsESPnetModel):
             # logging.info("langs:{}".format(langs))
             if self.embed_condition:
                 feats, feats_lengths = self.frontend(speech, speech_lengths, condition_features=condition_features)
+            elif self.self_condition:
+                langs_lens = torch.ones(langs.shape[0], dtype=torch.int64).to(langs.device)
+                feats, feats_lengths, self_condition_loss = self.frontend(speech, speech_lengths, langs=langs, langs_lens=langs_lens)
             else:
                 feats, feats_lengths = self.frontend(speech, speech_lengths)
         else:
             # No frontend and no feature extract
             feats, feats_lengths = speech, speech_lengths
-        return feats, feats_lengths
+        return feats, feats_lengths, self_condition_loss
 
     def nll(
         self,

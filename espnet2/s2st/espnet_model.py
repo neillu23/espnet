@@ -115,16 +115,16 @@ class ESPnetS2STModel(AbsESPnetModel):
         else:
             self.mt_error_calculator = None
 
-        # ASR error calculator
-        if asr_decoder and src_vocab_size and (report_cer or report_wer):
-            assert (
-                src_token_list is not None
-            ), "Missing src_token_list, cannot add asr module to st model"
-            self.asr_error_calculator = ASRErrorCalculator(
-                src_token_list, sym_space, sym_blank, report_cer, report_wer
-            )
-        else:
-            self.asr_error_calculator = None
+        # # ASR error calculator
+        # if asr_decoder and src_vocab_size and (report_cer or report_wer):
+        #     assert (
+        #         src_token_list is not None
+        #     ), "Missing src_token_list, cannot add asr module to st model"
+        #     self.asr_error_calculator = ASRErrorCalculator(
+        #         src_token_list, sym_space, sym_blank, report_cer, report_wer
+        #     )
+        # else:
+        self.asr_error_calculator = None
 
         self.extract_feats_in_collect_stats = extract_feats_in_collect_stats
 
@@ -534,7 +534,9 @@ class ESPnetS2STModel(AbsESPnetModel):
             unit_decoder_layer_for_st = len(syn_hidden) // 2
 
             # st_ctc
+            # logging.info()
             if self.st_ctc is not None and "st_ctc" in self.losses:
+                # logging.info("tgt_text:{}".format(tgt_text))
                 st_ctc_loss, cer_st_ctc = self._calc_ctc_loss(
                     syn_hidden[unit_decoder_layer_for_st],
                     tgt_speech_lengths + 1,
