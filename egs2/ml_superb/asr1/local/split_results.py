@@ -11,26 +11,26 @@ from espnet2.utils.types import str2bool
 
 """ Global Settings """
 RESERVE_LANG = [
-    "dan",
-    "lit",
-    "tur",
-    "srp",
-    "vie",
-    "kaz",
-    "zul",
-    "tsn",
-    "epo",
-    "frr",
-    "tok",
-    "umb",
-    "bos",
-    "ful",
-    "ceb",
-    "luo",
-    "kea",
-    "sun",
-    "tso",
-    "tos",
+    "dan", # cv, Danish
+    "lit", # cv, Lithuanian
+    "tur", # cv, Turkish
+    "srp", # fleurs, Serbian
+    "vie", # fleurs, Vietnamese
+    "kaz", # cv, Kazakh
+    "zul", # fleurs, Zulu
+    "tsn", # googlei18n-tts, Tswana
+    "epo", # cv, Esperanto
+    "frr", # cv, Northern Frisian
+    "tok", # cv, Toki Pona
+    "umb", # fleurs, Umbundu
+    "bos", # fleurs, Bosnian
+    "ful", # fleurs, Fulah
+    "ceb", # fleurs, Cebuano
+    "luo", # fleurs, Dholuo, Luo (Kenya and Tanzania)
+    "kea", # fleurs, Kabuverdianu
+    "sun", # googlei18n-tts, Sundanese
+    "tso", # nchlt, Tsonga
+    "tos", # mexico-el, Highland Totonac
 ]
 
 LID = False

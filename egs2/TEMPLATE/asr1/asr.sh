@@ -1564,16 +1564,16 @@ if [ ${stage} -le 12 ] && [ ${stop_stage} -ge 12 ] && ! [[ " ${skip_stages} " =~
             _scp=feats.scp
             _type=kaldi_ark
         fi
-
+            
+        _lid_opts=""
         #For Conditional ASR
         if [ "${use_lid_asr}" = true ]; then
-            _opts+="--data_path_and_name_and_type ${_data}/langs_idx,langs,text "
-            # _opts+="--lid_tokens ${_asr_train_dir}/all_langs "
-            _opts+="--lid_asr_joint_task ${lid_asr_joint_task} "
-            _opts+="--lid_token_list ${_data}/all_langs "
+            _lid_opts+="--data_path_and_name_and_type ${_data}/langs_idx,langs,text "
+            _lid_opts+="--lid_token_list ${_data}/all_langs "
         fi
 
-        _opts+="--lid_task ${lid_task} "
+        _lid_opts+="--lid_task ${lid_task} "
+        _lid_opts+="--lid_asr_joint_task ${lid_asr_joint_task} "
 
         # 1. Split the key file
         key_file=${_data}/${_scp}
@@ -1604,7 +1604,7 @@ if [ ${stage} -le 12 ] && [ ${stop_stage} -ge 12 ] && ! [[ " ${skip_stages} " =~
                 --asr_train_config "${asr_exp}"/config.yaml \
                 --asr_model_file "${asr_exp}"/"${inference_asr_model}" \
                 --output_dir "${_logdir}"/output.JOB \
-                ${_opts} ${inference_args} || { cat $(grep -l -i error "${_logdir}"/asr_inference.*.log) ; exit 1; }
+                ${_opts} ${_lid_opts} ${inference_args} || { cat $(grep -l -i error "${_logdir}"/asr_inference.*.log) ; exit 1; }
 
         # 3. Calculate and report RTF based on decoding logs
         if [ ${asr_task} == "asr" ] && [ -z ${inference_bin_tag} ]; then

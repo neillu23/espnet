@@ -78,7 +78,7 @@ tgt_bpe_char_cover=1.0  # character coverage when modeling BPE for target langua
 
 # Discrete unit-related
 use_discrete_unit=false         # Whether to use discrete unit
-clustering_stage=1              # clustering stage
+clustering_stage=2              # clustering stage
 clustering_stop_stage=100       # clustering stop stage
 clustering_num_threads=20       # Number of threads used for kmeans clustering
 feature_dir="dump/feats"        # Feature directory for dumped feature

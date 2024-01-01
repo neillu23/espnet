@@ -3,11 +3,11 @@ set -e
 set -u
 set -o pipefail
 
-stage=1
+stage=2
 stop_stage=100
 n_proc=8
 
-data_dir_prefix= # root dir to save datasets.
+data_dir_prefix=downloads # root dir to save datasets.
 
 trg_dir=data
 
@@ -125,13 +125,13 @@ if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ]; then
     log "Stage 3: Download Musan and RIR_NOISES for augmentation."
 
     if [ ! -f ${data_dir_prefix}/rirs_noises.zip ]; then
-        wget -P ${data_dir_prefix} -c http://www.openslr.org/resources/28/rirs_noises.zip
+        wget --no-check-certificate -P ${data_dir_prefix} -c http://www.openslr.org/resources/28/rirs_noises.zip
     else
         log "RIRS_NOISES exists. Skip download."
     fi
 
     if [ ! -f ${data_dir_prefix}/musan.tar.gz ]; then
-        wget -P ${data_dir_prefix} -c http://www.openslr.org/resources/17/musan.tar.gz
+        wget --no-check-certificate -P ${data_dir_prefix} -c http://www.openslr.org/resources/17/musan.tar.gz
     else
         log "Musan exists. Skip download."
     fi
