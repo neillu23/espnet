@@ -444,7 +444,7 @@ class ESPnetASRModel(AbsESPnetModel):
             self.encoder, "ctc_trim", False
         ):
             encoder_out, encoder_out_lens, _ = self.encoder(
-                feats, feats_lengths, ctc=self.ctc
+                feats, feats_lengths, ctc=self.ctc, condition_features=condition_features
             )
         else:
             encoder_out, encoder_out_lens, _ = self.encoder(feats, feats_lengths, condition_features=condition_features)
