@@ -51,6 +51,7 @@ class S3prlFrontend(AbsFrontend):
             path_or_url=frontend_conf.get("path_or_url", None),
             normalize=frontend_conf.get("normalize", False),
             embed_condition=frontend_conf.get("embed_condition", False),
+            self_condition=frontend_conf.get("self_condition", False),
             extra_conf=frontend_conf.get("extra_conf", None),
         )
         if getattr(upstream.upstream, "model", None):
@@ -66,18 +67,29 @@ class S3prlFrontend(AbsFrontend):
                 not multilayer_feature
             ), "multilayer feature will be deactivated, when specific layer used"
 
-        featurizer = Featurizer(upstream, layer_selections=layer_selections)
+        
 
         self.multilayer_feature = multilayer_feature
         self.layer = layer
-        self.upstream, self.featurizer = upstream, featurizer
+        self.upstream = upstream
+
         self.featurizer_num = featurizer_num
+
         if featurizer_num == 2:
+            self.featurizer = Featurizer(upstream, layer_selections=layer_selections)
             self.featurizer2 = Featurizer(upstream, layer_selections=None)
+            self.hop_length = self.featurizer.downsample_rate
+
+        elif featurizer_num > 2:
+            self.featurizers = torch.nn.ModuleList([Featurizer(upstream, layer_selections=layer_selections[i]) for i in range(featurizer_num - 1)])
+
+            self.featurizer_asr = Featurizer(upstream, layer_selections=None)
+            self.hop_length = self.featurizer_asr.downsample_rate
 
         self.pretrained_params = copy.deepcopy(self.upstream.state_dict())
         self.frontend_type = "s3prl"
-        self.hop_length = self.featurizer.downsample_rate
+        self.self_condition = frontend_conf.get("self_condition", False)
+        
         self.tile_factor = frontend_conf.get("tile_factor", 1)
 
     def _tile_representations(self, feature):
@@ -99,21 +111,33 @@ class S3prlFrontend(AbsFrontend):
         return tiled_feature
 
     def output_size(self) -> int:
+        if self.featurizer_num > 2:
+            return self.featurizer_asr.output_size
         return self.featurizer.output_size
 
     def forward(
-        self, input: torch.Tensor, input_lengths: torch.Tensor, condition_features: torch.Tensor=None, split_forward: bool = False
+        self, input: torch.Tensor, input_lengths: torch.Tensor, condition_features: torch.Tensor=None, langs: torch.Tensor=None, langs_lens: torch.Tensor=None, 
+        split_forward: bool = False, end_layer: int = 24
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        feats, feats_lens = self.upstream(input, input_lengths, condition_features, split_forward=split_forward)
+        # import pdb; pdb.set_trace()
+        if self.self_condition:
+            feats, feats_lens, self_condition_loss = self.upstream(input, input_lengths, condition_features, langs=langs, langs_lens=langs_lens, split_forward=split_forward, start_layer=0, end_layer=end_layer)
+        else:
+            feats, feats_lens = self.upstream(input, input_lengths, condition_features, langs=langs, langs_lens=langs_lens, split_forward=split_forward, start_layer=0, end_layer=end_layer)
         if self.layer != -1:
             layer = self.layer
             feats, feats_lens = feats[layer], feats_lens[layer]
             return feats, feats_lens
 
-        if self.multilayer_feature:
-            feats_fused, feats_lens_fused = self.featurizer(feats, feats_lens)
+        if self.featurizer_num <= 2:
+            featurizer = self.featurizer
         else:
-            feats_fused, feats_lens_fused = self.featurizer(feats[-1:], feats_lens[-1:])
+            featurizer = self.featurizers[0]
+            
+        if self.multilayer_feature:
+            feats_fused, feats_lens_fused = featurizer(feats, feats_lens)
+        else:
+            feats_fused, feats_lens_fused = featurizer(feats[-1:], feats_lens[-1:])
 
         if self.tile_factor != 1:
             feats_fused = self._tile_representations(feats_fused)
@@ -122,6 +146,9 @@ class S3prlFrontend(AbsFrontend):
         
         if self.featurizer_num > 1:
             return feats_fused, feats_lens_fused, feats, feats_lens
+
+        elif self.self_condition:
+            return feats_fused, feats_lens_fused, self_condition_loss
         else:
             return feats_fused, feats_lens_fused
 
