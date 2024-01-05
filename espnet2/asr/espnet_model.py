@@ -491,7 +491,7 @@ class ESPnetASRModel(AbsESPnetModel):
             )
 
         if intermediate_outs is not None:
-            return (encoder_out, intermediate_outs), encoder_out_lens
+            return (encoder_out, intermediate_outs), encoder_out_lens, self_condition_loss
 
         return encoder_out, encoder_out_lens, self_condition_loss
 

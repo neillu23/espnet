@@ -1256,8 +1256,9 @@ class AbsTask(ABC):
 
             # Use LoRA to finetune the large pre-trained foundation models, like Whisper
             if getattr(args, "use_lora", False):
-                model.frontend.upstream.enable_input_require_grads()
+                # model.frontend.upstream.enable_input_require_grads()
                 #TODO: add lora adapter for other models (here's only for frontend)
+                # create_lora_adapter(model, **args.lora_conf)
                 create_lora_adapter(model.frontend.upstream, **args.lora_conf)
 
             # 3. Build optimizer
