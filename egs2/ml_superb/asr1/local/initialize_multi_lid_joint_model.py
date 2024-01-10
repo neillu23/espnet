@@ -16,7 +16,7 @@ def copy_model_parameters(asr_model, lid_model, joint_model):
     # asr_update_state_dict = {name: param for name, param in asr_state_dict.items() if name in joint_state_dict and param.shape == joint_state_dict[name].shape}
     asr_update_state_dict = {}
     for name, param in asr_state_dict.items():
-        name = name.replace("featurizer.", "featurizer2.")
+        name = name.replace("featurizer.", "featurizer_asr.")
         if name in joint_state_dict and param.shape == joint_state_dict[name].shape:
             asr_update_state_dict[name] = param
         else:
@@ -32,6 +32,11 @@ def copy_model_parameters(asr_model, lid_model, joint_model):
         
         if name in joint_state_dict and param.shape == joint_state_dict[name].shape:
             lid_update_state_dict[name] = param
+        elif "featurizer" in name:
+            for i in range(25):
+                new_name = name.replace("featurizer", f"featurizers.{i}")
+                if new_name in joint_state_dict and param.shape == joint_state_dict[new_name].shape:
+                    lid_update_state_dict[new_name] = param
         elif "preencoder_lid" in name:
             # copy preencoder parameters to multiple preencoder
             for i in range(25):
@@ -89,7 +94,7 @@ def copy_model_parameters(asr_model, lid_model, joint_model):
     
     torch.save(joint_model, output_model)
 
-    torch.save(joint_model["model"], output_model.replace("checkpoint", "0epoch"))
+    # torch.save(joint_model["model"], output_model.replace("checkpoint", "0epoch"))
     
     same_parameters = []
     different_parameters = []

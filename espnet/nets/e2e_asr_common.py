@@ -129,6 +129,7 @@ class ErrorCalculator(object):
             self.idx_space = self.char_list.index(self.space)
         else:
             self.idx_space = None
+        # logging.info("self.char_list:{}".format(self.char_list))
 
     def __call__(self, ys_hat, ys_pad, is_ctc=False):
         """Calculate sentence-level WER/CER score.
@@ -173,6 +174,7 @@ class ErrorCalculator(object):
             for idx in y_hat:
                 idx = int(idx)
                 if idx != -1 and idx != self.idx_blank and idx != self.idx_space:
+                    # logging.info(int(idx))
                     seq_hat.append(self.char_list[int(idx)])
 
             for idx in y_true:

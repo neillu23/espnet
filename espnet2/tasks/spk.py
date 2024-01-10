@@ -21,6 +21,7 @@ from espnet2.layers.utterance_mvn import UtteranceMVN
 from espnet2.spk.encoder.ecapa_tdnn_encoder import EcapaTdnnEncoder
 from espnet2.spk.encoder.rawnet3_encoder import RawNet3Encoder
 from espnet2.spk.espnet_model import ESPnetSpeakerModel
+from espnet2.spk.hier_sv_espnet_model import ESPnetHierSVModel
 from espnet2.spk.loss.aamsoftmax import AAMSoftmax
 from espnet2.spk.loss.aamsoftmax_subcenter_intertopk import (
     ArcMarginProduct_intertopk_subcenter,
@@ -43,6 +44,18 @@ from espnet2.train.spk_trainer import SpkTrainer as Trainer
 from espnet2.utils.get_default_kwargs import get_default_kwargs
 from espnet2.utils.nested_dict_action import NestedDictAction
 from espnet2.utils.types import int_or_none, str2bool, str_or_none
+
+
+
+
+from espnet2.asr.preencoder.abs_preencoder import AbsPreEncoder
+from espnet2.asr.preencoder.linear import LinearProjection
+from espnet2.asr.preencoder.sinc import LightweightSincConvs
+from espnet2.asr.encoder.resnet_encoder import ResNetEncoder
+from espnet2.asr.postencoder.abs_postencoder import AbsPostEncoder
+from espnet2.train.abs_espnet_model import AbsESPnetModel
+
+
 
 # Check and understand
 frontend_choices = ClassChoices(
@@ -109,6 +122,7 @@ projector_choices = ClassChoices(
     default="rawnet3",
 )
 
+
 preprocessor_choices = ClassChoices(
     name="preprocessor",
     classes=dict(
@@ -129,6 +143,63 @@ loss_choices = ClassChoices(
 )
 
 
+
+model_choices = ClassChoices(
+    "model",
+    classes=dict(
+        espnet=ESPnetSpeakerModel,
+        joint_hier_espnet=ESPnetHierSVModel,
+    ),
+    type_check=AbsESPnetModel,
+    default="espnet",
+)
+
+
+preencoder_lid_choices = ClassChoices(
+    name="preencoder_lid",
+    classes=dict(
+        sinc=LightweightSincConvs,
+        linear=LinearProjection,
+    ),
+    type_check=AbsPreEncoder,
+    default=None,
+    optional=True,
+)
+
+
+encoder_lid_choices = ClassChoices(
+    "encoder_lid",
+    classes=dict(
+        resnet_enc=ResNetEncoder,
+    ),
+    type_check=AbsEncoder,
+    default="rnn",
+)
+
+postencoder_lid_choices = ClassChoices(
+    name="postencoder_lid",
+    classes=dict(
+        chn_attn_stat=ChnAttnStatPooling,  # for LID
+    ),
+    type_check=AbsPooling,
+    default=None,
+    optional=True,
+)
+
+
+
+projector_lid_choices = ClassChoices(
+    name="projector_lid",
+    classes=dict(
+        # TODO (Jee-weon): implement additional Projectors
+        # one_layer=OneLayerProjector,
+        rawnet3=RawNet3Projector,
+    ),
+    type_check=AbsProjector,
+    default="rawnet3",
+)
+
+
 class SpeakerTask(AbsTask):
     num_optimizers: int = 1
 
@@ -141,6 +212,11 @@ class SpeakerTask(AbsTask):
         projector_choices,
         preprocessor_choices,
         loss_choices,
+        preencoder_lid_choices,
+        encoder_lid_choices,
+        postencoder_lid_choices,
+        projector_lid_choices,
+        model_choices,
     ]
 
     trainer = Trainer
@@ -229,12 +305,12 @@ class SpeakerTask(AbsTask):
             help="Directory of the rir data to be augmented",
         )
 
-        group.add_argument(
-            "--model_conf",
-            action=NestedDictAction,
-            default=get_default_kwargs(ESPnetSpeakerModel),
-            help="The keyword arguments for model class.",
-        )
+        # group.add_argument(
+        #     "--model_conf",
+        #     action=NestedDictAction,
+        #     default=get_default_kwargs(ESPnetSpeakerModel),
+        #     help="The keyword arguments for model class.",
+        # )
 
         for class_choices in cls.class_choices_list:
             class_choices.add_arguments(group)
@@ -356,18 +432,76 @@ class SpeakerTask(AbsTask):
             nout=projector_output_size, nclasses=args.spk_num, **args.loss_conf
         )
 
-        model = ESPnetSpeakerModel(
-            frontend=frontend,
-            specaug=specaug,
-            normalize=normalize,
-            encoder=encoder,
-            pooling=pooling,
-            projector=projector,
-            loss=loss,
-            lid_tokens=lid_tokens,
-            langs_num=langs_num,
-            **args.model_conf, # uncomment when model_conf exists
-        )
+
+        # 7. Build model
+        try:
+            model_class = model_choices.get_class(args.model)
+        except AttributeError:
+            model_class = model_choices.get_class("espnet")
+
+
+        if model_class == ESPnetHierSVModel:
+                
+            preencoder_lid_nums = args.model_conf.get("preencoder_lid_nums", 1)
+            if preencoder_lid_nums > 1:
+                preencoder_lid_class = preencoder_lid_choices.get_class(args.preencoder_lid)
+                preencoder_lid = torch.nn.ModuleList([preencoder_lid_class(**args.preencoder_lid_conf) for i in range(preencoder_lid_nums)])
+
+                lid_input_size = preencoder_lid[0].output_size()
+            else:
+                if getattr(args, "preencoder_lid", None) is not None:
+                    preencoder_lid_class = preencoder_lid_choices.get_class(args.preencoder_lid)
+                    preencoder_lid = preencoder_lid_class(**args.preencoder_lid_conf)
+                    lid_input_size = preencoder_lid.output_size()
+                else:
+                    preencoder_lid = None
+                    if args.input_size is None:
+                        lid_input_size = frontend.output_size()
+                    else:
+                        lid_input_size = args.input_size
+
+            encoder_lid_class = encoder_lid_choices.get_class(args.encoder_lid)
+            encoder_lid = encoder_lid_class(input_size=lid_input_size, **args.encoder_lid_conf)
+            encoder_lid_output_size = encoder_lid.output_size()
+            if getattr(args, "postencoder_lid", None) is not None:
+                postencoder_lid_class = postencoder_lid_choices.get_class(args.postencoder_lid)
+                postencoder_lid = postencoder_lid_class(
+                    input_size=encoder_lid_output_size, **args.postencoder_lid_conf
+                )
+                encoder_lid_output_size = postencoder_lid.output_size()
+
+            projector_lid_class = projector_lid_choices.get_class(args.projector_lid)
+            projector_lid = projector_lid_class(**args.projector_lid_conf)
+
+            model = ESPnetHierSVModel(
+                frontend=frontend,
+                specaug=specaug,
+                normalize=normalize,
+                encoder=encoder,
+                pooling=pooling,
+                projector=projector,
+                loss=loss,
+                lid_tokens=lid_tokens,
+                langs_num=langs_num,
+                preencoder_lid=preencoder_lid,
+                encoder_lid=encoder_lid,
+                postencoder_lid=postencoder_lid,
+                projector_lid=projector_lid,
+                **args.model_conf, # uncomment when model_conf exists
+            )
+        else:
+            model = ESPnetSpeakerModel(
+                frontend=frontend,
+                specaug=specaug,
+                normalize=normalize,
+                encoder=encoder,
+                pooling=pooling,
+                projector=projector,
+                loss=loss,
+                lid_tokens=lid_tokens,
+                langs_num=langs_num,
+                **args.model_conf, # uncomment when model_conf exists
+            )
 
         if args.init is not None:
             initialize(model, args.init)

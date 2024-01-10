@@ -6,7 +6,7 @@
 #set -o pipefail
 
 # language related
-src_lang=fr
+src_lang=zh-CN
 tgt_lang=en
 use_src_lang=true
 

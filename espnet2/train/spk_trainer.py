@@ -104,7 +104,7 @@ class SpkTrainer(Trainer):
                 task_token = batch["task_tokens"][0]
 
             assert isinstance(batch, dict), type(batch)
-            if embed_condition:
+            if embed_condition and "langs" in batch:
                 for _utt_id, _speech, _speech2, _langs, _langs2 in zip(
                     utt_id, batch["speech"], batch["speech2"], batch["langs"], batch["langs2"]
                 ):
@@ -158,7 +158,7 @@ class SpkTrainer(Trainer):
                 task_tokens = to_device(
                     task_token.repeat(_speechs.size(0)), "cuda" if ngpu > 0 else "cpu"
                 ).unsqueeze(1)
-            if model.embed_condition:
+            if embed_condition and "langs" in batch:
                 _langs = lang_list[ii : ii + bs]
                 # expand dim[0] for each _langs[0] to num_eval
                 _langs = [_lang.expand(num_eval, 1) for _lang in _langs]
@@ -345,7 +345,7 @@ class SpkTrainer(Trainer):
 
             assert isinstance(batch, dict), type(batch)
 
-            if embed_condition:
+            if embed_condition and "langs" in batch:
                 for _utt_id, _speech, _speech2, _langs, _langs2 in zip(
                     utt_id, batch["speech"], batch["speech2"], batch["langs"], batch["langs2"]
                 ):
@@ -568,7 +568,7 @@ class SpkTrainer(Trainer):
                     "cuda" if ngpu > 0 else "cpu",
                 ).unsqueeze(1)
 
-            if embed_condition:
+            if embed_condition and "langs" in batch:
                 langs_list = [_lang.expand(num_eval, 1) for _lang in langs_list]
                 langs_list = torch.stack(langs_list, dim=1)
                 langs_list = langs_list.flatten(0, 1)
