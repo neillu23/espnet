@@ -42,7 +42,7 @@ dumpdir=dump         # Directory to dump features.
 expdir=exp           # Directory to save experiments.
 python=python3       # Specify python to execute espnet commands.
 use_lid_asr=False
-
+use_sv_asr=False
 
 # Data preparation related
 local_data_opts= # The options given to local/data.sh.
@@ -1400,6 +1400,14 @@ if [ ${stage} -le 11 ] && [ ${stop_stage} -ge 11 ] && ! [[ " ${skip_stages} " =~
             _opts+="--train_data_path_and_name_and_type ${_asr_train_dir}/langs_idx,langs,text "
             _opts+="--valid_data_path_and_name_and_type ${_asr_valid_dir}/langs_idx,langs,text "
             _opts+="--lid_tokens ${_asr_train_dir}/all_langs "
+        fi
+
+        if [ "${use_sv_asr}" = true ]; then
+            _opts+="--train_data_path_and_name_and_type ${_asr_train_dir}/utt2spk,spk_labels,text "
+            _opts+="--valid_data_path_and_name_and_type ${_asr_valid_dir}/utt2spk,spk_labels,text "
+            _opts+="--spk2utt ${_asr_valid_dir}/spk2utt "
+            _opts+="--spk_num $(wc -l ${_asr_valid_dir}/spk2utt | cut -f1 -d" ") "
+            
         fi
     fi
 
