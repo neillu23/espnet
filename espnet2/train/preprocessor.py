@@ -166,6 +166,7 @@ class CommonPreprocessor(AbsPreprocessor):
         # only use for whisper
         whisper_language: str = None,
         whisper_task: str = None,
+        spk2utt: str = None,
     ):
         super().__init__(train)
         self.train = train
@@ -665,9 +666,9 @@ class JointASRLIDSVPreprocessor(CommonPreprocessor):
         # logging.info("names in data:{}".format(data.keys()))
         # logging.info("self.token_id_converter:{}".format(self.token_id_converter))
         # logging.info("self.tokenizer:{}".format(self.tokenizer))
-        logging.info("spk_labels:{}".format(data["spk_labels"]))
-        logging.info("langs:{}".format(data["langs"]))
-        logging.info("text:{}".format(data["text"]))
+        # logging.info("spk_labels:{}".format(data["spk_labels"]))
+        # logging.info("langs:{}".format(data["langs"]))
+        # logging.info("text:{}".format(data["text"]))
         
         if self.text_name in data and data[self.text_name] == "-1":
             data[self.text_name] = np.array([-1], dtype=np.int64)

@@ -48,7 +48,7 @@ local_data_opts="--duration ${duration} --lid ${lid} --only_lid ${only_lid}"
 local_data_opts+=" --multilingual true --nlsyms_txt ${nlsyms_txt}"
 
 ./asr.sh \
-    --ngpu 1 \
+    --ngpu 4 \
     --stage ${stage} \
     --stop_stage ${stop_stage} \
     --expdir exp_joint \

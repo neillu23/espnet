@@ -206,9 +206,9 @@ class ESPnetHierASRLIDSVModel(ESPnetASRModel):
         langs_valid_indices = [i for i, label in enumerate(langs) if label[0] != -1]
         spk_valid_indices = [i for i, label in enumerate(spk_labels) if label[0] != -1]
 
-        logging.info("asr_valid_indices: {}".format(asr_valid_indices))
-        logging.info("langs_valid_indices: {}".format(langs_valid_indices))
-        logging.info("spk_valid_indices: {}".format(spk_valid_indices))
+        # logging.info("asr_valid_indices: {}".format(asr_valid_indices))
+        # logging.info("langs_valid_indices: {}".format(langs_valid_indices))
+        # logging.info("spk_valid_indices: {}".format(spk_valid_indices))
         # import pdb; pdb.set_trace()
 
         # for data-parallel
@@ -225,8 +225,8 @@ class ESPnetHierASRLIDSVModel(ESPnetASRModel):
         # lid loss
         # filter lid labels
 
-        loss_lid = torch.tensor(0)
-        loss_lid_ave = torch.tensor(0)
+        loss_lid = torch.tensor(0.0)
+        loss_lid_ave = torch.tensor(0.0)
         if len(langs_valid_indices) > 0:
             lid_embd_list = [lid_embd[langs_valid_indices] for lid_embd in lid_embd_list]
             langs = langs[langs_valid_indices]
@@ -237,7 +237,7 @@ class ESPnetHierASRLIDSVModel(ESPnetASRModel):
 
         # spk loss
         # filter spk labels
-        loss_spk = torch.tensor(0)
+        loss_spk = torch.tensor(0.0)
         if len(spk_valid_indices) > 0:
             spk_embd = spk_embd[spk_valid_indices]
             spk_labels = spk_labels[spk_valid_indices]
@@ -265,6 +265,8 @@ class ESPnetHierASRLIDSVModel(ESPnetASRModel):
                 loss_ctc, cer_ctc = self._calc_ctc_loss(
                     encoder_out, encoder_out_lens, text, text_lengths
                 )
+                # logging.info("loss_ctc:{}".format(loss_ctc))
+                # logging.info("cer_ctc:{}".format(cer_ctc)) # None
 
                 # Collect CTC branch stats
                 stats["loss_ctc"] = loss_ctc.detach() if loss_ctc is not None else None
@@ -363,8 +365,35 @@ class ESPnetHierASRLIDSVModel(ESPnetASRModel):
                 stats["cer"] = cer_att
                 stats["wer"] = wer_att
         else:
-            stats["loss_ctc"] = 0.0
-            loss_asr = torch.tensor(0)
+            loss_asr = torch.tensor(0.0)
+
+            if self.ctc_weight != 0.0:
+                stats["loss_ctc"] = 0.0
+
+                if self.training or self.error_calculator is None:
+                    stats["cer_ctc"] = None
+                else:
+                    stats["cer_ctc"] = 0.0
+
+            # Intermediate CTC (optional)
+            if self.interctc_weight != 0.0 and intermediate_outs is not None:
+                for layer_idx, intermediate_out in intermediate_outs:
+                    # Collect Intermedaite CTC stats
+                    stats["loss_interctc_layer{}".format(layer_idx)] = 0.0
+                    
+                    stats["cer_interctc_layer{}".format(layer_idx)] = 0.0
+
+            if self.use_transducer_decoder:
+                stats["loss_transducer"] = 0.0
+                stats["cer_transducer"] =  0.0
+                stats["wer_transducer"] =  0.0
+
+            else:
+                # Collect Attn branch stats
+                stats["loss_att"] = None
+                stats["acc"] = None
+                stats["cer"] = None
+                stats["wer"] = None
 
 
         # Collect total loss stats
@@ -377,11 +406,11 @@ class ESPnetHierASRLIDSVModel(ESPnetASRModel):
         stats["loss"] = loss.detach()
 
 
-        logging.info("loss: {}".format(loss))
-        logging.info("loss_asr: {}".format(loss_asr))
-        logging.info("loss_lid: {}".format(loss_lid))
-        logging.info("loss_lid_ave: {}".format(loss_lid_ave))
-        logging.info("loss_spk: {}".format(loss_spk))
+        # logging.info("loss: {}".format(loss))
+        # logging.info("loss_asr: {}".format(loss_asr))
+        # logging.info("loss_lid: {}".format(loss_lid))
+        # logging.info("loss_lid_ave: {}".format(loss_lid_ave))
+        # logging.info("loss_spk: {}".format(loss_spk))
 
         # force_gatherable: to-device and to-tensor if scalar for DataParallel
         loss, stats, weight = force_gatherable((loss, stats, batch_size), loss.device)

@@ -65,6 +65,7 @@ from espnet2.asr.maskctc_model import MaskCTCModel
 from espnet2.asr.pit_espnet_model import ESPnetASRModel as PITESPnetModel
 from espnet2.asr.joint_asr_espnet_model import ESPnetJointASRModel
 from espnet2.asr.hier_asr_espnet_model import ESPnetHierASRModel
+from espnet2.asr.hier_lid_espnet_model import ESPnetHierLIDModel
 from espnet2.asr.hier_asr_lid_sv_espnet_model import ESPnetHierASRLIDSVModel
 from espnet2.asr.lid_espnet_model import ESPnetLIDModel
 from espnet2.asr.postencoder.abs_postencoder import AbsPostEncoder
@@ -147,6 +148,7 @@ model_choices = ClassChoices(
         pit_espnet=PITESPnetModel,
         joint_espnet=ESPnetJointASRModel,
         joint_hier_espnet=ESPnetHierASRModel,
+        lid_hier_espnet=ESPnetHierLIDModel,
         joint_hier_asr_lid_sv_espnet=ESPnetHierASRLIDSVModel,
         lid_espnet=ESPnetLIDModel
     ),
@@ -420,8 +422,8 @@ class ASRTask(AbsTask):
         
         group.add_argument(
             "--spk2utt",
-            type=str,
-            default="",
+            type=str_or_none,
+            default=None,
             help="Directory of spk2utt file to be used in label mapping",
         )
 
@@ -827,7 +829,7 @@ class ASRTask(AbsTask):
         except AttributeError:
             model_class = model_choices.get_class("espnet")
 
-        if model_class == ESPnetJointASRModel or model_class == ESPnetHierASRModel or model_class == ESPnetHierASRLIDSVModel:
+        if model_class == ESPnetJointASRModel or model_class == ESPnetHierASRModel or model_class == ESPnetHierASRLIDSVModel  or model_class == ESPnetHierLIDModel:
                 
             preencoder_lid_nums = args.model_conf.get("preencoder_lid_nums", 1)
             if preencoder_lid_nums > 1:
@@ -863,7 +865,7 @@ class ASRTask(AbsTask):
             loss_class = loss_choices.get_class(args.loss)
             loss = loss_class(**args.loss_conf)
             
-            if model_class == ESPnetJointASRModel or model_class == ESPnetHierASRModel:
+            if model_class == ESPnetJointASRModel or model_class == ESPnetHierASRModel or model_class == ESPnetHierLIDModel:
                 model = model_class(
                     vocab_size=vocab_size,
                     frontend=frontend,
