@@ -667,7 +667,9 @@ class ASRTask(AbsTask):
             specaug = specaug_class(**args.specaug_conf)
         else:
             specaug = None
-
+        
+        # import pdb; pdb.set_trace()
+        # logging.info(args.normalize)
         # 3. Normalization layer
         if args.normalize is not None:
             normalize_class = normalize_choices.get_class(args.normalize)
@@ -779,6 +781,9 @@ class ASRTask(AbsTask):
             # ctc_lid = CTC(
             #     odim=langs_num, encoder_output_size=encoder_lid_output_size, **args.ctc_conf
             # )
+            # logging.info("normalize:",normalize)
+            # logging.info("model conf:",args.model_conf)
+            # im
             model = model_class(
                 vocab_size=vocab_size,
                 frontend=frontend,

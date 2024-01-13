@@ -75,10 +75,12 @@ class S3prlFrontend(AbsFrontend):
 
         self.featurizer_num = featurizer_num
 
-        if featurizer_num == 2:
+        if featurizer_num <= 2:
             self.featurizer = Featurizer(upstream, layer_selections=layer_selections)
-            self.featurizer2 = Featurizer(upstream, layer_selections=None)
             self.hop_length = self.featurizer.downsample_rate
+
+        if featurizer_num == 2:
+            self.featurizer2 = Featurizer(upstream, layer_selections=None)
 
         elif featurizer_num > 2:
             self.featurizers = torch.nn.ModuleList([Featurizer(upstream, layer_selections=layer_selections[i]) for i in range(featurizer_num - 1)])

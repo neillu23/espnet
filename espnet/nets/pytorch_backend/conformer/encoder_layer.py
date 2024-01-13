@@ -51,6 +51,9 @@ class EncoderLayer(nn.Module):
         normalize_before=True,
         concat_after=False,
         stochastic_depth_rate=0.0,
+        embed_condition: bool = False,
+        embed_condition_size: int = 0,
+        embed_condition_method: str = "FiLM",
     ):
         """Construct an EncoderLayer object."""
         super(EncoderLayer, self).__init__()
@@ -75,8 +78,16 @@ class EncoderLayer(nn.Module):
         if self.concat_after:
             self.concat_linear = nn.Linear(size + size, size)
         self.stochastic_depth_rate = stochastic_depth_rate
+        self.embed_condition = embed_condition
+        self.embed_condition_size = embed_condition_size
+        self.embed_condition_method = embed_condition_method
+        if self.embed_condition:
+            # logging.info("size: {}".format(size))
+            # import pdb; pdb.set_trace()
+            self.condition_layer = FiLM(size, embed_condition_size, "linear")
 
-    def forward(self, x_input, mask, cache=None):
+
+    def forward(self, x_input, mask, condition_features=None, cache=None):
         """Compute encoded features.
 
         Args:
@@ -140,6 +151,9 @@ class EncoderLayer(nn.Module):
         else:
             x_att = self.self_attn(x_q, x, x, mask)
 
+        if self.embed_condition:
+            x_att = self.condition_layer(x_att, condition_features)
+
         if self.concat_after:
             x_concat = torch.cat((x, x_att), dim=-1)
             x = residual + stoch_layer_coeff * self.concat_linear(x_concat)
@@ -174,6 +188,6 @@ class EncoderLayer(nn.Module):
             x = torch.cat([cache, x], dim=1)
 
         if pos_emb is not None:
-            return (x, pos_emb), mask
+            return (x, pos_emb), mask, condition_features
 
-        return x, mask
+        return x, mask, condition_features

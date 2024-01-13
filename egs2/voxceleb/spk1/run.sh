@@ -12,8 +12,13 @@ test_sets="voxceleb1_test"
 feats_type="raw"
 
 ./spk.sh \
+<<<<<<< HEAD
     --inference_model valid.eer.ave.pth \
     --feats_type ${feats_type} \
+=======
+    --ngpu 2 \
+    --feats_type raw \
+>>>>>>> 0762440c1fc048ade7296629197edec5722cdccb
     --spk_config ${spk_config} \
     --train_set ${train_set} \
     --valid_set ${valid_set} \

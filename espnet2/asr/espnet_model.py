@@ -262,11 +262,24 @@ class ESPnetASRModel(AbsESPnetModel):
             encoder_out = encoder_out[0]
 
 
-        ys_hat = self.ctc.argmax(encoder_out).data
+        # # LID loss calculation
+        # if torch.all(text_lengths == 1):
+        #     loss = nn.CrossEntropyLoss()
+        #     # Collect total loss stats
+        #     stats["loss"] = loss(encoder_out, text).mean()
+
+        #     # force_gatherable: to-device and to-tensor if scalar for DataParallel
+        #     loss, stats, weight = force_gatherable((loss, stats, batch_size), loss.device)
+        #     return loss, stats, weight
+
+
+        # ys_hat = self.ctc.argmax(encoder_out).data
 
         # logging.info("langs:{}".format(langs))
         # logging.info("ys_hat:{}".format(ys_hat.shape))
         # logging.info("ys_hat value:{}".format(ys_hat))
+
+
 
 
         loss_att, acc_att, cer_att, wer_att = None, None, None, None
@@ -426,7 +439,7 @@ class ESPnetASRModel(AbsESPnetModel):
             condition_features = None
             if self.embed_condition:
                 condition_features = self.lang_embedding(langs)
-
+            # logging.info("langs:{}".format(langs))
             # 1. Extract feats
             feats, feats_lengths, self_condition_loss = self._extract_feats(speech, speech_lengths, condition_features, langs)
 
@@ -449,7 +462,7 @@ class ESPnetASRModel(AbsESPnetModel):
             self.encoder, "ctc_trim", False
         ):
             encoder_out, encoder_out_lens, _ = self.encoder(
-                feats, feats_lengths, ctc=self.ctc
+                feats, feats_lengths, ctc=self.ctc, condition_features=condition_features
             )
         else:
             encoder_out, encoder_out_lens, _ = self.encoder(feats, feats_lengths, condition_features=condition_features)
@@ -478,7 +491,7 @@ class ESPnetASRModel(AbsESPnetModel):
             )
 
         if intermediate_outs is not None:
-            return (encoder_out, intermediate_outs), encoder_out_lens
+            return (encoder_out, intermediate_outs), encoder_out_lens, self_condition_loss
 
         return encoder_out, encoder_out_lens, self_condition_loss
 
@@ -489,6 +502,10 @@ class ESPnetASRModel(AbsESPnetModel):
         assert speech_lengths.dim() == 1, speech_lengths.shape
 
         # for data-parallel
+        # logging.info("speech shape:{}".format(speech.shape))
+        # logging.info("speech_lengths shape:{}".format(speech_lengths.shape))
+        # logging.info("condition_features shape:{}".format(condition_features.shape))
+        # logging.info("speech_lengths:{}".format(speech_lengths))
         speech = speech[:, : speech_lengths.max()]
 
         self_condition_loss = None

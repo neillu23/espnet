@@ -114,6 +114,9 @@ class ConformerEncoder(AbsEncoder):
         stochastic_depth_rate: Union[float, List[float]] = 0.0,
         layer_drop_rate: float = 0.0,
         max_pos_emb_len: int = 5000,
+        embed_condition: bool = False,
+        embed_condition_size: int = 0,
+        embed_condition_method: str = "FiLM",
     ):
         assert check_argument_types()
         super().__init__()
@@ -287,6 +290,9 @@ class ConformerEncoder(AbsEncoder):
                 normalize_before,
                 concat_after,
                 stochastic_depth_rate[lnum],
+                embed_condition=embed_condition,
+                embed_condition_size=embed_condition_size,
+                embed_condition_method=embed_condition_method,
             ),
             layer_drop_rate,
         )
@@ -299,6 +305,9 @@ class ConformerEncoder(AbsEncoder):
         self.interctc_use_conditioning = interctc_use_conditioning
         self.conditioning_layer = None
         self.ctc_trim = ctc_trim
+        self.embed_condition = embed_condition
+        self.embed_condition_size = embed_condition_size
+        self.embed_condition_method = embed_condition_method
 
     def output_size(self) -> int:
         return self._output_size
@@ -307,6 +316,7 @@ class ConformerEncoder(AbsEncoder):
         self,
         xs_pad: torch.Tensor,
         ilens: torch.Tensor,
+        condition_features: torch.Tensor = None,
         prev_states: torch.Tensor = None,
         ctc: CTC = None,
         return_all_hs: bool = False,
@@ -350,7 +360,7 @@ class ConformerEncoder(AbsEncoder):
         intermediate_outs = []
         if len(self.interctc_layer_idx) == 0:
             for layer_idx, encoder_layer in enumerate(self.encoders):
-                xs_pad, masks = encoder_layer(xs_pad, masks)
+                xs_pad, masks, condition_features = encoder_layer(xs_pad, masks, condition_features)
                 if return_all_hs:
                     if isinstance(xs_pad, tuple):
                         intermediate_outs.append(xs_pad[0])
@@ -358,7 +368,7 @@ class ConformerEncoder(AbsEncoder):
                         intermediate_outs.append(xs_pad)
         else:
             for layer_idx, encoder_layer in enumerate(self.encoders):
-                xs_pad, masks = encoder_layer(xs_pad, masks)
+                xs_pad, masks, condition_features = encoder_layer(xs_pad, masks, condition_features)
 
                 if layer_idx + 1 in self.interctc_layer_idx:
                     encoder_out = xs_pad

@@ -651,21 +651,39 @@ class Trainer:
                         optim_idx = None
 
                 stats = {k: v for k, v in stats.items() if v is not None}
-                if ngpu > 1 or distributed:
-                    # Apply weighted averaging for loss and stats
-                    loss = (loss * weight.type(loss.dtype)).sum()
+                if isinstance(loss, dict):
+                    for key, loss_item in loss.items():
+                        if ngpu > 1 or distributed:
+                            # Apply weighted averaging for loss and stats
+                            loss_item = (loss_item * weight.type(loss_item.dtype)).sum()
 
-                    # if distributed, this method can also apply all_reduce()
-                    stats, weight = recursive_average(stats, weight, distributed)
+                            # if distributed, this method can also apply all_reduce()
+                            stats, weight = recursive_average(stats, weight, distributed)
+                            
+                            # Now weight is summation over all workers
+                            loss_item /= weight
+                        if distributed:
+                            # NOTE(kamo): Multiply world_size because DistributedDataParallel
+                            # automatically normalizes the gradient by world_size.
+                            loss_item *= torch.distributed.get_world_size()
+                        loss_item /= accum_grad
+                    loss = loss["loss"]
+                else:
+                    if ngpu > 1 or distributed:
+                        # Apply weighted averaging for loss and stats
+                        loss = (loss * weight.type(loss.dtype)).sum()
 
-                    # Now weight is summation over all workers
-                    loss /= weight
-                if distributed:
-                    # NOTE(kamo): Multiply world_size because DistributedDataParallel
-                    # automatically normalizes the gradient by world_size.
-                    loss *= torch.distributed.get_world_size()
-
-                loss /= accum_grad
+                        # if distributed, this method can also apply all_reduce()
+                        stats, weight = recursive_average(stats, weight, distributed)
+                        # logging.info(f"weight: {weight}")
+                        # Now weight is summation over all workers
+                        loss /= weight
+                    if distributed:
+                        # NOTE(kamo): Multiply world_size because DistributedDataParallel
+                        # automatically normalizes the gradient by world_size.
+                        loss *= torch.distributed.get_world_size()
+                    # logging.info(f"loss: {accum_grad}")
+                    loss /= accum_grad
 
             reporter.register(stats, weight)
 
