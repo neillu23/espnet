@@ -70,6 +70,7 @@ if [ ! -f $filepath ]; then
   fi
   cd $workspace
 fi
+mv "downloads/zh-CN/zh-CN.tar.gz\?X-Goog-Algorithm\=GOOG4-RSA-SHA256\&X-Goog-Credential\=gke-prod@moz-fx-common-voice-prod.iam.gserviceaccount.com%2F20231127%2Fauto%2Fstorage%2Fgoog4_request\&X-Goog-Date\=20231127T002404Z\&X-Goog-Expires\=43200\&X-Goog-SignedHeader"  "downloads/zh-CN/zh-CN.tar.gz"
 
 cd $data
 

@@ -65,6 +65,8 @@ from espnet2.asr.maskctc_model import MaskCTCModel
 from espnet2.asr.pit_espnet_model import ESPnetASRModel as PITESPnetModel
 from espnet2.asr.joint_asr_espnet_model import ESPnetJointASRModel
 from espnet2.asr.hier_asr_espnet_model import ESPnetHierASRModel
+from espnet2.asr.hier_lid_espnet_model import ESPnetHierLIDModel
+from espnet2.asr.hier_asr_lid_sv_espnet_model import ESPnetHierASRLIDSVModel
 from espnet2.asr.lid_espnet_model import ESPnetLIDModel
 from espnet2.asr.postencoder.abs_postencoder import AbsPostEncoder
 from espnet2.asr.postencoder.chn_attn_stat_pooling import ChnAttnStatPooling
@@ -91,12 +93,21 @@ from espnet2.train.preprocessor import (
     AbsPreprocessor,
     CommonPreprocessor,
     CommonPreprocessor_multi,
+    JointASRLIDSVPreprocessor,
     MutliTokenizerCommonPreprocessor,
 )
 from espnet2.train.trainer import Trainer
 from espnet2.utils.get_default_kwargs import get_default_kwargs
 from espnet2.utils.nested_dict_action import NestedDictAction
 from espnet2.utils.types import float_or_none, int_or_none, str2bool, str_or_none
+
+
+from espnet2.spk.loss.aamsoftmax_subcenter_intertopk import (
+    ArcMarginProduct_intertopk_subcenter,
+)
+from espnet2.spk.encoder.ecapa_tdnn_encoder import EcapaTdnnEncoder
+from espnet2.spk.encoder.rawnet3_encoder import RawNet3Encoder
+from espnet2.spk.pooling.chn_attn_stat_pooling import ChnAttnStatPooling as ChnAttnStatPooling_spk
 
 frontend_choices = ClassChoices(
     name="frontend",
@@ -137,6 +148,8 @@ model_choices = ClassChoices(
         pit_espnet=PITESPnetModel,
         joint_espnet=ESPnetJointASRModel,
         joint_hier_espnet=ESPnetHierASRModel,
+        lid_hier_espnet=ESPnetHierLIDModel,
+        joint_hier_asr_lid_sv_espnet=ESPnetHierASRLIDSVModel,
         lid_espnet=ESPnetLIDModel
     ),
     type_check=AbsESPnetModel,
@@ -213,6 +226,7 @@ encoder_lid_choices = ClassChoices(
     type_check=AbsEncoder,
     default="rnn",
 )
+
 postencoder_choices = ClassChoices(
     name="postencoder",
     classes=dict(
@@ -263,6 +277,7 @@ preprocessor_choices = ClassChoices(
         default=CommonPreprocessor,
         multi=CommonPreprocessor_multi,
         multi_tokenizer=MutliTokenizerCommonPreprocessor,
+        joint_asr_lid_spk=JointASRLIDSVPreprocessor,
     ),
     type_check=AbsPreprocessor,
     default="default",
@@ -288,6 +303,50 @@ loss_choices = ClassChoices(
     type_check=AbsLoss,
     default="aam",
 )
+
+
+encoder_spk_choices = ClassChoices(
+    name="encoder_spk",
+    classes=dict(
+        rawnet3=RawNet3Encoder,
+        ecapa_tdnn=EcapaTdnnEncoder,
+    ),
+    type_check=AbsEncoder,
+    default="rawnet3",
+)
+
+
+pooling_spk_choices = ClassChoices(
+    name="pooling_spk",
+    classes=dict(
+        chn_attn_stat=ChnAttnStatPooling_spk,
+    ),
+    type_check=AbsPooling,
+    default="chn_attn_stat",
+)
+
+projector_spk_choices = ClassChoices(
+    name="projector_spk",
+    classes=dict(
+        # TODO (Jee-weon): implement additional Projectors
+        # one_layer=OneLayerProjector,
+        rawnet3=RawNet3Projector,
+    ),
+    type_check=AbsProjector,
+    default="rawnet3",
+)
+
+
+loss_spk_choices = ClassChoices(
+    name="loss_spk",
+    classes=dict(
+        aamsoftmax=AAMSoftmax,
+        aamsoftmax_sc_topk=ArcMarginProduct_intertopk_subcenter,
+    ),
+    default="aam",
+)
+
+
 
 
 class ASRTask(AbsTask):
@@ -324,6 +383,15 @@ class ASRTask(AbsTask):
         projector_choices,
         # --loss and --loss_conf
         loss_choices,
+        # --encoder_spk and --encoder_spk_conf
+        encoder_spk_choices,
+        # --pooling_spk and --pooling_spk_conf
+        pooling_spk_choices,
+        # --projector_spk and --projector_spk_conf
+        projector_spk_choices,
+        # --loss_spk and --loss_spk_conf
+        loss_spk_choices,
+
     ]
 
     # If you need to modify train() or eval() procedures, change Trainer class here
@@ -352,6 +420,21 @@ class ASRTask(AbsTask):
             help="A text mapping int-id to lid token",
         )
         
+        group.add_argument(
+            "--spk2utt",
+            type=str_or_none,
+            default=None,
+            help="Directory of spk2utt file to be used in label mapping",
+        )
+
+
+        group.add_argument(
+            "--spk_num",
+            type=int,
+            default=None,
+            help="specify the number of speakers during training",
+        )
+
         
         group.add_argument(
             "--init",
@@ -572,6 +655,9 @@ class ASRTask(AbsTask):
                 use_nlp_prompt=args.use_nlp_prompt
                 if hasattr(args, "use_nlp_prompt")
                 else None,
+                spk2utt=args.spk2utt
+                if hasattr(args, "spk2utt")
+                else None,
             )
         else:
             retval = None
@@ -597,6 +683,7 @@ class ASRTask(AbsTask):
 
         retval = ["text_spk{}".format(n) for n in range(2, MAX_REFERENCE_NUM + 1)]
         retval.append("langs")
+        retval.append("spk_labels")
         retval = retval + ["prompt"]
         retval = tuple(retval)
 
@@ -742,7 +829,7 @@ class ASRTask(AbsTask):
         except AttributeError:
             model_class = model_choices.get_class("espnet")
 
-        if model_class == ESPnetJointASRModel or model_class == ESPnetHierASRModel:
+        if model_class == ESPnetJointASRModel or model_class == ESPnetHierASRModel or model_class == ESPnetHierASRLIDSVModel  or model_class == ESPnetHierLIDModel:
                 
             preencoder_lid_nums = args.model_conf.get("preencoder_lid_nums", 1)
             if preencoder_lid_nums > 1:
@@ -762,11 +849,11 @@ class ASRTask(AbsTask):
                     else:
                         lid_input_size = args.input_size
 
-            encoder_lid_class = encoder_choices.get_class(args.encoder_lid)
+            encoder_lid_class = encoder_lid_choices.get_class(args.encoder_lid)
             encoder_lid = encoder_lid_class(input_size=lid_input_size, **args.encoder_lid_conf)
             encoder_lid_output_size = encoder_lid.output_size()
             if getattr(args, "postencoder_lid", None) is not None:
-                postencoder_lid_class = postencoder_choices.get_class(args.postencoder_lid)
+                postencoder_lid_class = postencoder_lid_choices.get_class(args.postencoder_lid)
                 postencoder_lid = postencoder_lid_class(
                     input_size=encoder_lid_output_size, **args.postencoder_lid_conf
                 )
@@ -777,35 +864,77 @@ class ASRTask(AbsTask):
 
             loss_class = loss_choices.get_class(args.loss)
             loss = loss_class(**args.loss_conf)
+            
+            if model_class == ESPnetJointASRModel or model_class == ESPnetHierASRModel or model_class == ESPnetHierLIDModel:
+                model = model_class(
+                    vocab_size=vocab_size,
+                    frontend=frontend,
+                    specaug=specaug,
+                    normalize=normalize,
+                    preencoder_lid=preencoder_lid,
+                    preencoder=preencoder,
+                    encoder_lid=encoder_lid,
+                    encoder=encoder,
+                    postencoder=postencoder,
+                    postencoder_lid=postencoder_lid,
+                    projector=projector,
+                    loss=loss,
+                    decoder=decoder,
+                    ctc=ctc,
+                    joint_network=joint_network,
+                    token_list=token_list,
+                    lid_tokens=lid_tokens,
+                    langs_num=langs_num,
+                    **args.model_conf,
+                )
+            if model_class == ESPnetHierASRLIDSVModel:
+                # spk related modules
+                encoder_spk_class = encoder_spk_choices.get_class(args.encoder_spk)
+                encoder_spk = encoder_spk_class(input_size=frontend.output_size(), **args.encoder_spk_conf)
+                encoder_spk_output_size = encoder_spk.output_size()
+            
+                pooling_spk_class = pooling_spk_choices.get_class(args.pooling_spk)
+                pooling_spk = pooling_spk_class(
+                    input_size=encoder_spk_output_size, **args.pooling_spk_conf
+                )
+                pooling_spk_output_size = pooling_spk.output_size()
 
-            # ctc_lid = CTC(
-            #     odim=langs_num, encoder_output_size=encoder_lid_output_size, **args.ctc_conf
-            # )
-            # logging.info("normalize:",normalize)
-            # logging.info("model conf:",args.model_conf)
-            # im
-            model = model_class(
-                vocab_size=vocab_size,
-                frontend=frontend,
-                specaug=specaug,
-                normalize=normalize,
-                preencoder_lid=preencoder_lid,
-                preencoder=preencoder,
-                encoder_lid=encoder_lid,
-                encoder=encoder,
-                postencoder=postencoder,
-                postencoder_lid=postencoder_lid,
-                projector=projector,
-                loss=loss,
-                decoder=decoder,
-                ctc=ctc,
-                joint_network=joint_network,
-                token_list=token_list,
-                lid_tokens=lid_tokens,
-                langs_num=langs_num,
-                **args.model_conf,
-            )
-                # ctc_lid=ctc_lid,
+                projector_spk_class = projector_spk_choices.get_class(args.projector_spk)
+                projector_spk = projector_spk_class(input_size=pooling_spk_output_size, **args.projector_spk_conf)
+                projector_spk_output_size = projector_spk.output_size()
+
+                loss_spk_class = loss_spk_choices.get_class(args.loss_spk)
+                loss_spk = loss_spk_class(nout=projector_spk_output_size, nclasses=args.spk_num, **args.loss_spk_conf)
+                
+                
+
+                model = model_class(
+                    vocab_size=vocab_size,
+                    frontend=frontend,
+                    specaug=specaug,
+                    normalize=normalize,
+                    preencoder_lid=preencoder_lid,
+                    preencoder=preencoder,
+                    encoder_lid=encoder_lid,
+                    encoder=encoder,
+                    postencoder=postencoder,
+                    postencoder_lid=postencoder_lid,
+                    projector=projector,
+                    loss=loss,
+                    decoder=decoder,
+                    ctc=ctc,
+                    joint_network=joint_network,
+                    token_list=token_list,
+                    lid_tokens=lid_tokens,
+                    langs_num=langs_num,
+                    encoder_spk=encoder_spk,
+                    pooling_spk=pooling_spk,
+                    projector_spk=projector_spk,
+                    loss_spk=loss_spk,
+
+                    **args.model_conf,
+                )
+
         elif model_class == ESPnetLIDModel:
 
             projector_class = projector_choices.get_class(args.projector)

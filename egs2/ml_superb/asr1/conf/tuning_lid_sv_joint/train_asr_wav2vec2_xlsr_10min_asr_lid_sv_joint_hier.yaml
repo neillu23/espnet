@@ -1,0 +1,195 @@
+encoder: transformer
+encoder_conf:
+    output_size: 256
+    attention_heads: 8
+    linear_units: 1024
+    num_blocks: 2
+    dropout_rate: 0.1
+    positional_dropout_rate: 0.1
+    attention_dropout_rate: 0.1
+    input_layer: conv2d2
+    normalize_before: true
+    embed_condition: true
+    embed_condition_size: 256
+
+encoder_lid: resnet_enc
+encoder_lid_conf:
+  # in_feats: 1024
+  in_conv_channels: 1024
+  in_kernel_size: 5
+  in_stride: 1
+  resb_type: seres2bn
+  resb_repeats:
+    - 1
+  resb_channels:
+    - 512
+  resb_kernel_sizes:
+    - 3
+  resb_dilations:
+    - 2
+  resb_strides:
+    - 1
+  res2net_width_factor: 1
+  res2net_scale: 8
+  se_r: 8
+  multilayer: true
+  multilayer_concat: true
+  endpoint_channels: 3072
+  hid_act: swish
+  dropout_rate: 0.2
+
+
+postencoder_lid: chn_attn_stat
+# postencoder_conf:
+#   input_size: 1536  # 1.5 * ndim of encoder
+
+
+projector: rawnet3
+projector_conf:
+  input_size: 6144  # 2 * input_size of pooling
+  output_size: 256
+
+loss: aamsoftmax
+loss_conf:
+  nout: 256
+  nclasses: 146
+  margin: 0.3
+  scale: 30
+decoder: none
+
+
+# Encoder
+encoder_spk: ecapa_tdnn
+encoder_spk_conf:
+  model_scale: 8
+  ndim: 1024
+  output_size: 1536
+
+# Pooling
+pooling_spk: chn_attn_stat
+
+# Projector
+projector_spk: rawnet3
+projector_spk_conf:
+  output_size: 192
+
+# Loss
+loss_spk: aamsoftmax_sc_topk
+loss_spk_conf:
+  margin: 0.3
+  scale: 30
+  K: 3
+  mp: 0.06
+  k_top: 5
+
+model: joint_hier_asr_lid_sv_espnet
+
+preprocessor: joint_asr_lid_spk
+preprocessor_conf:
+  target_duration: 3.0  # seconds for non ASR task
+  sample_rate: 16000
+  # num_eval: 5
+
+model_conf:
+    ctc_weight: 1.0
+    lid_weight: 1.0
+    spk_weight: 1.0
+    lid_audio_length: 48000
+    lid_condition_feature: soft
+    lid_condition_activate: bndrop
+    droprate: 0.5
+    embed_condition: true
+    embed_condition_size: 256
+    separate_forward: true
+    sep_layers: [4,8,12,16,20,24] 
+    preencoder_lid_nums: 6  # sep_layers numbers
+
+
+frontend: s3prl
+frontend_conf:
+    frontend_conf:
+        upstream: xls_r_300m # Note: If the upstream is changed, please change the input_size in the preencoder.
+        embed_condition: true
+        extra_conf:
+            embed_condition_size: 256
+            embed_condition_start: 4 # same as the first sep_layers
+            embed_condition_end: 24
+            embed_condition_method: FiLM
+            embed_condition_components: 
+            - attention
+    download_dir: ./hub
+    multilayer_feature: True
+    layer_selections: 
+    - [0,1,2,3,4]
+    - [0,1,2,3,4,5,6,7,8]
+    - [0,1,2,3,4,5,6,7,8,9,10,11,12]
+    - [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]
+    - [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    - [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24]
+
+    featurizer_num: 8 # sep_layers numbers + 2 (asr,sv) 
+    featurizer_spk: True
+
+preencoder: linear
+preencoder_conf:
+    input_size: 1024  # Note: If the upstream is changed, please change this value accordingly.
+    output_size: 80
+
+preencoder_lid: linear
+preencoder_lid_conf:
+    input_size: 1024  # Note: If the upstream is changed, please change this value accordingly.
+    output_size: 80
+
+
+# unused_parameters: true
+freeze_param: [
+"frontend.upstream",
+# freeze all lid parameters
+# "frontend.featurizer",
+"encoder_lid",
+"preencoder_lid",
+"projector",
+"postencoder_lid",
+"loss",
+]
+
+unfreeze_param: [
+    "condition_layer"]
+
+
+num_workers: 4
+batch_type: sorted
+batch_size: 12
+accum_grad: 3
+patience: none
+init: none
+best_model_criterion:
+-   - valid
+    - cer_ctc
+    - min
+keep_nbest_models: 5
+
+optim: adam
+optim_conf:
+    lr: 0.0001
+    weight_decay: 0.000001
+
+specaug: specaug
+specaug_conf:
+    apply_time_warp: true
+    time_warp_window: 5
+    time_warp_mode: bicubic
+    apply_freq_mask: true
+    freq_mask_width_range:
+    - 0
+    - 27
+    num_freq_mask: 2
+    apply_time_mask: true
+    time_mask_width_ratio_range:
+    - 0.
+    - 0.05
+    num_time_mask: 10
+
+
+num_iters_per_epoch: 1 # number of iterations per epoch
+max_epoch: 19

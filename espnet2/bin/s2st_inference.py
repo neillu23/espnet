@@ -97,8 +97,8 @@ class Speech2Speech:
         else:
             self.vocoder = None
         logging.info(f"S2ST:\n{self.model}")
-        if self.vocoder is not None:
-            logging.info(f"Vocoder:\n{self.vocoder}")
+        # if self.vocoder is not None:
+        #     logging.info(f"Vocoder:\n{self.vocoder}")
 
         # setup decoding config
         self.decode_conf = {}  # use for specotrogram-based decoding

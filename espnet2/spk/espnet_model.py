@@ -52,6 +52,7 @@ class ESPnetSpeakerModel(AbsESPnetModel):
         langs_num: int = 0,
         embed_condition: bool = False,
         embed_condition_size: int = 0,
+        lid_condition_feature: str = "hard",
     ):
         assert check_argument_types()
 
@@ -66,7 +67,8 @@ class ESPnetSpeakerModel(AbsESPnetModel):
         self.loss = loss
         self.embed_condition = embed_condition
         self.embed_condition_size = embed_condition_size
-        if embed_condition:
+        self.lid_condition_feature = lid_condition_feature
+        if embed_condition and lid_condition_feature == "hard":
             self.langs_num = langs_num
             self.lang_embedding = torch.nn.Embedding(langs_num, embed_condition_size)
 
@@ -195,5 +197,5 @@ class ESPnetSpeakerModel(AbsESPnetModel):
         if self.embed_condition:
             condition_features = self.lang_embedding(langs)
             
-        feats, feats_lengths = self.extract_feats(speech, speech_lengths, condition_features)
+        feats, feats_lengths = extract_feats(speech, speech_lengths, condition_features)
         return {"feats": feats}

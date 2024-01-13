@@ -48,7 +48,7 @@ use_lid_asr=False
 local_data_opts= # The options given to local/data.sh
 
 # Speed perturbation related
-speed_perturb_factors="0.9 1.0 1.1" # perturbation factors, e.g. "0.9 1.0 1.1" (separated by space).
+speed_perturb_factors= #"0.9 1.0 1.1" # perturbation factors, e.g. "0.9 1.0 1.1" (separated by space).
 
 # Feature extraction related
 feats_type=raw      # Feature type (raw, raw_copy, fbank_pitch, or extracted).

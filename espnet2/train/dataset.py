@@ -576,6 +576,7 @@ class ESPnetDataset(AbsDataset):
             elif isinstance(value, numbers.Number):
                 value = np.array([value])
             data[name] = value
+            # logging.info(f'{name}:{value}')
 
         # 2. [Option] Apply preprocessing
         #   e.g. espnet2.train.preprocessor:CommonPreprocessor
@@ -585,6 +586,7 @@ class ESPnetDataset(AbsDataset):
         # 3. Force data-precision
         for name in data:
             value = data[name]
+            # logging.info(f'{name}:{value}')
             if not isinstance(value, np.ndarray):
                 raise RuntimeError(
                     f"All values must be converted to np.ndarray object "

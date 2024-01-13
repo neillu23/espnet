@@ -23,6 +23,7 @@ class S3prlFrontend(AbsFrontend):
         layer: int = -1,
         layer_selections: Optional[list] = None,
         featurizer_num: int = 1,
+        featurizer_spk: bool = False,
     ):
         try:
             import s3prl
@@ -83,7 +84,13 @@ class S3prlFrontend(AbsFrontend):
             self.featurizer2 = Featurizer(upstream, layer_selections=None)
 
         elif featurizer_num > 2:
-            self.featurizers = torch.nn.ModuleList([Featurizer(upstream, layer_selections=layer_selections[i]) for i in range(featurizer_num - 1)])
+            lid_featurizer_num = featurizer_num - 1 # 1 for asr
+
+            if featurizer_spk:
+                lid_featurizer_num = lid_featurizer_num - 1 # 1 for spk
+                self.featurizer_spk = Featurizer(upstream, layer_selections=None)
+
+            self.featurizers = torch.nn.ModuleList([Featurizer(upstream, layer_selections=layer_selections[i]) for i in range(lid_featurizer_num)])
 
             self.featurizer_asr = Featurizer(upstream, layer_selections=None)
             self.hop_length = self.featurizer_asr.downsample_rate
