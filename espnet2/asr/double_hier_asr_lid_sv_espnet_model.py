@@ -42,7 +42,7 @@ def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True, export=False)
     return torch.nn.LayerNorm(normalized_shape, eps, elementwise_affine)
 
 
-class ESPnetHierASRLIDSVModel(ESPnetASRModel):
+class ESPnetDoubleHierASRLIDSVModel(ESPnetASRModel):
     """CTC-attention hybrid Encoder-Decoder model"""
 
     def __init__(
@@ -162,16 +162,19 @@ class ESPnetHierASRLIDSVModel(ESPnetASRModel):
         assert(separate_forward == True), "separate_forward must be True"
 
         if self.embed_condition and self.lid_condition_feature == "soft":
-            # 256 is the size of the lid/speaker embedding
             sep_num = len(self.sep_layers)
             if self.sep_layers[-1] == 24:
                 sep_num = sep_num - 1
+
+            # 256, 192 are the size of the lid/speaker embeddings
             self.lang_embeddings = torch.nn.ModuleList([torch.nn.Linear(256, embed_condition_size) for i in range(sep_num)])
+            self.spk_embeddings = torch.nn.ModuleList([torch.nn.Linear(192, embed_condition_size) for i in range(sep_num)])
 
             if self.lid_condition_activate == "bndrop":
                 self.lns = torch.nn.ModuleList([LayerNorm(embed_condition_size, export=False) for i in range(sep_num)])
                 self.activation_fns = torch.nn.ModuleList([torch.nn.PReLU() for i in range(sep_num)])
                 self.dropouts = torch.nn.ModuleList([torch.nn.Dropout(p=droprate) for i in range(sep_num)])
+
 
         
     def forward(
@@ -219,7 +222,7 @@ class ESPnetHierASRLIDSVModel(ESPnetASRModel):
         text = text[:, : text_lengths.max()]
 
         # 1. Encoder
-        encoder_out, encoder_out_lens, lid_embd_list, encoder_lid_out_lens, spk_embd =  self.encode(speech, speech_lengths, langs)
+        encoder_out, encoder_out_lens, lid_embd_list, encoder_lid_out_lens, spk_embd_list =  self.encode(speech, speech_lengths, langs)
         intermediate_outs = None
         if isinstance(encoder_out, tuple):
             intermediate_outs = encoder_out[1]
@@ -242,10 +245,22 @@ class ESPnetHierASRLIDSVModel(ESPnetASRModel):
         # spk loss
         # filter spk labels
         loss_spk = torch.tensor(0.0)
+        loss_spk_ave = torch.tensor(0.0)
         if len(spk_valid_indices) > 0:
-            spk_embd = spk_embd[spk_valid_indices]
+            spk_embd_list = [spk_embd[spk_valid_indices] for spk_embd in spk_embd_list]
             spk_labels = spk_labels[spk_valid_indices]
-            loss_spk = self.loss_spk(spk_embd, spk_labels)
+
+            loss_spk_list = [self.loss(spk_embd, spk_labels) for spk_embd in spk_embd_list]
+            loss_spk_ave = sum(loss_spk_list) / len(loss_spk_list)
+            loss_spk = loss_spk_list[-1]
+
+
+
+        # loss_spk = torch.tensor(0.0)
+        # if len(spk_valid_indices) > 0:
+        #     spk_embd = spk_embd_list[-1][spk_valid_indices]
+        #     spk_labels = spk_labels[spk_valid_indices]
+        #     loss_spk = self.loss_spk(spk_embd, spk_labels)
             
 
         loss_att, acc_att, cer_att, wer_att = None, None, None, None
@@ -405,8 +420,9 @@ class ESPnetHierASRLIDSVModel(ESPnetASRModel):
         stats["loss_lid"] = loss_lid.detach()
         stats["loss_lid_ave"] = loss_lid_ave.detach()
         stats["loss_spk"] = loss_spk.detach()
+        stats["loss_spk_ave"] = loss_spk_ave.detach()
 
-        loss = loss_asr + self.lid_weight * loss_lid_ave + self.spk_weight * loss_spk
+        loss = loss_asr + self.lid_weight * loss_lid_ave + self.spk_weight * loss_spk_ave
         stats["loss"] = loss.detach()
 
 
@@ -487,6 +503,7 @@ class ESPnetHierASRLIDSVModel(ESPnetASRModel):
         
 
         lid_embd_list = []
+        spk_embd_list = []
         for index in range(len(self.sep_layers)):
             # condition_features = None for testing purpose
             # condition_features = None 
@@ -504,7 +521,8 @@ class ESPnetHierASRLIDSVModel(ESPnetASRModel):
                 lid_speech = speech
                 lid_speech_lengths = speech_lengths
                 feats_lid, feats_lid_lengths, feats_layers, feats_lengths_layers = self._extract_feats(speech, speech_lengths, condition_features, start_layer=start_layer, end_layer=end_layer, featurizer_index=index, feats_layers=feats_layers, feats_lengths_layers=feats_lengths_layers)
-                
+                feats_spk, feats_spk_lengths = self.frontend.featurizers_spk[index](feats_layers, feats_lengths_layers)
+
                 if self.lid_audio_length > 0:
                     # Random cropping
                     lid_feats_lengths = self.lid_audio_length // 150
@@ -512,23 +530,29 @@ class ESPnetHierASRLIDSVModel(ESPnetASRModel):
                         if self.lid_start_begin:
                             feats_lid = feats_lid[:, : lid_feats_lengths]
                             feats_lid_lengths = feats_lid.new_full(feats_lid_lengths.shape, lid_feats_lengths, dtype=int)
+                            feats_spk = feats_spk[:, : lid_feats_lengths]
+                            feats_spk_lengths = feats_spk.new_full(feats_lid_lengths.shape, lid_feats_lengths, dtype=int)
                         else:
                             lid_start = torch.randint(0, feats_lid_lengths.min() - lid_feats_lengths + 1, (1,)).item()
                             feats_lid = feats_lid[:, lid_start: lid_start + lid_feats_lengths]
                             feats_lid_lengths = feats_lid.new_full(feats_lid_lengths.shape, lid_feats_lengths, dtype=int)
+                            feats_spk = feats_spk[:, lid_start: lid_start + lid_feats_lengths]
+                            feats_spk_lengths = feats_spk.new_full(feats_lid_lengths.shape, lid_feats_lengths, dtype=int)
                 
                 # 2. Data augmentation
                 if self.specaug is not None and self.training:
                     feats_lid, feats_lid_lengths = self.specaug(feats_lid, feats_lid_lengths)
+                    feats_spk, feats_lengths = self.specaug(feats_spk, feats_spk_lengths)
 
                 # 3. Normalization for feature: e.g. Global-CMVN, Utterance-CMVN
                 if self.normalize is not None:
                     feats_lid, feats_lid_lengths = self.normalize(feats_lid, feats_lid_lengths)
+                    feats_spk, feats_lengths = self.normalize(feats_spk, feats_spk_lengths)
 
             
             hook_handle.remove()
 
-
+            # logging.info("feats_lid: {}".format(feats_lid.shape))
             # 4. Forward encoder for LID
             # Pre-encoder, e.g. used for raw input data
             if self.preencoder_lid_nums > 1:
@@ -547,6 +571,19 @@ class ESPnetHierASRLIDSVModel(ESPnetASRModel):
 
             lid_embd = self.project_lid_embd(encoder_lid_out)
             lid_embd_list.append(lid_embd)
+
+
+
+            # 4. Forward encoder for SV
+
+            task_tokens = None
+            # feats_spk, feats_lengths = self.frontend.featurizers_spk[index](feats_layers, feats_lengths_layers)
+            # logging.info("feats_spk: {}".format(feats_spk.shape))
+            frame_level_feats = self.encoder_spk(feats_spk)
+            utt_level_feat = self.pooling_spk(frame_level_feats, task_tokens)
+            spk_embd = self.project_spk_embd(utt_level_feat)
+            spk_embd_list.append(spk_embd)
+
 
             # does not need to generate condition features from the last layer
             if self.sep_layers[index] == 24:
@@ -573,7 +610,10 @@ class ESPnetHierASRLIDSVModel(ESPnetASRModel):
                         condition_features = torch.nn.LeakyReLU()(condition_features)
                     elif self.lid_condition_activate == "bndrop":
                         # import pdb; pdb.set_trace()
-                        condition_features = self.lang_embeddings[index](lid_embd)
+                        condition_features_lid = self.lang_embeddings[index](lid_embd) # (Batch, 1, 256)
+                        condition_features_spk = self.spk_embeddings[index](spk_embd) # (Batch, 1, 256)
+                        condition_features = condition_features_lid + condition_features_spk
+                        
                         condition_features = self.lns[index](condition_features)
                         condition_features = condition_features.unsqueeze(1)
                         condition_features = self.activation_fns[index](condition_features)
@@ -647,21 +687,21 @@ class ESPnetHierASRLIDSVModel(ESPnetASRModel):
             )
 
 
-        # 7. Forward encoder for SV
+        # # 7. Forward encoder for SV
 
-        task_tokens = None
-        batch_size = speech.shape[0]
+        # task_tokens = None
+        # batch_size = speech.shape[0]
 
-        feats, feats_lengths = self.frontend.featurizer_spk(feats_layers, feats_lengths_layers)
-        frame_level_feats = self.encoder_spk(feats)
-        utt_level_feat = self.pooling_spk(frame_level_feats, task_tokens)
-        spk_embd = self.project_spk_embd(utt_level_feat)
+        # feats, feats_lengths = self.frontend.featurizer_spk(feats_layers, feats_lengths_layers)
+        # frame_level_feats = self.encoder_spk(feats)
+        # utt_level_feat = self.pooling_spk(frame_level_feats, task_tokens)
+        # spk_embd = self.project_spk_embd(utt_level_feat)
 
 
         if intermediate_outs is not None:
-            return (encoder_out, intermediate_outs), encoder_out_lens, lid_embd_list, encoder_lid_out_lens, spk_embd
+            return (encoder_out, intermediate_outs), encoder_out_lens, lid_embd_list, encoder_lid_out_lens, spk_embd_list
 
-        return encoder_out, encoder_out_lens, lid_embd_list, encoder_lid_out_lens, spk_embd
+        return encoder_out, encoder_out_lens, lid_embd_list, encoder_lid_out_lens, spk_embd_list
 
     def _extract_feats(
         self, speech: torch.Tensor, speech_lengths: torch.Tensor, condition_features: torch.Tensor = None, start_layer: int = 0, end_layer: int = 24, featurizer_index: int = 0, feats_layers: Optional[List] = None, feats_lengths_layers: Optional[List] = None

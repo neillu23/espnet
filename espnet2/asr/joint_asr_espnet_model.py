@@ -146,7 +146,7 @@ class ESPnetJointASRModel(ESPnetASRModel):
         self.lid_condition_activate = lid_condition_activate
         # if 
         if self.embed_condition and lid_condition_feature == "soft":
-            self.lang_embedding = torch.nn.Linear(embed_condition_size, embed_condition_size)
+            self.lang_embedding = torch.nn.Linear(256, embed_condition_size)
 
             if self.lid_condition_activate == "bndrop":
                 self.ln = LayerNorm(embed_condition_size, export=False)

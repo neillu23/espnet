@@ -23,7 +23,8 @@ class S3prlFrontend(AbsFrontend):
         layer: int = -1,
         layer_selections: Optional[list] = None,
         featurizer_num: int = 1,
-        featurizer_spk: bool = False,
+        feature_lid: Optional[str] = None, # can be "lid" or "hier_lid"
+        feature_spk: Optional[str] = None, # can be "spk" or "hier_spk"
     ):
         try:
             import s3prl
@@ -74,27 +75,32 @@ class S3prlFrontend(AbsFrontend):
         self.layer = layer
         self.upstream = upstream
 
-        self.featurizer_num = featurizer_num
+        # self.featurizer_num = featurizer_num
+        self.feature_lid = feature_lid
+        self.feature_spk = feature_spk
 
-        if featurizer_num <= 2:
-            self.featurizer = Featurizer(upstream, layer_selections=layer_selections)
+        # for LID or Hier LID
+        if feature_lid == "lid":
+            self.featurizer = Featurizer(upstream, layer_selections=None) 
+        elif feature_lid == "hier_lid":
+            self.featurizers = torch.nn.ModuleList([Featurizer(upstream, layer_selections=layers) for layers in layer_selections])
+
+        # for SPK or Hier SPK (main for ASR)
+        if feature_spk == "spk":
+            self.featurizer_spk = Featurizer(upstream, layer_selections=None) 
+        elif feature_spk == "hier_spk":
+            self.featurizers_spk = torch.nn.ModuleList([Featurizer(upstream, layer_selections=layers) for layers in layer_selections])
+
+        # for main task (ASR or SV)
+        if feature_lid is None and feature_spk is None:
+            self.featurizer = Featurizer(upstream, layer_selections=layer_selections) 
             self.hop_length = self.featurizer.downsample_rate
-
-        if featurizer_num == 2:
-            self.featurizer2 = Featurizer(upstream, layer_selections=None)
-
-        elif featurizer_num > 2:
-            lid_featurizer_num = featurizer_num - 1 # 1 for asr
-
-            if featurizer_spk:
-                lid_featurizer_num = lid_featurizer_num - 1 # 1 for spk
-                self.featurizer_spk = Featurizer(upstream, layer_selections=None)
-
-            self.featurizers = torch.nn.ModuleList([Featurizer(upstream, layer_selections=layer_selections[i]) for i in range(lid_featurizer_num)])
-
+        elif feature_lid == "lid" and feature_spk is None:
+            self.featurizer2 = Featurizer(upstream, layer_selections=None) # for ASR or SV
+            self.hop_length = self.featurizer2.downsample_rate
+        else:
             self.featurizer_asr = Featurizer(upstream, layer_selections=None)
-            self.hop_length = self.featurizer_asr.downsample_rate
-
+        
         self.pretrained_params = copy.deepcopy(self.upstream.state_dict())
         self.frontend_type = "s3prl"
         self.self_condition = frontend_conf.get("self_condition", False)
@@ -120,7 +126,7 @@ class S3prlFrontend(AbsFrontend):
         return tiled_feature
 
     def output_size(self) -> int:
-        if self.featurizer_num > 2:
+        if self.feature_lid == "hier_lid":
             return self.featurizer_asr.output_size
         return self.featurizer.output_size
 
@@ -138,11 +144,11 @@ class S3prlFrontend(AbsFrontend):
             feats, feats_lens = feats[layer], feats_lens[layer]
             return feats, feats_lens
 
-        if self.featurizer_num <= 2:
-            featurizer = self.featurizer
-        else:
+        if self.feature_lid == "hier_lid":
             featurizer = self.featurizers[0]
-            
+        else:
+            featurizer = self.featurizer
+
         if self.multilayer_feature:
             feats_fused, feats_lens_fused = featurizer(feats, feats_lens)
         else:
@@ -153,7 +159,7 @@ class S3prlFrontend(AbsFrontend):
         
         
         
-        if self.featurizer_num > 1:
+        if self.feature_lid is not None or self.feature_spk is not None:
             return feats_fused, feats_lens_fused, feats, feats_lens
 
         elif self.self_condition:

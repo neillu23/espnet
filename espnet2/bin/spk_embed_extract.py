@@ -12,6 +12,7 @@ from torch.multiprocessing.spawn import ProcessContext
 from typeguard import check_argument_types, check_return_type
 
 from espnet2.samplers.build_batch_sampler import BATCH_TYPES
+from espnet2.tasks.asr import ASRTask
 from espnet2.tasks.spk import SpeakerTask
 from espnet2.torch_utils.set_all_random_seed import set_all_random_seed
 from espnet2.train.distributed_utils import (
@@ -78,8 +79,10 @@ def extract_embed(args):
     # 1. Set random-seed
     set_all_random_seed(args.seed)
 
+    task = SpeakerTask if not args.sv_asr_joint_task else ASRTask 
+
     # 2. define train args
-    spk_model, spk_train_args = SpeakerTask.build_model_from_file(
+    spk_model, spk_train_args = task.build_model_from_file(
         args.spk_train_config, args.spk_model_file, device
     )
 
@@ -129,6 +132,7 @@ def extract_embed(args):
             output_dir=args.output_dir,
             custom_bs=bs,
             average=args.average_embd,
+            sv_asr_joint_task=args.sv_asr_joint_task,
         )
 
     if distributed_option.distributed:
@@ -179,6 +183,14 @@ def get_parser():
         type=int,
         default=1,
         help="The number of workers used for DataLoader",
+    )
+
+
+    parser.add_argument(
+        "--sv_asr_joint_task",
+        type=str2bool,
+        default=False,
+        help="Whether we are using an SV and ASR joint model",
     )
 
     group = parser.add_argument_group("Input data related")

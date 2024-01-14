@@ -172,6 +172,11 @@ class SpkTrainer(Trainer):
                     task_tokens=task_tokens,
                     langs=_langs,
                 )
+                # check if spk_embds is tuple
+                if isinstance(spk_embds, tuple):
+                    spk_embds = spk_embds[-1]
+
+
             else:
                 spk_embds = model(
                     speech=_speechs,
@@ -179,6 +184,10 @@ class SpkTrainer(Trainer):
                     extract_embd=True,
                     task_tokens=task_tokens,
                 )
+                # check if spk_embds is tuple
+                if isinstance(spk_embds, tuple):
+                    spk_embds = spk_embds[-1]
+                    
             spk_embds = F.normalize(spk_embds, p=2, dim=1)
             spk_embds = spk_embds.view(org_shape[0], org_shape[1], -1)
 
@@ -302,6 +311,8 @@ class SpkTrainer(Trainer):
         output_dir: str,
         custom_bs: int,
         average: bool = False,
+        sv_asr_joint_task: bool = False,
+
     ) -> None:
         assert check_argument_types()
         ngpu = options.ngpu
@@ -489,12 +500,19 @@ class SpkTrainer(Trainer):
                                     task_token.repeat(speech_list.size(0)),
                                     "cuda" if ngpu > 0 else "cpu",
                                 ).unsqueeze(1)
-                            spk_embds = model(
-                                speech=speech_list,
-                                spk_labels=None,
-                                extract_embd=True,
-                                task_tokens=task_tokens,
-                            )
+                            # import pdb; pdb.set_trace()
+                            if sv_asr_joint_task:
+                                spk_embds = model.encode(
+                                    speech=speech_list,
+                                    speech_lengths=torch.tensor([sp.size(0) for sp in speech_list]).to("cuda" if ngpu > 0 else "cpu")
+                                )[-1]
+                            else:
+                                spk_embds = model(
+                                    speech=speech_list,
+                                    spk_labels=None,
+                                    extract_embd=True,
+                                    task_tokens=task_tokens,
+                                )
                             # removed to be use magnitude in qmf
                             # spk_embds = F.normalize(spk_embds, p=2, dim=1)
                             spk_embds = spk_embds.view(org_shape[0], org_shape[1], -1)
@@ -531,12 +549,19 @@ class SpkTrainer(Trainer):
                                     task_token.repeat(speech_list.size(0)),
                                     "cuda" if ngpu > 0 else "cpu",
                                 ).unsqueeze(1)
-                            spk_embds = model(
-                                speech=speech_list,
-                                spk_labels=None,
-                                extract_embd=True,
-                                task_tokens=task_tokens,
-                            )
+                            if sv_asr_joint_task:
+                                spk_embds = model.encode(
+                                    speech=speech_list,
+                                    speech_lengths=torch.tensor([sp.size(0) for sp in speech_list]).to("cuda" if ngpu > 0 else "cpu")
+                                )[-1]
+                                
+                            else:
+                                spk_embds = model(
+                                    speech=speech_list,
+                                    spk_labels=None,
+                                    extract_embd=True,
+                                    task_tokens=task_tokens,
+                                )
                             # removed to be use magnitude in qmf
                             # spk_embds = F.normalize(spk_embds, p=2, dim=1)
                             spk_embds = spk_embds.view(org_shape[0], org_shape[1], -1)
@@ -576,13 +601,20 @@ class SpkTrainer(Trainer):
             else:
                 langs_list = None
             
-            spk_embds = model(
-                speech=speech_list,
-                spk_labels=None,
-                extract_embd=True,
-                task_tokens=task_tokens,
-                langs=langs_list,
-            )
+            if sv_asr_joint_task:
+                speech_lengths = torch.tensor([speech_list.size(0)]).to("cuda" if ngpu > 0 else "cpu")
+                spk_embds = model.encode(
+                    speech=speech_list,
+                    speech_lengths=torch.tensor([sp.size(0) for sp in speech_list]).to("cuda" if ngpu > 0 else "cpu")
+                )[-1]
+            else:
+                spk_embds = model(
+                    speech=speech_list,
+                    spk_labels=None,
+                    extract_embd=True,
+                    task_tokens=task_tokens,
+                    langs=langs_list,
+                )
             spk_embds = F.normalize(spk_embds, p=2, dim=1)
             spk_embds = spk_embds.view(org_shape[0], org_shape[1], -1)
 
