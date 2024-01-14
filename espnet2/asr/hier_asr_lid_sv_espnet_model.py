@@ -162,7 +162,8 @@ class ESPnetHierASRLIDSVModel(ESPnetASRModel):
         assert(separate_forward == True), "separate_forward must be True"
 
         if self.embed_condition and self.lid_condition_feature == "soft":
-            self.lang_embeddings = torch.nn.ModuleList([torch.nn.Linear(embed_condition_size, embed_condition_size) for i in range(len(self.sep_layers))])
+            # 256 is the size of the lid/speaker embedding
+            self.lang_embeddings = torch.nn.ModuleList([torch.nn.Linear(256, embed_condition_size) for i in range(len(self.sep_layers))])
 
             if self.lid_condition_activate == "bndrop":
                 self.lns = torch.nn.ModuleList([LayerNorm(embed_condition_size, export=False) for i in range(len(self.sep_layers))])
@@ -499,8 +500,9 @@ class ESPnetHierASRLIDSVModel(ESPnetASRModel):
                 # 1. Extract LID feats
                 lid_speech = speech
                 lid_speech_lengths = speech_lengths
+                feats_lid, feats_lid_lengths, feats_layers, feats_lengths_layers = self._extract_feats(speech, speech_lengths, condition_features, start_layer=start_layer, end_layer=end_layer, featurizer_index=index, feats_layers=feats_layers, feats_lengths_layers=feats_lengths_layers)
+                
                 if self.lid_audio_length > 0:
-                    feats_lid, feats_lid_lengths, feats_layers, feats_lengths_layers = self._extract_feats(speech, speech_lengths, condition_features, start_layer=start_layer, end_layer=end_layer, featurizer_index=index, feats_layers=feats_layers, feats_lengths_layers=feats_lengths_layers)
                     # Random cropping
                     lid_feats_lengths = self.lid_audio_length // 150
                     if feats_lid_lengths.min() > lid_feats_lengths:

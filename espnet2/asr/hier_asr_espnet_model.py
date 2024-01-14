@@ -149,7 +149,8 @@ class ESPnetHierASRModel(ESPnetASRModel):
         assert(separate_forward == True), "separate_forward must be True"
 
         if self.embed_condition and self.lid_condition_feature == "soft":
-            self.lang_embeddings = torch.nn.ModuleList([torch.nn.Linear(embed_condition_size, embed_condition_size) for i in range(len(self.sep_layers))])
+            # 256 is the size of the lid/speaker embedding
+            self.lang_embeddings = torch.nn.ModuleList([torch.nn.Linear(256, embed_condition_size) for i in range(len(self.sep_layers))])
 
             if self.lid_condition_activate == "bndrop":
                 self.lns = torch.nn.ModuleList([LayerNorm(embed_condition_size, export=False) for i in range(len(self.sep_layers))])
