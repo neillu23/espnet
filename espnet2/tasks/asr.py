@@ -64,6 +64,8 @@ from espnet2.asr.frontend.windowing import SlidingWindow
 from espnet2.asr.maskctc_model import MaskCTCModel
 from espnet2.asr.pit_espnet_model import ESPnetASRModel as PITESPnetModel
 from espnet2.asr.joint_asr_espnet_model import ESPnetJointASRModel
+from espnet2.asr.joint_asr_lid_sv_espnet_model import ESPnetJointASRLIDSVModel
+from espnet2.asr.double_hier_asr_lid_sv_espnet_model import ESPnetDoubleHierASRLIDSVModel
 from espnet2.asr.hier_asr_espnet_model import ESPnetHierASRModel
 from espnet2.asr.hier_lid_espnet_model import ESPnetHierLIDModel
 from espnet2.asr.hier_asr_lid_sv_espnet_model import ESPnetHierASRLIDSVModel
@@ -147,6 +149,8 @@ model_choices = ClassChoices(
         maskctc=MaskCTCModel,
         pit_espnet=PITESPnetModel,
         joint_espnet=ESPnetJointASRModel,
+        joint_lid_sv_espnet=ESPnetJointASRLIDSVModel,
+        double_hier_asr_lid_sv_espnet=ESPnetDoubleHierASRLIDSVModel,
         joint_hier_espnet=ESPnetHierASRModel,
         lid_hier_espnet=ESPnetHierLIDModel,
         joint_hier_asr_lid_sv_espnet=ESPnetHierASRLIDSVModel,
@@ -829,8 +833,9 @@ class ASRTask(AbsTask):
         except AttributeError:
             model_class = model_choices.get_class("espnet")
 
-        if model_class == ESPnetJointASRModel or model_class == ESPnetHierASRModel or model_class == ESPnetHierASRLIDSVModel  or model_class == ESPnetHierLIDModel:
-                
+        # if model_class == ESPnetJointASRModel or model_class == ESPnetHierASRModel or model_class == ESPnetHierASRLIDSVModel  or model_class == ESPnetHierLIDModel or model_class == ESPnetDoubleHierASRLIDSVModel:
+        # # rewrite
+        if model_class in [ESPnetJointASRModel, ESPnetJointASRLIDSVModel, ESPnetHierASRModel, ESPnetHierASRLIDSVModel, ESPnetHierLIDModel, ESPnetDoubleHierASRLIDSVModel]:
             preencoder_lid_nums = args.model_conf.get("preencoder_lid_nums", 1)
             if preencoder_lid_nums > 1:
                 preencoder_lid_class = preencoder_choices.get_class(args.preencoder_lid)
@@ -865,7 +870,8 @@ class ASRTask(AbsTask):
             loss_class = loss_choices.get_class(args.loss)
             loss = loss_class(**args.loss_conf)
             
-            if model_class == ESPnetJointASRModel or model_class == ESPnetHierASRModel or model_class == ESPnetHierLIDModel:
+            # if model_class == ESPnetJointASRModel or model_class == ESPnetHierASRModel or model_class == ESPnetHierLIDModel:
+            if model_class in [ESPnetJointASRModel, ESPnetHierASRModel, ESPnetHierLIDModel]:
                 model = model_class(
                     vocab_size=vocab_size,
                     frontend=frontend,
@@ -887,7 +893,7 @@ class ASRTask(AbsTask):
                     langs_num=langs_num,
                     **args.model_conf,
                 )
-            if model_class == ESPnetHierASRLIDSVModel:
+            if model_class in [ESPnetHierASRLIDSVModel, ESPnetJointASRLIDSVModel, ESPnetDoubleHierASRLIDSVModel]:
                 # spk related modules
                 encoder_spk_class = encoder_spk_choices.get_class(args.encoder_spk)
                 encoder_spk = encoder_spk_class(input_size=frontend.output_size(), **args.encoder_spk_conf)

@@ -153,6 +153,7 @@ download_model= # Download a model from Model Zoo and use it for decoding.
 train_set=       # Name of training set.
 valid_set=       # Name of validation set used for monitoring/tuning network training.
 test_sets=       # Names of test sets. Multiple items (e.g., both dev and eval sets) can be specified.
+extra_spk2utt=   # Names of extra spk2utt files to combine with the original spk2utt file or use it instead of the original one.
 bpe_train_text=  # Text file path of bpe training set.
 lm_train_text=   # Text file path of language model training set.
 lm_dev_text=     # Text file path of language model development set.
@@ -1405,8 +1406,16 @@ if [ ${stage} -le 11 ] && [ ${stop_stage} -ge 11 ] && ! [[ " ${skip_stages} " =~
         if [ "${use_sv_asr}" = true ]; then
             _opts+="--train_data_path_and_name_and_type ${_asr_train_dir}/utt2spk,spk_labels,text "
             _opts+="--valid_data_path_and_name_and_type ${_asr_valid_dir}/utt2spk,spk_labels,text "
-            _opts+="--spk2utt ${_asr_valid_dir}/spk2utt "
-            _opts+="--spk_num $(wc -l ${_asr_valid_dir}/spk2utt | cut -f1 -d" ") "
+            # if ${extra_spk2utt} exists, use it to get the number of speakers
+            if [ -f "${extra_spk2utt}" ]; then
+                _opts+="--spk2utt ${extra_spk2utt} "
+                _opts+="--spk_num $(wc -l ${extra_spk2utt} | cut -f1 -d" ") "
+            else
+                # warning
+                log "WARNING: ${extra_spk2utt} does not exist. Using ${_asr_train_dir}/spk2utt instead."
+                _opts+="--spk2utt ${_asr_train_dir}/spk2utt "
+                _opts+="--spk_num $(wc -l ${_asr_train_dir}/spk2utt | cut -f1 -d" ") "
+            fi
             
         fi
     fi
