@@ -105,6 +105,7 @@ class Speech2Text:
         enh_s2t_task: bool = False,
         lid_task: bool = False,
         lid_asr_joint_task: bool = False,
+        sv_lid_asr_joint_task: bool = False,
         lid_token_list: str = "",
         quantize_asr_model: bool = False,
         quantize_lm: bool = False,
@@ -473,6 +474,7 @@ class Speech2Text:
         self.enh_s2t_task = enh_s2t_task
         self.lid_task = lid_task
         self.lid_asr_joint_task = lid_asr_joint_task
+        self.sv_lid_asr_joint_task = sv_lid_asr_joint_task
         self.multi_asr = multi_asr
 
     @torch.no_grad()
@@ -577,8 +579,13 @@ class Speech2Text:
 
 
         elif self.lid_asr_joint_task: # LID + ASR Joint
-            enc, enc_olens, lid_embd, enc_lid_olens = self.asr_model.encode(**batch)
-            
+            if self.sv_lid_asr_joint_task:
+                enc, enc_olens, lid_embd, enc_lid_olens, _ = self.asr_model.encode(**batch)
+            else:
+                enc, enc_olens, lid_embd, enc_lid_olens = self.asr_model.encode(**batch)
+            # if lid_embd is list
+            if isinstance(lid_embd, list):
+                lid_embd = lid_embd[-1]
             # Compute cosine similarity
             cosine = F.linear(F.normalize(lid_embd), F.normalize(self.asr_model.loss.weight))
             
@@ -842,6 +849,7 @@ def inference(
     enh_s2t_task: bool,
     lid_task: bool,
     lid_asr_joint_task: bool,
+    sv_lid_asr_joint_task: bool,
     lid_token_list: str,
     quantize_asr_model: bool,
     quantize_lm: bool,
@@ -900,6 +908,7 @@ def inference(
         enh_s2t_task=enh_s2t_task,
         lid_task=lid_task,
         lid_asr_joint_task=lid_asr_joint_task,
+        sv_lid_asr_joint_task=sv_lid_asr_joint_task,
         lid_token_list=lid_token_list,
         multi_asr=multi_asr,
         quantize_asr_model=quantize_asr_model,
@@ -1140,6 +1149,13 @@ def get_parser():
         type=str2bool,
         default=False,
         help="Whether we are using a language identification and ASR joint model",
+    )
+
+    group.add_argument(
+        "--sv_lid_asr_joint_task",
+        type=str2bool,
+        default=False,
+        help="Whether we are using a speaker verification, language identification and ASR joint model",
     )
 
     group.add_argument(
