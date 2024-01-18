@@ -3,7 +3,7 @@
 
 """Transformer encoder definition."""
 
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 import torch
 from typeguard import check_argument_types
@@ -188,7 +188,7 @@ class TransformerEncoder(AbsEncoder):
         self,
         xs_pad: torch.Tensor,
         ilens: torch.Tensor,
-        condition_features: torch.Tensor = None,
+        condition_features: Union[torch.Tensor, List[torch.Tensor]] = None,
         prev_states: torch.Tensor = None,
         ctc: CTC = None,
         return_all_hs: bool = False,
@@ -228,7 +228,7 @@ class TransformerEncoder(AbsEncoder):
             xs_pad, masks = self.embed(xs_pad, masks)
         else:
             xs_pad = self.embed(xs_pad)
-
+        
         intermediate_outs = []
         if len(self.interctc_layer_idx) == 0:
             for layer_idx, encoder_layer in enumerate(self.encoders):

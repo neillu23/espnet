@@ -116,6 +116,7 @@ num_inf=    # Number of inferences output by the model
 sot_asr=false   # Whether to use Serialized Output Training (SOT)
 lid_task=false # Whether doing LID task
 lid_asr_joint_task=false # Whether doing joint LID and ASR task
+sv_lid_asr_joint_task=false # Whether doing joint LID, SV, and ASR task
 
 # Upload model related
 hf_repo=
@@ -1591,6 +1592,7 @@ if [ ${stage} -le 12 ] && [ ${stop_stage} -ge 12 ] && ! [[ " ${skip_stages} " =~
 
         _lid_opts+="--lid_task ${lid_task} "
         _lid_opts+="--lid_asr_joint_task ${lid_asr_joint_task} "
+        _lid_opts+="--sv_lid_asr_joint_task ${sv_lid_asr_joint_task} "
 
         # 1. Split the key file
         key_file=${_data}/${_scp}
