@@ -8,9 +8,9 @@ set -o pipefail
 # Process Pipeline
 stage=1
 stop_stage=13
-nj=32
-inference_nj=4
-gpu_inference=true
+nj=60
+inference_nj=80
+gpu_inference=false
 
 # Config
 duration=10min # duration set ("10min" or "1h")
@@ -19,7 +19,7 @@ lid=false # whether to add joint LID task in multiligual ASR
 
 # Model/Inference Configs
 inference_config=conf/decode_asr.yaml
-asr_config=conf/tuning/train_asr_wav2vec2_xlsr_${duration}.yaml
+asr_config=conf/tuning/train_asr_wav2vec2_xlsr_${duration}_stage2.yaml
 
 . utils/parse_options.sh || exit 1
 
@@ -38,7 +38,7 @@ fi
 
 train_set=train_${duration}${suffix}
 train_dev=dev_${duration}${suffix}
-test_set="${train_dev} test_${duration}${suffix}"
+test_set="test_${duration}${suffix}"
 
 nlsyms_txt=data/local/nlsyms.txt
 asr_tag="$(basename "${asr_config}" .yaml)_multilingual_${duration}"

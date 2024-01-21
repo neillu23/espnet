@@ -49,7 +49,7 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
     log "stage2: Preparing data for TOTONAC"
     ### Task dependent. You have to make data the following preparation part by yourself.
     for x in train dev "test"; do
-        python local/data_prep.py -w $wavdir -t data/${x} -i local/split/${x}.tsv -a ${annotation_dir}
+        python local/data_prep.py -w $wavdir/Conversaciones -t data/${x} -i local/split/${x}.tsv -a ${annotation_dir}/Conversaciones
         # sort -o data/${x}/utt2spk > data/${x}/utt2spk
         utils/fix_data_dir.sh data/${x}
     done

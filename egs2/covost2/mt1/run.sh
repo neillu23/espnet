@@ -79,7 +79,6 @@ fi
     --local_data_opts "--stage 0 --src_lang ${src_lang} --tgt_lang ${tgt_lang}" \
     --use_lm false \
     --feats_type raw \
-    --audio_format "flac.ark" \
     --token_joint false \
     --src_lang ${src_lang} \
     --tgt_lang ${tgt_lang} \
@@ -97,3 +96,5 @@ fi
     --src_bpe_train_text "data/${train_set}/text.${src_case}.${src_lang}" \
     --tgt_bpe_train_text "data/${train_set}/text.${tgt_case}.${tgt_lang}" \
     --lm_train_text "data/${train_set}/text.${tgt_case}.${tgt_lang}"  "$@"
+
+    # --audio_format "flac.ark" \

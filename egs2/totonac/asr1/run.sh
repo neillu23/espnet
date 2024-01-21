@@ -13,8 +13,7 @@ asr_config=conf/train_asr.yaml
 inference_config=conf/decode_asr.yaml
 
 ./asr.sh \
-    --local_data_opts "--stage 0" \
-    --audio_format "flac.ark" \
+    --local_data_opts "--stage 1" \
     --feats_normalize utterance_mvn \
     --stage 1 \
     --stop_stage 100 \
@@ -31,3 +30,4 @@ inference_config=conf/decode_asr.yaml
     --test_sets "${test_set}" \
     --inference_asr_model valid.acc.best.pth \
     --lm_train_text "data/${train_set}/text"  "$@"
+    # --audio_format "flac.ark" \

@@ -9,7 +9,7 @@ lang=all # all, en_us, af_za, fr_fr ... see https://huggingface.co/datasets/goog
 
 train_set=train_"$(echo "${lang}" | tr - _)"
 train_dev=dev_"$(echo "${lang}" | tr - _)"
-test_set="${train_dev} test_$(echo ${lang} | tr - _)"
+test_set="test_$(echo ${lang} | tr - _)"
 
 nlsyms_txt=data/nlsyms.txt
 monolingual_asr_config=conf/train_asr.yaml
@@ -33,8 +33,11 @@ if [[ "all" == *"${lang}"* ]]; then
   ./asr.sh \
       --ngpu 2 \
       --lang "${lang}" \
+      --gpu_inference false \
+      --inference_nj 60 \
       --local_data_opts "--stage 2 --stop_stage 2 --lang ${lang} --nlsyms_txt ${nlsyms_txt}" \
       --post_process_local_data_opts "--stage 2 --lang ${lang} --nlsyms_txt ${nlsyms_txt}" \
+      --inference_asr_model valid.acc.best.pth \
       --audio_format "wav" \
       --use_lm false \
       --feats_normalize utt_mvn \

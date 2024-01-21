@@ -6,7 +6,7 @@ set -u
 set -o pipefail
 
 # language related
-src_lang=es # ar ca cy de et es fa fr id it ja lv mn nl pt ru sl sv ta tr zh
+src_lang=zh # ar ca cy de et es fa fr id it ja lv mn nl pt ru sl sv ta tr zh
 version=c # c or t (please refer to cvss paper for details)
 
 train_set=train_${src_lang}
@@ -20,7 +20,7 @@ inference_config=conf/decode_s2st.yaml
 
 ./s2st.sh \
     --ngpu 1 \
-    --stage 5 \
+    --stage 1 \
     --nj 1 \
     --local_data_opts "--stage 0 --src_lang ${src_lang} --version ${version}" \
     --feats_type raw \

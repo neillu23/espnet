@@ -8,7 +8,8 @@
 
 import torch
 from torch import nn
-from espnet2.asr.layers.film_blocks import FiLM
+# from espnet2.asr.layers.film_blocks import FiLM, DoubleFiLM
+from s3prl.upstream.wav2vec2.film_blocks import FiLM, DoubleFiLM
 import logging
 from espnet.nets.pytorch_backend.transformer.layer_norm import LayerNorm
 
@@ -67,7 +68,10 @@ class EncoderLayer(nn.Module):
         if self.embed_condition:
             # logging.info("size: {}".format(size))
             # import pdb; pdb.set_trace()
-            self.condition_layer = FiLM(size, embed_condition_size, "linear")
+            if self.embed_condition_method == "FiLM":
+                self.condition_layer = FiLM(size, embed_condition_size, "linear")
+            elif self.embed_condition_method == "DoubleFiLM":
+                self.condition_layer = DoubleFiLM(size, embed_condition_size, "linear")
 
 
     def forward(self, x, mask, condition_features=None, cache=None):

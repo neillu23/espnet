@@ -10,7 +10,7 @@ log() {
     echo -e "$(date '+%Y-%m-%dT%H:%M:%S') (${fname}:${BASH_LINENO[0]}:${FUNCNAME[1]}) $*"
 }
 
-stage=1
+stage=2
 stop_stage=100
 skip_stages=
 cpu_cmd="run.pl"

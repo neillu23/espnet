@@ -30,7 +30,7 @@ score_asr_model_tag=
     --nj 64 \
     --inference_nj 64 \
     --use_discrete_unit true \
-    --local_data_opts "--stage 0 --src_lang ${src_lang} --version ${version}" \
+    --local_data_opts "--stage 2 --src_lang ${src_lang} --version ${version}" \
     --feats_type raw \
     --audio_format "wav" \
     --use_src_lang ${use_src_lang} \
@@ -41,7 +41,7 @@ score_asr_model_tag=
     --feature_layer ${feature_layer} \
     --s3prl_upstream_name hubert \
     --storage_save_mode false \
-    --clustering_num_threads 8 \
+    --clustering_num_threads 20 \
     --clustering_portion ${clustering_portion} \
     --feature_num_clusters ${clustering_num_clusters} \
     --src_token_type "char" \

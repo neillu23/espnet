@@ -11,7 +11,9 @@ def get_full_id(wavpath):
     wav_info = open(wavpath, "r", encoding="utf-8")
     for line in wav_info.readlines():
         full_utt_id = line.strip().split(maxsplit=1)[0]
-        spk_id, utt_id = full_utt_id.split("-")
+        # print(line)
+        # print(full_utt_id)
+        spk_id, utt_id = full_utt_id.split("-",maxsplit=1)
         full_id_info[utt_id] = full_utt_id
     return full_id_info
 

@@ -86,6 +86,7 @@ class ESPnetJointASRLIDSVModel(ESPnetASRModel):
         separate_forward: bool = True,
         lid_condition: bool = True,
         spk_condition: bool = False,
+        combine_condition_method: str = "concat",
         interctc_weight: float = 0.0,
         ignore_id: int = -1,
         lsm_weight: float = 0.0,
@@ -160,6 +161,7 @@ class ESPnetJointASRLIDSVModel(ESPnetASRModel):
         self.lid_condition_activate = lid_condition_activate
         self.lid_condition = lid_condition
         self.spk_condition = spk_condition
+        self.combine_condition_method = combine_condition_method
         # self.sep_layers = sep_layers
         # self.preencoder_lid_nums = preencoder_lid_nums
         
@@ -173,6 +175,10 @@ class ESPnetJointASRLIDSVModel(ESPnetASRModel):
                 self.ln = LayerNorm(embed_condition_size, export=False)
                 self.activation_fn = torch.nn.PReLU()
                 self.dropout = torch.nn.Dropout(p=droprate)
+                if self.combine_condition_method == "prod_sum":
+                    self.ln_spk = LayerNorm(embed_condition_size, export=False)
+                    self.activation_fn_spk = torch.nn.PReLU()
+                    self.dropout_spk = torch.nn.Dropout(p=droprate)
 
         
     def forward(
@@ -552,18 +558,35 @@ class ESPnetJointASRLIDSVModel(ESPnetASRModel):
                             condition_features_lid = self.lang_embedding(lid_embd) # (Batch, 1, 256)
                         if self.spk_condition:
                             condition_features_spk = self.spk_embedding(spk_embd) # (Batch, 1, 256)
-
-                        if self.lid_condition and self.spk_condition:
-                            condition_features = condition_features_lid + condition_features_spk
-                        elif self.lid_condition:
-                            condition_features = condition_features_lid
-                        elif self.spk_condition:
-                            condition_features = condition_features_spk
                         
-                        condition_features = self.ln(condition_features)
-                        condition_features = condition_features.unsqueeze(1)
-                        condition_features = self.activation_fn(condition_features)
-                        condition_features = self.dropout(condition_features)
+                        if self.combine_condition_method == "concat":
+                            if self.lid_condition and self.spk_condition:
+                                condition_features = condition_features_lid + condition_features_spk
+                            elif self.lid_condition:
+                                condition_features = condition_features_lid
+                            elif self.spk_condition:
+                                condition_features = condition_features_spk
+                            
+                            condition_features = self.ln(condition_features)
+                            condition_features = condition_features.unsqueeze(1)
+                            condition_features = self.activation_fn(condition_features)
+                            condition_features = self.dropout(condition_features)
+
+                        elif self.combine_condition_method == "prod_sum":
+                            condition_features_lid = self.ln(condition_features_lid)
+                            condition_features_lid = condition_features_lid.unsqueeze(1)
+                            condition_features_lid = self.activation_fn(condition_features_lid)
+                            condition_features_lid = self.dropout(condition_features_lid)
+
+                            condition_features_spk = self.ln_spk(condition_features_spk)
+                            condition_features_spk = condition_features_spk.unsqueeze(1)
+                            condition_features_spk = self.activation_fn_spk(condition_features_spk)
+                            condition_features_spk = self.dropout_spk(condition_features_spk)
+
+                            condition_features = [condition_features_lid, condition_features_spk]
+
+                        else:
+                            raise NotImplementedError("combine_condition_method must be concat or prod_sum")
 
 
         # 6. Forward encoder for ASR
