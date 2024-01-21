@@ -60,6 +60,7 @@ class ESPnetHierSVModel(ESPnetSpeakerModel):
         frontend: Optional[AbsFrontend],
         specaug: Optional[AbsSpecAug],
         normalize: Optional[AbsNormalize],
+        preencoder: Optional[AbsPreEncoder],
         encoder: Optional[AbsEncoder],
         pooling: Optional[AbsPooling],
         projector: Optional[AbsProjector],
@@ -85,6 +86,7 @@ class ESPnetHierSVModel(ESPnetSpeakerModel):
             frontend=frontend,
             specaug=specaug,
             normalize=normalize,
+            preencoder=preencoder,
             encoder=encoder,
             pooling=pooling,
             projector=projector,
@@ -269,8 +271,12 @@ class ESPnetHierSVModel(ESPnetSpeakerModel):
             #     logging.info("feats_layers {} is the same as ori_feats_layers: {}".format(i, torch.all(torch.eq(ori_feats_layers[i],feats_layers[i]))))
 
 
-            feats, _ = self.frontend.featurizer_asr(feats_layers, feats_lengths_layers)
+            feats, feats_lengths = self.frontend.featurizer_asr(feats_layers, feats_lengths_layers)
 
+
+        # Pre-encoder, e.g. used for raw input data
+        if self.preencoder is not None:
+            feats, feats_lengths = self.preencoder(feats, feats_lengths)
 
         frame_level_feats = self.encode_frame(feats)
 

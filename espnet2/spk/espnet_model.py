@@ -17,6 +17,7 @@ from espnet2.spk.projector.abs_projector import AbsProjector
 from espnet2.torch_utils.device_funcs import force_gatherable
 from espnet2.train.abs_espnet_model import AbsESPnetModel
 
+from espnet2.asr.preencoder.abs_preencoder import AbsPreEncoder
 
 class ESPnetSpeakerModel(AbsESPnetModel):
     """
@@ -44,6 +45,7 @@ class ESPnetSpeakerModel(AbsESPnetModel):
         frontend: Optional[AbsFrontend],
         specaug: Optional[AbsSpecAug],
         normalize: Optional[AbsNormalize],
+        preencoder: Optional[AbsPreEncoder],
         encoder: Optional[AbsEncoder],
         pooling: Optional[AbsPooling],
         projector: Optional[AbsProjector],
@@ -62,6 +64,7 @@ class ESPnetSpeakerModel(AbsESPnetModel):
         self.specaug = specaug
         self.normalize = normalize
         self.encoder = encoder
+        self.preencoder = preencoder
         self.pooling = pooling
         self.projector = projector
         self.loss = loss
@@ -114,7 +117,11 @@ class ESPnetSpeakerModel(AbsESPnetModel):
 
         # 1. extract low-level feats (e.g., mel-spectrogram or MFCC)
         # Will do nothing for raw waveform-based models (e.g., RawNets)
-        feats, _ = self.extract_feats(speech, None, condition_features)
+        feats, feats_lengths = self.extract_feats(speech, None, condition_features)
+
+        # Pre-encoder, e.g. used for raw input data
+        if self.preencoder is not None:
+            feats, feats_lengths = self.preencoder(feats, feats_lengths)
 
         frame_level_feats = self.encode_frame(feats)
 
@@ -167,6 +174,7 @@ class ESPnetSpeakerModel(AbsESPnetModel):
         return feats, feat_lengths
 
     def encode_frame(self, feats: torch.Tensor) -> torch.Tensor:
+
         frame_level_feats = self.encoder(feats)
 
         return frame_level_feats

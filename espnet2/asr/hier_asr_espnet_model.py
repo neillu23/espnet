@@ -188,6 +188,9 @@ class ESPnetHierASRModel(ESPnetASRModel):
 
         text[text == -1] = self.ignore_id
 
+        asr_valid_indices = [i for i, label in enumerate(text) if label[0] != -1]
+
+
         # for data-parallel
         text = text[:, : text_lengths.max()]
 
@@ -211,107 +214,139 @@ class ESPnetHierASRModel(ESPnetASRModel):
         stats = dict()
 
         # 1. CTC branch
-        if self.ctc_weight != 0.0:
-            loss_ctc, cer_ctc = self._calc_ctc_loss(
-                encoder_out, encoder_out_lens, text, text_lengths
-            )
-
-            # Collect CTC branch stats
-            stats["loss_ctc"] = loss_ctc.detach() if loss_ctc is not None else None
-            stats["cer_ctc"] = cer_ctc
-
-        # Intermediate CTC (optional)
-        loss_interctc = 0.0
-        if self.interctc_weight != 0.0 and intermediate_outs is not None:
-            for layer_idx, intermediate_out in intermediate_outs:
-                # we assume intermediate_out has the same length & padding
-                # as those of encoder_out
-
-                # use auxillary ctc data if specified
-                loss_ic = None
-                if self.aux_ctc is not None:
-                    idx_key = str(layer_idx)
-                    if idx_key in self.aux_ctc:
-                        aux_data_key = self.aux_ctc[idx_key]
-                        aux_data_tensor = kwargs.get(aux_data_key, None)
-                        aux_data_lengths = kwargs.get(aux_data_key + "_lengths", None)
-
-                        if aux_data_tensor is not None and aux_data_lengths is not None:
-                            loss_ic, cer_ic = self._calc_ctc_loss(
-                                intermediate_out,
-                                encoder_out_lens,
-                                aux_data_tensor,
-                                aux_data_lengths,
-                            )
-                        else:
-                            raise Exception(
-                                "Aux. CTC tasks were specified but no data was found"
-                            )
-                if loss_ic is None:
-                    loss_ic, cer_ic = self._calc_ctc_loss(
-                        intermediate_out, encoder_out_lens, text, text_lengths
-                    )
-                loss_interctc = loss_interctc + loss_ic
-
-                # Collect Intermedaite CTC stats
-                stats["loss_interctc_layer{}".format(layer_idx)] = (
-                    loss_ic.detach() if loss_ic is not None else None
-                )
-                stats["cer_interctc_layer{}".format(layer_idx)] = cer_ic
-
-            loss_interctc = loss_interctc / len(intermediate_outs)
-
-            # calculate whole encoder loss
-            loss_ctc = (
-                1 - self.interctc_weight
-            ) * loss_ctc + self.interctc_weight * loss_interctc
-
-        if self.use_transducer_decoder:
-            # 2a. Transducer decoder branch
-            (
-                loss_transducer,
-                cer_transducer,
-                wer_transducer,
-            ) = self._calc_transducer_loss(
-                encoder_out,
-                encoder_out_lens,
-                text,
-            )
-
-            if loss_ctc is not None:
-                loss_asr = loss_transducer + (self.ctc_weight * loss_ctc)
-            else:
-                loss_asr = loss_transducer
-
-            # Collect Transducer branch stats
-            stats["loss_transducer"] = (
-                loss_transducer.detach() if loss_transducer is not None else None
-            )
-            stats["cer_transducer"] = cer_transducer
-            stats["wer_transducer"] = wer_transducer
-
-        else:
-            # logging.info("text",text)
-            # logging.info("text_lengths",text_lengths)
-            # 2b. Attention decoder branch
-            if self.ctc_weight != 1.0:
-                loss_att, acc_att, cer_att, wer_att = self._calc_att_loss(
+        if len(asr_valid_indices) > 0:
+            if self.ctc_weight != 0.0:
+                loss_ctc, cer_ctc = self._calc_ctc_loss(
                     encoder_out, encoder_out_lens, text, text_lengths
                 )
 
-            # 3. CTC-Att loss definition
-            if self.ctc_weight == 0.0:
-                loss_asr = loss_att
-            elif self.ctc_weight == 1.0:
-                loss_asr = loss_ctc
-            else:
-                loss_asr = self.ctc_weight * loss_ctc + (1 - self.ctc_weight) * loss_att
+                # Collect CTC branch stats
+                stats["loss_ctc"] = loss_ctc.detach() if loss_ctc is not None else None
+                stats["cer_ctc"] = cer_ctc
 
-            # Collect Attn branch stats
-            stats["loss_att"] = loss_att.detach() if loss_att is not None else None
-            stats["acc"] = acc_att
-            stats["cer"] = cer_att
-            stats["wer"] = wer_att
+            # Intermediate CTC (optional)
+            loss_interctc = 0.0
+            if self.interctc_weight != 0.0 and intermediate_outs is not None:
+                for layer_idx, intermediate_out in intermediate_outs:
+                    # we assume intermediate_out has the same length & padding
+                    # as those of encoder_out
+
+                    # use auxillary ctc data if specified
+                    loss_ic = None
+                    if self.aux_ctc is not None:
+                        idx_key = str(layer_idx)
+                        if idx_key in self.aux_ctc:
+                            aux_data_key = self.aux_ctc[idx_key]
+                            aux_data_tensor = kwargs.get(aux_data_key, None)
+                            aux_data_lengths = kwargs.get(aux_data_key + "_lengths", None)
+
+                            if aux_data_tensor is not None and aux_data_lengths is not None:
+                                loss_ic, cer_ic = self._calc_ctc_loss(
+                                    intermediate_out,
+                                    encoder_out_lens,
+                                    aux_data_tensor,
+                                    aux_data_lengths,
+                                )
+                            else:
+                                raise Exception(
+                                    "Aux. CTC tasks were specified but no data was found"
+                                )
+                    if loss_ic is None:
+                        loss_ic, cer_ic = self._calc_ctc_loss(
+                            intermediate_out, encoder_out_lens, text, text_lengths
+                        )
+                    loss_interctc = loss_interctc + loss_ic
+
+                    # Collect Intermedaite CTC stats
+                    stats["loss_interctc_layer{}".format(layer_idx)] = (
+                        loss_ic.detach() if loss_ic is not None else None
+                    )
+                    stats["cer_interctc_layer{}".format(layer_idx)] = cer_ic
+
+                loss_interctc = loss_interctc / len(intermediate_outs)
+
+                # calculate whole encoder loss
+                loss_ctc = (
+                    1 - self.interctc_weight
+                ) * loss_ctc + self.interctc_weight * loss_interctc
+
+            if self.use_transducer_decoder:
+                # 2a. Transducer decoder branch
+                (
+                    loss_transducer,
+                    cer_transducer,
+                    wer_transducer,
+                ) = self._calc_transducer_loss(
+                    encoder_out,
+                    encoder_out_lens,
+                    text,
+                )
+
+                if loss_ctc is not None:
+                    loss_asr = loss_transducer + (self.ctc_weight * loss_ctc)
+                else:
+                    loss_asr = loss_transducer
+
+                # Collect Transducer branch stats
+                stats["loss_transducer"] = (
+                    loss_transducer.detach() if loss_transducer is not None else None
+                )
+                stats["cer_transducer"] = cer_transducer
+                stats["wer_transducer"] = wer_transducer
+
+            else:
+                # logging.info("text",text)
+                # logging.info("text_lengths",text_lengths)
+                # 2b. Attention decoder branch
+                if self.ctc_weight != 1.0:
+                    loss_att, acc_att, cer_att, wer_att = self._calc_att_loss(
+                        encoder_out, encoder_out_lens, text, text_lengths
+                    )
+
+                # 3. CTC-Att loss definition
+                if self.ctc_weight == 0.0:
+                    loss_asr = loss_att
+                elif self.ctc_weight == 1.0:
+                    loss_asr = loss_ctc
+                else:
+                    loss_asr = self.ctc_weight * loss_ctc + (1 - self.ctc_weight) * loss_att
+
+                # Collect Attn branch stats
+                stats["loss_att"] = loss_att.detach() if loss_att is not None else None
+                stats["acc"] = acc_att
+                stats["cer"] = cer_att
+                stats["wer"] = wer_att
+        else:
+            loss_asr = torch.tensor(0.0)
+
+            if self.ctc_weight != 0.0:
+                stats["loss_ctc"] = 0.0
+
+                if self.training or self.error_calculator is None:
+                    stats["cer_ctc"] = None
+                else:
+                    stats["cer_ctc"] = 0.0
+
+            # Intermediate CTC (optional)
+            if self.interctc_weight != 0.0 and intermediate_outs is not None:
+                for layer_idx, intermediate_out in intermediate_outs:
+                    # Collect Intermedaite CTC stats
+                    stats["loss_interctc_layer{}".format(layer_idx)] = 0.0
+                    
+                    stats["cer_interctc_layer{}".format(layer_idx)] = 0.0
+
+            if self.use_transducer_decoder:
+                stats["loss_transducer"] = 0.0
+                stats["cer_transducer"] =  0.0
+                stats["wer_transducer"] =  0.0
+
+            else:
+                # Collect Attn branch stats
+                stats["loss_att"] = None
+                stats["acc"] = None
+                stats["cer"] = None
+                stats["wer"] = None
+
 
         # Collect total loss stats
         stats["loss_asr"] = loss_asr.detach()

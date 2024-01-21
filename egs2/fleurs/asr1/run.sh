@@ -13,7 +13,7 @@ test_set="${train_dev} test_$(echo ${lang} | tr - _)"
 
 nlsyms_txt=data/nlsyms.txt
 monolingual_asr_config=conf/train_asr.yaml
-multilingual_asr_config=conf/tuning/train_asr_conformer_scctc.yaml
+multilingual_asr_config=conf/tuning/train_asr_conformer_scctc2.yaml
 lm_config=conf/train_lm.yaml
 inference_config=conf/decode_lid.yaml
 

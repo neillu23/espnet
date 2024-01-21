@@ -154,6 +154,16 @@ model_choices = ClassChoices(
     default="espnet",
 )
 
+preencoder_choices = ClassChoices(
+    name="preencoder",
+    classes=dict(
+        sinc=LightweightSincConvs,
+        linear=LinearProjection,
+    ),
+    type_check=AbsPreEncoder,
+    default=None,
+    optional=True,
+)
 
 preencoder_lid_choices = ClassChoices(
     name="preencoder_lid",
@@ -212,6 +222,7 @@ class SpeakerTask(AbsTask):
         projector_choices,
         preprocessor_choices,
         loss_choices,
+        preencoder_choices,
         preencoder_lid_choices,
         encoder_lid_choices,
         postencoder_lid_choices,
@@ -412,6 +423,14 @@ class SpeakerTask(AbsTask):
             lid_tokens= None
             langs_num = 0
 
+        if getattr(args, "preencoder", None) is not None:
+            preencoder_class = preencoder_choices.get_class(args.preencoder)
+            preencoder = preencoder_class(**args.preencoder_conf)
+            input_size = preencoder.output_size()
+        else:
+            preencoder = None
+
+
 
         encoder_class = encoder_choices.get_class(args.encoder)
         encoder = encoder_class(input_size=input_size, **args.encoder_conf)
@@ -477,6 +496,7 @@ class SpeakerTask(AbsTask):
                 frontend=frontend,
                 specaug=specaug,
                 normalize=normalize,
+                preencoder=preencoder,
                 encoder=encoder,
                 pooling=pooling,
                 projector=projector,
@@ -494,6 +514,7 @@ class SpeakerTask(AbsTask):
                 frontend=frontend,
                 specaug=specaug,
                 normalize=normalize,
+                preencoder=preencoder,
                 encoder=encoder,
                 pooling=pooling,
                 projector=projector,
