@@ -118,7 +118,7 @@ class ESPnetASRModel(AbsESPnetModel):
         self.self_condition_weight = self_condition_weight
         self.lid_condition_feature = lid_condition_feature
 
-        if embed_condition and lid_condition_feature == "hard":
+        if embed_condition and (lid_condition_feature in ["hard","GT"]):
             self.langs_num = langs_num
             self.lang_embedding = torch.nn.Embedding(langs_num, embed_condition_size)
 

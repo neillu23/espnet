@@ -216,6 +216,13 @@ class ESPnetHierASRModel(ESPnetASRModel):
         # 1. CTC branch
         if len(asr_valid_indices) > 0:
             if self.ctc_weight != 0.0:
+                # filter text labels
+                
+                text = text[asr_valid_indices]
+                text_lengths = text_lengths[asr_valid_indices]
+                encoder_out = encoder_out[asr_valid_indices]
+                encoder_out_lens = encoder_out_lens[asr_valid_indices]
+
                 loss_ctc, cer_ctc = self._calc_ctc_loss(
                     encoder_out, encoder_out_lens, text, text_lengths
                 )
@@ -317,7 +324,9 @@ class ESPnetHierASRModel(ESPnetASRModel):
                 stats["cer"] = cer_att
                 stats["wer"] = wer_att
         else:
+            # logging.info("no text data in this batch")
             loss_asr = torch.tensor(0.0)
+            # self.zero_grad_asr()
 
             if self.ctc_weight != 0.0:
                 stats["loss_ctc"] = 0.0
@@ -601,6 +610,21 @@ class ESPnetHierASRModel(ESPnetASRModel):
 
                 return feats, feats_lengths, feats_layers, feats_lengths_layers
         
+
+    # def zero_grad_asr(self) -> None:
+    #     """Zero the gradients of model parameters."""
+
+    #     logging.warning("No text is valid in this mini-batch. zero_grad_asr this batch.")
+    #     if self.preencoder is not None:
+    #         for param in self.preencoder.parameters():
+    #             param.grad = torch.zeros_like(param)
+
+    #     for param in self.encoder.parameters():
+    #         param.grad = torch.zeros_like(param)
+    #     for param in self.ctc.parameters():
+    #         param.grad = torch.zeros_like(param)
+    #     for param in self.frontend.featurizer_asr.parameters():
+    #         param.grad = torch.zeros_like(param)
 
     def nll(
         self,
