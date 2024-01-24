@@ -596,7 +596,7 @@ class JointASRLIDSVPreprocessor(CommonPreprocessor):
 
         if self.text_name in data and data[self.text_name] == "-1":
             audio = data[self.speech_name]
-            logging.info("no text:{}".format(data[self.text_name]))
+            # logging.info("no text:{}".format(data[self.text_name]))
             # duplicate if utt is shorter than minimum required duration
             if len(audio) < self.target_duration:
                 shortage = self.target_duration - len(audio) + 1

@@ -150,12 +150,15 @@ class ESPnetHierASRModel(ESPnetASRModel):
 
         if self.embed_condition and self.lid_condition_feature == "soft":
             # 256 is the size of the lid/speaker embedding
-            self.lang_embeddings = torch.nn.ModuleList([torch.nn.Linear(256, embed_condition_size) for i in range(len(self.sep_layers))])
+            sep_num = len(self.sep_layers)
+            if self.sep_layers[-1] == 24:
+                sep_num = sep_num - 1
+            self.lang_embeddings = torch.nn.ModuleList([torch.nn.Linear(256, embed_condition_size) for i in range(sep_num)])
 
             if self.lid_condition_activate == "bndrop":
-                self.lns = torch.nn.ModuleList([LayerNorm(embed_condition_size, export=False) for i in range(len(self.sep_layers))])
-                self.activation_fns = torch.nn.ModuleList([torch.nn.PReLU() for i in range(len(self.sep_layers))])
-                self.dropouts = torch.nn.ModuleList([torch.nn.Dropout(p=droprate) for i in range(len(self.sep_layers))])
+                self.lns = torch.nn.ModuleList([LayerNorm(embed_condition_size, export=False) for i in range(sep_num)])
+                self.activation_fns = torch.nn.ModuleList([torch.nn.PReLU() for i in range(sep_num)])
+                self.dropouts = torch.nn.ModuleList([torch.nn.Dropout(p=droprate) for i in range(sep_num)])
 
         
     def forward(
@@ -442,8 +445,9 @@ class ESPnetHierASRModel(ESPnetASRModel):
                 # 1. Extract LID feats
                 lid_speech = speech
                 lid_speech_lengths = speech_lengths
+                feats_lid, feats_lid_lengths, feats_layers, feats_lengths_layers = self._extract_feats(speech, speech_lengths, condition_features, start_layer=start_layer, end_layer=end_layer, featurizer_index=index, feats_layers=feats_layers, feats_lengths_layers=feats_lengths_layers)
+
                 if self.lid_audio_length > 0:
-                    feats_lid, feats_lid_lengths, feats_layers, feats_lengths_layers = self._extract_feats(speech, speech_lengths, condition_features, start_layer=start_layer, end_layer=end_layer, featurizer_index=index, feats_layers=feats_layers, feats_lengths_layers=feats_lengths_layers)
                     # Random cropping
                     lid_feats_lengths = self.lid_audio_length // 150
                     if feats_lid_lengths.min() > lid_feats_lengths:
@@ -485,6 +489,10 @@ class ESPnetHierASRModel(ESPnetASRModel):
 
             lid_embd = self.project_lid_embd(encoder_lid_out)
             lid_embd_list.append(lid_embd)
+
+            # does not need to generate condition features from the last layer
+            if self.sep_layers[index] == 24:
+                break
 
             # 5. generate lid condition features
             if self.embed_condition:
