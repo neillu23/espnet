@@ -69,7 +69,7 @@ class ESPnetHierASRModel(ESPnetASRModel):
         lid_condition_feature: str = "soft",
         lid_condition_activate: Optional[str] = None,
         preencoder_lid_nums: int = 1,
-        sep_layers: List[int] = [24],
+        sep_layers: List[int] = [],
         droprate: float = 0.3,
         aux_ctc: dict = None,
         ctc_weight: float = 0.5,
@@ -143,7 +143,10 @@ class ESPnetHierASRModel(ESPnetASRModel):
         self.lid_start_begin = lid_start_begin
         self.separate_forward = separate_forward
         self.lid_condition_activate = lid_condition_activate
-        self.sep_layers = sep_layers
+        if len(sep_layers) == 0:
+            self.sep_layers = [self.frontend.upstream.num_layers - 1]
+        else:
+            self.sep_layers = sep_layers
         self.preencoder_lid_nums = preencoder_lid_nums
         
         assert(separate_forward == True), "separate_forward must be True"
@@ -151,7 +154,7 @@ class ESPnetHierASRModel(ESPnetASRModel):
         if self.embed_condition and self.lid_condition_feature == "soft":
             # 256 is the size of the lid/speaker embedding
             sep_num = len(self.sep_layers)
-            if self.sep_layers[-1] == 24:
+            if self.sep_layers[-1] == self.frontend.upstream.num_layers - 1:
                 sep_num = sep_num - 1
             self.lang_embeddings = torch.nn.ModuleList([torch.nn.Linear(256, embed_condition_size) for i in range(sep_num)])
 
@@ -491,7 +494,7 @@ class ESPnetHierASRModel(ESPnetASRModel):
             lid_embd_list.append(lid_embd)
 
             # does not need to generate condition features from the last layer
-            if self.sep_layers[index] == 24:
+            if self.sep_layers[index] == self.frontend.upstream.num_layers - 1:
                 break
 
             # 5. generate lid condition features
@@ -525,7 +528,7 @@ class ESPnetHierASRModel(ESPnetASRModel):
         # 6. Forward encoder for ASR
 
         with autocast(False):
-            if self.sep_layers[-1] < 24:
+            if self.sep_layers[-1] < self.frontend.upstream.num_layers - 1:
                 feats_layers_new, feats_lengths_new = self.frontend.upstream(speech, speech_lengths, condition_features, split_forward=True, last_layer_result=self.intermediate_outputs, start_layer=self.sep_layers[-1], end_layer=24)
                 feats_layers = feats_layers[:-1]
                 feats_layers.extend(feats_layers_new)

@@ -97,6 +97,7 @@ class TrainerOptions:
     unused_parameters: bool
     wandb_model_log_interval: int
     create_graph_in_tensorboard: bool
+    eval_param: Sequence[str]
 
 
 class Trainer:
@@ -542,6 +543,7 @@ class Trainer:
         use_wandb = options.use_wandb
         create_graph_in_tensorboard = options.create_graph_in_tensorboard
         distributed = distributed_option.distributed
+        eval_param = options.eval_param
 
         if log_interval is None:
             try:
@@ -550,6 +552,15 @@ class Trainer:
                 log_interval = 100
 
         model.train()
+
+        # set eval mode for specified modules
+        for name, module in model.named_modules():
+            # logging.info(f"name: {name}")
+            if name in eval_param or name.replace("module.", "") in eval_param:
+                module.eval()  
+                logging.info(f"Set eval mode for {name}")
+
+
         all_steps_are_invalid = True
         # [For distributed] Because iteration counts are not always equals between
         # processes, send stop-flag to the other processes if iterator is finished
@@ -567,6 +578,7 @@ class Trainer:
                     break
 
             batch["utt_id"] = utt_id
+            # logging.info("utt_id: {}".format(utt_id) )
 
             batch = to_device(batch, "cuda" if ngpu > 0 else "cpu")
             if no_forward_run:
@@ -657,6 +669,8 @@ class Trainer:
                             # Apply weighted averaging for loss and stats
                             loss_item = (loss_item * weight.type(loss_item.dtype)).sum()
 
+                            # logging.info("stats: " + str(stats))
+                            # logging.info("weight: " + str(weight))
                             # if distributed, this method can also apply all_reduce()
                             stats, weight = recursive_average(stats, weight, distributed)
                             
@@ -673,6 +687,8 @@ class Trainer:
                         # Apply weighted averaging for loss and stats
                         loss = (loss * weight.type(loss.dtype)).sum()
 
+                        # logging.info("stats: " + str(stats))
+                        # logging.info("weight: " + str(weight))
                         # if distributed, this method can also apply all_reduce()
                         stats, weight = recursive_average(stats, weight, distributed)
                         # logging.info(f"weight: {weight}")
@@ -847,6 +863,9 @@ class Trainer:
                 weight = retval["weight"]
             else:
                 _, stats, weight = retval
+                
+            # logging.info("stats: " + str(stats))
+            # logging.info("weight: " + str(weight))
             if ngpu > 1 or distributed:
                 # Apply weighted averaging for stats.
                 # if distributed, this method can also apply all_reduce()

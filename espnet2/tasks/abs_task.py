@@ -707,6 +707,15 @@ class AbsTask(ABC):
             help="Unfreeze parameters after freezing",
         )
 
+
+        group.add_argument(
+            "--eval_param",
+            type=str,
+            default=[],
+            nargs="*",
+            help="Eval parameters during training",
+        )
+
         group = parser.add_argument_group("BatchSampler related")
         group.add_argument(
             "--num_iters_per_epoch",
