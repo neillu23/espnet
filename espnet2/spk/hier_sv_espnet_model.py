@@ -231,32 +231,33 @@ class ESPnetHierSVModel(ESPnetSpeakerModel):
             # does not need to generate condition features from the last layer
             if self.sep_layers[index] == self.frontend.upstream.num_layers - 1:
                 break
-                # 5. generate lid condition features
-                if self.embed_condition:
-                    if self.lid_condition_feature == "hard":
-                        # Compute cosine similarity
-                        cosine = F.linear(F.normalize(lid_embd), F.normalize(self.loss.weight))
-                        
-                        # Get the predicted speaker index
-                        cosine_similarity = torch.max(cosine, dim=1)
-                        langs_token = torch.argmax(cosine, dim=1)
+                
+            # 5. generate lid condition features
+            if self.embed_condition:
+                if self.lid_condition_feature == "hard":
+                    # Compute cosine similarity
+                    cosine = F.linear(F.normalize(lid_embd), F.normalize(self.loss.weight))
+                    
+                    # Get the predicted speaker index
+                    cosine_similarity = torch.max(cosine, dim=1)
+                    langs_token = torch.argmax(cosine, dim=1)
 
-                    # condition_features = self.lang_embedding(langs)
-                        condition_features = self.lang_embedding(langs_token).unsqueeze(1)
-                    elif self.lid_condition_feature == "GT":
-                        condition_features = self.lang_embedding(langs)
-                    elif self.lid_condition_feature == "soft":
-                        if self.lid_condition_activate == "LeakyReLU":
-                            # import pdb; pdb.set_trace()
-                            condition_features = self.lang_embedding(lid_embd).unsqueeze(1)
-                            condition_features = torch.nn.LeakyReLU()(condition_features)
-                        elif self.lid_condition_activate == "bndrop":
-                            # import pdb; pdb.set_trace()
-                            condition_features = self.lang_embeddings[index](lid_embd)
-                            condition_features = self.lns[index](condition_features)
-                            condition_features = condition_features.unsqueeze(1)
-                            condition_features = self.activation_fns[index](condition_features.to(torch.float32))
-                            condition_features = self.dropouts[index](condition_features)
+                # condition_features = self.lang_embedding(langs)
+                    condition_features = self.lang_embedding(langs_token).unsqueeze(1)
+                elif self.lid_condition_feature == "GT":
+                    condition_features = self.lang_embedding(langs)
+                elif self.lid_condition_feature == "soft":
+                    if self.lid_condition_activate == "LeakyReLU":
+                        # import pdb; pdb.set_trace()
+                        condition_features = self.lang_embedding(lid_embd).unsqueeze(1)
+                        condition_features = torch.nn.LeakyReLU()(condition_features)
+                    elif self.lid_condition_activate == "bndrop":
+                        # import pdb; pdb.set_trace()
+                        condition_features = self.lang_embeddings[index](lid_embd)
+                        condition_features = self.lns[index](condition_features)
+                        condition_features = condition_features.unsqueeze(1)
+                        condition_features = self.activation_fns[index](condition_features.to(torch.float32))
+                        condition_features = self.dropouts[index](condition_features)
 
 
 
