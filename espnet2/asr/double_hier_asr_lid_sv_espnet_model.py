@@ -81,10 +81,10 @@ class ESPnetDoubleHierASRLIDSVModel(ESPnetASRModel):
         lid_weight: float = 1.0,
         spk_weight: float = 1.0,
         lid_audio_length: int = 0,
-        spk_audio_length: int = 0,
         lid_start_begin: bool = False,
         separate_forward: bool = True,
         interctc_weight: float = 0.0,
+        combine_condition_method: str = "concat",
         ignore_id: int = -1,
         lsm_weight: float = 0.0,
         length_normalized_loss: bool = False,
@@ -152,12 +152,12 @@ class ESPnetDoubleHierASRLIDSVModel(ESPnetASRModel):
         self.lid_weight = lid_weight
         self.spk_weight = spk_weight
         self.lid_audio_length = lid_audio_length
-        self.spk_audio_length = spk_audio_length
         self.lid_start_begin = lid_start_begin
         self.separate_forward = separate_forward
         self.lid_condition_activate = lid_condition_activate
         self.sep_layers = sep_layers
         self.preencoder_lid_nums = preencoder_lid_nums
+        self.combine_condition_method = combine_condition_method
         
         assert(separate_forward == True), "separate_forward must be True"
 
@@ -174,6 +174,11 @@ class ESPnetDoubleHierASRLIDSVModel(ESPnetASRModel):
                 self.lns = torch.nn.ModuleList([LayerNorm(embed_condition_size, export=False) for i in range(sep_num)])
                 self.activation_fns = torch.nn.ModuleList([torch.nn.PReLU() for i in range(sep_num)])
                 self.dropouts = torch.nn.ModuleList([torch.nn.Dropout(p=droprate) for i in range(sep_num)])
+                
+                if self.combine_condition_method == "prod_sum":
+                    self.lns_spk = torch.nn.ModuleList([LayerNorm(embed_condition_size, export=False) for i in range(sep_num)])
+                    self.activation_fns_spk = torch.nn.ModuleList([torch.nn.PReLU() for i in range(sep_num)])
+                    self.dropouts_spk = torch.nn.ModuleList([torch.nn.Dropout(p=droprate) for i in range(sep_num)])
 
 
         
@@ -612,12 +617,29 @@ class ESPnetDoubleHierASRLIDSVModel(ESPnetASRModel):
                         # import pdb; pdb.set_trace()
                         condition_features_lid = self.lang_embeddings[index](lid_embd) # (Batch, 1, 256)
                         condition_features_spk = self.spk_embeddings[index](spk_embd) # (Batch, 1, 256)
-                        condition_features = condition_features_lid + condition_features_spk
-                        
-                        condition_features = self.lns[index](condition_features)
-                        condition_features = condition_features.unsqueeze(1)
-                        condition_features = self.activation_fns[index](condition_features)
-                        condition_features = self.dropouts[index](condition_features)
+                        if self.combine_condition_method == "concat":
+                            condition_features = condition_features_lid + condition_features_spk
+                            
+                            condition_features = self.lns[index](condition_features)
+                            condition_features = condition_features.unsqueeze(1)
+                            condition_features = self.activation_fns[index](condition_features)
+                            condition_features = self.dropouts[index](condition_features)
+
+                        elif self.combine_condition_method == "prod_sum":
+                            condition_features_lid = self.lns[index](condition_features_lid)
+                            condition_features_lid = condition_features_lid.unsqueeze(1)
+                            condition_features_lid = self.activation_fns[index](condition_features_lid)
+                            condition_features_lid = self.dropouts[index](condition_features_lid)
+
+                            condition_features_spk = self.lns_spk[index](condition_features_spk)
+                            condition_features_spk = condition_features_spk.unsqueeze(1)
+                            condition_features_spk = self.activation_fns_spk[index](condition_features_spk)
+                            condition_features_spk = self.dropouts_spk[index](condition_features_spk)
+
+                            condition_features = [condition_features_lid, condition_features_spk]
+
+                        else:
+                            raise NotImplementedError("combine_condition_method must be concat or prod_sum")
 
 
         # 6. Forward encoder for ASR
