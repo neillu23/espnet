@@ -76,6 +76,7 @@ class ESPnetDoubleHierASRLIDSVModel(ESPnetASRModel):
         lid_condition_activate: Optional[str] = None,
         preencoder_lid_nums: int = 1,
         sep_layers: List[int] = [],
+        sep_layers_spk: List[int] = [],
         droprate: float = 0.3,
         aux_ctc: dict = None,
         ctc_weight: float = 0.5,
@@ -85,6 +86,7 @@ class ESPnetDoubleHierASRLIDSVModel(ESPnetASRModel):
         lid_start_begin: bool = False,
         separate_forward: bool = True,
         combine_condition_method: str = "concat",
+        half_spk_condition: bool = False,
         interctc_weight: float = 0.0,
         ignore_id: int = -1,
         lsm_weight: float = 0.0,
@@ -158,11 +160,20 @@ class ESPnetDoubleHierASRLIDSVModel(ESPnetASRModel):
         self.separate_forward = separate_forward
         self.lid_condition_activate = lid_condition_activate
         self.combine_condition_method = combine_condition_method
+        self.half_spk_condition = half_spk_condition
         
         if len(sep_layers) == 0:
             self.sep_layers = [self.frontend.upstream.num_layers - 1]
         else:
             self.sep_layers = sep_layers
+
+        if len(sep_layers_spk) == 0:
+            self.sep_layers_spk = sep_layers
+        else:
+            for layer in sep_layers_spk:
+                assert(layer in sep_layers), "sep_layers_spk must be subset of sep_layers"
+            self.sep_layers_spk = sep_layers_spk
+
         self.preencoder_lid_nums = preencoder_lid_nums
         
         assert(separate_forward == True), "separate_forward must be True"
@@ -258,10 +269,11 @@ class ESPnetDoubleHierASRLIDSVModel(ESPnetASRModel):
         loss_spk = torch.tensor(0.0)
         loss_spk_ave = torch.tensor(0.0)
         if len(spk_valid_indices) > 0:
+            # import pdb; pdb.set_trace()
             spk_embd_list = [spk_embd[spk_valid_indices] for spk_embd in spk_embd_list]
             spk_labels = spk_labels[spk_valid_indices]
 
-            loss_spk_list = [self.loss(spk_embd, spk_labels) for spk_embd in spk_embd_list]
+            loss_spk_list = [self.loss_spk(spk_embd, spk_labels) for spk_embd in spk_embd_list]
             loss_spk_ave = sum(loss_spk_list) / len(loss_spk_list)
             loss_spk = loss_spk_list[-1]
 
@@ -509,6 +521,9 @@ class ESPnetDoubleHierASRLIDSVModel(ESPnetASRModel):
 
 
         condition_features = None
+        condition_features_lid = None
+        condition_features_spk = None
+
         feats_layers = []
         feats_lengths_layers = []
         
@@ -553,12 +568,10 @@ class ESPnetDoubleHierASRLIDSVModel(ESPnetASRModel):
                 # 2. Data augmentation
                 if self.specaug is not None and self.training:
                     feats_lid, feats_lid_lengths = self.specaug(feats_lid, feats_lid_lengths)
-                    feats_spk, feats_lengths = self.specaug(feats_spk, feats_spk_lengths)
 
                 # 3. Normalization for feature: e.g. Global-CMVN, Utterance-CMVN
                 if self.normalize is not None:
                     feats_lid, feats_lid_lengths = self.normalize(feats_lid, feats_lid_lengths)
-                    feats_spk, feats_lengths = self.normalize(feats_spk, feats_spk_lengths)
 
             
             hook_handle.remove()
@@ -568,13 +581,9 @@ class ESPnetDoubleHierASRLIDSVModel(ESPnetASRModel):
             # Pre-encoder, e.g. used for raw input data
             if self.preencoder_lid_nums > 1:
                 feats_lid, feats_lid_lengths = self.preencoder_lid[index](feats_lid, feats_lid_lengths)
-                if self.preencoder_spk is not None:
-                    feats_spk, feats_spk_lengths = self.preencoder_spk[index](feats_spk, feats_spk_lengths)
             else:
                 if self.preencoder_lid is not None:
                     feats_lid, feats_lid_lengths = self.preencoder_lid(feats_lid, feats_lid_lengths)
-                if self.preencoder_spk is not None:
-                    feats_spk, feats_spk_lengths = self.preencoder_spk(feats_spk, feats_spk_lengths)
 
             encoder_lid_out, encoder_lid_out_lens, _ = self.encoder_lid(feats_lid, feats_lid_lengths)
 
@@ -587,17 +596,20 @@ class ESPnetDoubleHierASRLIDSVModel(ESPnetASRModel):
             lid_embd = self.project_lid_embd(encoder_lid_out)
             lid_embd_list.append(lid_embd)
 
-
-
             # 4. Forward encoder for SV
-
-            task_tokens = None
-            # feats_spk, feats_lengths = self.frontend.featurizers_spk[index](feats_layers, feats_lengths_layers)
-            # logging.info("feats_spk: {}".format(feats_spk.shape))
-            frame_level_feats = self.encoder_spk(feats_spk)
-            utt_level_feat = self.pooling_spk(frame_level_feats, task_tokens)
-            spk_embd = self.project_spk_embd(utt_level_feat)
-            spk_embd_list.append(spk_embd)
+            if self.sep_layers[index] in self.sep_layers_spk: # not self.half_spk_condition or (index%2 == 0) or (index == len(self.sep_layers) - 1): 
+                if self.preencoder_lid_nums > 1:
+                    if self.preencoder_spk is not None:
+                        feats_spk, feats_spk_lengths = self.preencoder_spk[index](feats_spk, feats_spk_lengths)
+                else:
+                    if self.preencoder_spk is not None:
+                        feats_spk, feats_spk_lengths = self.preencoder_spk(feats_spk, feats_spk_lengths)
+                        
+                task_tokens = None
+                frame_level_feats = self.encoder_spk(feats_spk)
+                utt_level_feat = self.pooling_spk(frame_level_feats, task_tokens)
+                spk_embd = self.project_spk_embd(utt_level_feat)
+                spk_embd_list.append(spk_embd)
 
 
             # does not need to generate condition features from the last layer
@@ -626,7 +638,8 @@ class ESPnetDoubleHierASRLIDSVModel(ESPnetASRModel):
                     elif self.lid_condition_activate == "bndrop":
                         # import pdb; pdb.set_trace()
                         condition_features_lid = self.lang_embeddings[index](lid_embd) # (Batch, 1, 256)
-                        condition_features_spk = self.spk_embeddings[index](spk_embd) # (Batch, 1, 256)
+                        if self.sep_layers[index] in self.sep_layers_spk:
+                            condition_features_spk = self.spk_embeddings[index](spk_embd) # (Batch, 1, 256)
                         if self.combine_condition_method == "concat":
                             condition_features = condition_features_lid + condition_features_spk
                             
@@ -641,10 +654,11 @@ class ESPnetDoubleHierASRLIDSVModel(ESPnetASRModel):
                             condition_features_lid = self.activation_fns[index](condition_features_lid)
                             condition_features_lid = self.dropouts[index](condition_features_lid)
 
-                            condition_features_spk = self.lns_spk[index](condition_features_spk)
-                            condition_features_spk = condition_features_spk.unsqueeze(1)
-                            condition_features_spk = self.activation_fns_spk[index](condition_features_spk)
-                            condition_features_spk = self.dropouts_spk[index](condition_features_spk)
+                            if self.sep_layers[index] in self.sep_layers_spk:
+                                condition_features_spk = self.lns_spk[index](condition_features_spk)
+                                condition_features_spk = condition_features_spk.unsqueeze(1)
+                                condition_features_spk = self.activation_fns_spk[index](condition_features_spk)
+                                condition_features_spk = self.dropouts_spk[index](condition_features_spk)
 
                             condition_features = [condition_features_lid, condition_features_spk]
 
@@ -666,6 +680,12 @@ class ESPnetDoubleHierASRLIDSVModel(ESPnetASRModel):
             # for i in range(25):
             #     logging.info("feats_layers {} is the same as ori_feats_layers: {}".format(i, torch.all(torch.eq(ori_feats_layers[i],feats_layers[i]))))
             
+            # ori_feats_layers, ori_feats_lengths_layers = self.frontend.upstream(speech, speech_lengths, condition_features)
+            # for i in range(25):
+            #     logging.info("feats_layers {} ".format(i))
+            #     logging.info("feats_layers shape: {}".format(feats_layers[i].shape))
+            #     logging.info("feats_layers features: {}".format(feats_layers[i]))
+            # exit()
             # import pdb; pdb.set_trace()
             feats, feats_lengths = self.frontend.featurizer_asr(feats_layers, feats_lengths_layers)
 
@@ -729,7 +749,8 @@ class ESPnetDoubleHierASRLIDSVModel(ESPnetASRModel):
         # utt_level_feat = self.pooling_spk(frame_level_feats, task_tokens)
         # spk_embd = self.project_spk_embd(utt_level_feat)
 
-
+        # logging.info("spk_embd_list: {}".format(spk_embd_list[-1]))
+        # exit()
         if intermediate_outs is not None:
             return (encoder_out, intermediate_outs), encoder_out_lens, lid_embd_list, encoder_lid_out_lens, spk_embd_list
 

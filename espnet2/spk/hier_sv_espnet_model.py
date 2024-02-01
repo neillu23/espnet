@@ -2,7 +2,7 @@
 #  Apache 2.0  (http://www.apache.org/licenses/LICENSE-2.0)
 
 from typing import Dict, List, Optional, Tuple, Union
-
+import logging
 import torch
 from typeguard import check_argument_types
 
@@ -232,39 +232,33 @@ class ESPnetHierSVModel(ESPnetSpeakerModel):
             if self.sep_layers[index] == self.frontend.upstream.num_layers - 1:
                 break
                 
-            # 5. generate lid condition features
-            if self.embed_condition:
-                if self.lid_condition_feature == "hard":
-                    # Compute cosine similarity
-                    cosine = F.linear(F.normalize(lid_embd), F.normalize(self.loss.weight))
-                    
-                    # Get the predicted speaker index
-                    cosine_similarity = torch.max(cosine, dim=1)
-                    langs_token = torch.argmax(cosine, dim=1)
+            with autocast(False):
+                # 5. generate lid condition features
+                if self.embed_condition:
+                    if self.lid_condition_feature == "hard":
+                        # Compute cosine similarity
+                        cosine = F.linear(F.normalize(lid_embd), F.normalize(self.loss.weight))
+                        
+                        # Get the predicted speaker index
+                        cosine_similarity = torch.max(cosine, dim=1)
+                        langs_token = torch.argmax(cosine, dim=1)
 
-                # condition_features = self.lang_embedding(langs)
-                    condition_features = self.lang_embedding(langs_token).unsqueeze(1)
-                elif self.lid_condition_feature == "GT":
-                    condition_features = self.lang_embedding(langs)
-                elif self.lid_condition_feature == "soft":
-                    if self.lid_condition_activate == "LeakyReLU":
-                        # import pdb; pdb.set_trace()
-                        condition_features = self.lang_embedding(lid_embd).unsqueeze(1)
-                        condition_features = torch.nn.LeakyReLU()(condition_features)
-                    elif self.lid_condition_activate == "bndrop":
-                        # import pdb; pdb.set_trace()
-                        condition_features = self.lang_embeddings[index](lid_embd)
-                        condition_features = self.lns[index](condition_features)
-                        condition_features = condition_features.unsqueeze(1)
-                        condition_features = self.activation_fns[index](condition_features.to(torch.float32))
-                        condition_features = self.dropouts[index](condition_features)
-
-
-
-
-        # # 1. extract low-level feats (e.g., mel-spectrogram or MFCC)
-        # # Will do nothing for raw waveform-based models (e.g., RawNets)
-        # feats, _ , feats_layers, _ = self.extract_feats(speech, None, condition_features)
+                    # condition_features = self.lang_embedding(langs)
+                        condition_features = self.lang_embedding(langs_token).unsqueeze(1)
+                    elif self.lid_condition_feature == "GT":
+                        condition_features = self.lang_embedding(langs)
+                    elif self.lid_condition_feature == "soft":
+                        if self.lid_condition_activate == "LeakyReLU":
+                            # import pdb; pdb.set_trace()
+                            condition_features = self.lang_embedding(lid_embd).unsqueeze(1)
+                            condition_features = torch.nn.LeakyReLU()(condition_features)
+                        elif self.lid_condition_activate == "bndrop":
+                            # import pdb; pdb.set_trace()
+                            condition_features = self.lang_embeddings[index](lid_embd)
+                            condition_features = self.lns[index](condition_features)
+                            condition_features = condition_features.unsqueeze(1)
+                            condition_features = self.activation_fns[index](condition_features.to(torch.float32))
+                            condition_features = self.dropouts[index](condition_features)
 
 
 
@@ -281,6 +275,12 @@ class ESPnetHierSVModel(ESPnetSpeakerModel):
             # ori_feats_layers, ori_feats_lengths_layers = self.frontend.upstream(speech, speech_lengths, condition_features)
             # for i in range(25):
             #     logging.info("feats_layers {} is the same as ori_feats_layers: {}".format(i, torch.all(torch.eq(ori_feats_layers[i],feats_layers[i]))))
+            # for i in range(25):
+            #     # logging.info("feats_layers {} is the same as ori_feats_layers: {}".format(i, torch.all(torch.eq(ori_feats_layers[i],feats_layers[i]))))
+            #     logging.info("layer_index: {}".format(i))
+            #     logging.info("feats_layers shape: {}".format(feats_layers[i].shape))
+            #     logging.info("feats_layers features: {}".format(feats_layers[i]))
+            # exit()
 
 
             feats, feats_lengths = self.frontend.featurizer_asr(feats_layers, feats_lengths_layers)

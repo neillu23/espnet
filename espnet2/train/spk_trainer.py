@@ -506,6 +506,9 @@ class SpkTrainer(Trainer):
                                     speech=speech_list,
                                     speech_lengths=torch.tensor([sp.size(0) for sp in speech_list]).to("cuda" if ngpu > 0 else "cpu")
                                 )[-1]
+                                # if spk_embds is list
+                                if isinstance(spk_embds, list):
+                                    spk_embds = spk_embds[-1]
                             else:
                                 spk_embds = model(
                                     speech=speech_list,
@@ -554,6 +557,9 @@ class SpkTrainer(Trainer):
                                     speech=speech_list,
                                     speech_lengths=torch.tensor([sp.size(0) for sp in speech_list]).to("cuda" if ngpu > 0 else "cpu")
                                 )[-1]
+
+                                if isinstance(spk_embds, list):
+                                    spk_embds = spk_embds[-1]
                                 
                             else:
                                 spk_embds = model(
@@ -578,6 +584,8 @@ class SpkTrainer(Trainer):
                             speech_list = []
 
                         idx += 1
+                        
+                
 
         if len(utt_id_list) != 0:
             num_eval = speech_list[0].shape[0]
@@ -607,6 +615,9 @@ class SpkTrainer(Trainer):
                     speech=speech_list,
                     speech_lengths=torch.tensor([sp.size(0) for sp in speech_list]).to("cuda" if ngpu > 0 else "cpu")
                 )[-1]
+
+                if isinstance(spk_embds, list):
+                    spk_embds = spk_embds[-1]
             else:
                 spk_embds = model(
                     speech=speech_list,

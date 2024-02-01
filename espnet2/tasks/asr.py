@@ -181,6 +181,19 @@ preencoder_lid_choices = ClassChoices(
     optional=True,
 )
 
+
+preencoder_spk_choices = ClassChoices(
+    name="preencoder_spk",
+    classes=dict(
+        sinc=LightweightSincConvs,
+        linear=LinearProjection,
+    ),
+    type_check=AbsPreEncoder,
+    default=None,
+    optional=True,
+)
+
+
 encoder_choices = ClassChoices(
     "encoder",
     classes=dict(
@@ -371,6 +384,8 @@ class ASRTask(AbsTask):
         preencoder_choices,
         # --preencoder_lid and --preencoder_lid_conf
         preencoder_lid_choices,
+        # --preencoder_spk and --preencoder_spk_conf
+        preencoder_spk_choices,
         # --encoder and --encoder_conf
         encoder_choices,
         # # --encoder_lid and --encoder_lid_conf
@@ -895,8 +910,25 @@ class ASRTask(AbsTask):
                 )
             if model_class in [ESPnetHierASRLIDSVModel, ESPnetJointASRLIDSVModel, ESPnetDoubleHierASRLIDSVModel]:
                 # spk related modules
+                if preencoder_lid_nums > 1:
+                    preencoder_spk_class = preencoder_choices.get_class(args.preencoder_spk)
+                    preencoder_spk = torch.nn.ModuleList([preencoder_spk_class(**args.preencoder_spk_conf) for i in range(preencoder_lid_nums)])
+
+                    spk_input_size = preencoder_spk[0].output_size()
+                else:
+                    if getattr(args, "preencoder_spk", None) is not None:
+                        preencoder_spk_class = preencoder_choices.get_class(args.preencoder_spk)
+                        preencoder_spk = preencoder_spk_class(**args.preencoder_spk_conf)
+                        spk_input_size = preencoder_spk.output_size()
+                    else:
+                        preencoder_spk = None
+                        if args.input_size is None:
+                            spk_input_size = frontend.output_size()
+                        else:
+                            spk_input_size = args.input_size
+
                 encoder_spk_class = encoder_spk_choices.get_class(args.encoder_spk)
-                encoder_spk = encoder_spk_class(input_size=frontend.output_size(), **args.encoder_spk_conf)
+                encoder_spk = encoder_spk_class(input_size=spk_input_size, **args.encoder_spk_conf)
                 encoder_spk_output_size = encoder_spk.output_size()
             
                 pooling_spk_class = pooling_spk_choices.get_class(args.pooling_spk)
@@ -933,6 +965,7 @@ class ASRTask(AbsTask):
                     token_list=token_list,
                     lid_tokens=lid_tokens,
                     langs_num=langs_num,
+                    preencoder_spk=preencoder_spk,
                     encoder_spk=encoder_spk,
                     pooling_spk=pooling_spk,
                     projector_spk=projector_spk,
