@@ -145,13 +145,19 @@ class ESPnetJointASRModel(ESPnetASRModel):
         self.lid_condition_feature = lid_condition_feature
         self.lid_condition_activate = lid_condition_activate
         # if 
+
+        if embed_condition and (lid_condition_feature == "weighted_cosine"):
+            self.langs_num = langs_num
+            self.lang_embedding = torch.nn.Linear(langs_num, embed_condition_size)
+            # self.lang_embedding = torch.nn.Embedding(langs_num, embed_condition_size)
+
         if self.embed_condition and lid_condition_feature == "soft":
             self.lang_embedding = torch.nn.Linear(256, embed_condition_size)
 
-            if self.lid_condition_activate == "bndrop":
-                self.ln = LayerNorm(embed_condition_size, export=False)
-                self.activation_fn = torch.nn.PReLU()
-                self.dropout = torch.nn.Dropout(p=droprate)
+        if self.lid_condition_activate == "bndrop":
+            self.ln = LayerNorm(embed_condition_size, export=False)
+            self.activation_fn = torch.nn.PReLU()
+            self.dropout = torch.nn.Dropout(p=droprate)
 
         
     def forward(
@@ -435,6 +441,19 @@ class ESPnetJointASRModel(ESPnetASRModel):
 
             # condition_features = self.lang_embedding(langs)
                 condition_features = self.lang_embedding(langs_token).unsqueeze(1)
+            elif self.lid_condition_feature == "weighted_cosine":
+                # Compute cosine similarity
+                cosine = F.linear(F.normalize(lid_embd), F.normalize(self.loss.weight))
+                cosine_probabilities = F.softmax(cosine, dim=-1)
+                if self.lid_condition_activate == "LeakyReLU":
+                    condition_features = self.lang_embedding(cosine).unsqueeze(1)
+                    condition_features = torch.nn.LeakyReLU()(condition_features)
+                if self.lid_condition_activate == "bndrop":
+                    condition_features = self.lang_embedding(cosine)
+                    condition_features = self.ln(condition_features)
+                    condition_features = condition_features.unsqueeze(1)
+                    condition_features = self.activation_fn(condition_features)
+                    condition_features = self.dropout(condition_features)
             elif self.lid_condition_feature == "GT":
                 condition_features = self.lang_embedding(langs)
             elif self.lid_condition_feature == "soft":
