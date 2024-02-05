@@ -23,6 +23,7 @@ from espnet2.spk.encoder.ecapa_tdnn_encoder import EcapaTdnnEncoder
 from espnet2.spk.encoder.rawnet3_encoder import RawNet3Encoder
 from espnet2.spk.espnet_model import ESPnetSpeakerModel
 from espnet2.spk.hier_sv_espnet_model import ESPnetHierSVModel
+from espnet2.spk.hier_sv_espnet_model_test import ESPnetHierSVModelTest
 from espnet2.spk.loss.aamsoftmax import AAMSoftmax
 from espnet2.spk.loss.aamsoftmax_subcenter_intertopk import (
     ArcMarginProduct_intertopk_subcenter,
@@ -97,6 +98,7 @@ normalize_choices = ClassChoices(
 encoder_choices = ClassChoices(
     name="encoder",
     classes=dict(
+        resnet_enc=ResNetEncoder,
         rawnet3=RawNet3Encoder,
         ecapa_tdnn=EcapaTdnnEncoder,
     ),
@@ -151,6 +153,7 @@ model_choices = ClassChoices(
     classes=dict(
         espnet=ESPnetSpeakerModel,
         joint_hier_espnet=ESPnetHierSVModel,
+        joint_hier_espnet_test=ESPnetHierSVModelTest,
     ),
     type_check=AbsESPnetModel,
     default="espnet",
@@ -461,7 +464,7 @@ class SpeakerTask(AbsTask):
             model_class = model_choices.get_class("espnet")
 
 
-        if model_class == ESPnetHierSVModel:
+        if model_class in [ESPnetHierSVModel, ESPnetHierSVModelTest]:
                 
             preencoder_lid_nums = args.model_conf.get("preencoder_lid_nums", 1)
             if preencoder_lid_nums > 1:
@@ -494,7 +497,7 @@ class SpeakerTask(AbsTask):
             projector_lid_class = projector_lid_choices.get_class(args.projector_lid)
             projector_lid = projector_lid_class(**args.projector_lid_conf)
 
-            model = ESPnetHierSVModel(
+            model = model_class(
                 frontend=frontend,
                 specaug=specaug,
                 normalize=normalize,

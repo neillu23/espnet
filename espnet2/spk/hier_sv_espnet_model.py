@@ -17,6 +17,7 @@ from espnet2.spk.projector.abs_projector import AbsProjector
 from espnet2.spk.espnet_model import ESPnetSpeakerModel
 from espnet2.torch_utils.device_funcs import force_gatherable
 from espnet2.train.abs_espnet_model import AbsESPnetModel
+from espnet2.asr.encoder.resnet_encoder import ResNetEncoder
 
 from espnet2.asr.preencoder.abs_preencoder import AbsPreEncoder
 from espnet2.asr.postencoder.abs_postencoder import AbsPostEncoder
@@ -285,12 +286,11 @@ class ESPnetHierSVModel(ESPnetSpeakerModel):
 
             feats, feats_lengths = self.frontend.featurizer_asr(feats_layers, feats_lengths_layers)
 
-
         # Pre-encoder, e.g. used for raw input data
         if self.preencoder is not None:
             feats, feats_lengths = self.preencoder(feats, feats_lengths)
 
-        frame_level_feats = self.encode_frame(feats)
+        frame_level_feats = self.encode_frame(feats, feats_lengths)
 
         # 2. aggregation into utterance-level
         utt_level_feat = self.pooling(frame_level_feats, task_tokens)
@@ -344,10 +344,16 @@ class ESPnetHierSVModel(ESPnetSpeakerModel):
 
                 return feats, feats_lengths, feats_layers, feats_lengths_layers
         
-    def encode_frame(self, feats: torch.Tensor) -> torch.Tensor:
-        frame_level_feats = self.encoder(feats)
+
+    def encode_frame(self, feats: torch.Tensor, feats_lengths: torch.Tensor) -> torch.Tensor:
+        if isinstance(self.encoder, ResNetEncoder):
+            feats_lengths.to(feats.device)
+            frame_level_feats, _, _  = self.encoder(feats, feats_lengths)
+        else:
+            frame_level_feats = self.encoder(feats)
 
         return frame_level_feats
+        
 
     def aggregate(self, frame_level_feats: torch.Tensor) -> torch.Tensor:
         utt_level_feat = self.aggregator(frame_level_feats)
