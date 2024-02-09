@@ -54,6 +54,7 @@ class ESPnetJointASRLIDSVModel(ESPnetASRModel):
         normalize: Optional[AbsNormalize],
         preencoder: Optional[AbsPreEncoder],
         preencoder_lid: Union[AbsPreEncoder,torch.nn.modules.container.ModuleList],
+        preencoder_spk: Union[AbsPreEncoder,torch.nn.modules.container.ModuleList],
         encoder: AbsEncoder,
         encoder_lid: AbsEncoder,
         encoder_spk: Optional[AbsEncoder], 
@@ -144,6 +145,7 @@ class ESPnetJointASRLIDSVModel(ESPnetASRModel):
 
         )
         self.preencoder_lid = preencoder_lid
+        self.preencoder_spk = preencoder_spk
         self.encoder_lid = encoder_lid
         self.encoder_spk = encoder_spk
         self.postencoder_lid = postencoder_lid
@@ -492,12 +494,12 @@ class ESPnetJointASRLIDSVModel(ESPnetASRModel):
             # 2. Data augmentation
             if self.specaug is not None and self.training:
                 feats_lid, feats_lid_lengths = self.specaug(feats_lid, feats_lid_lengths)
-                feats_spk, feats_lengths = self.specaug(feats_spk, feats_spk_lengths)
+                # feats_spk, feats_lengths = self.specaug(feats_spk, feats_spk_lengths)
 
             # 3. Normalization for feature: e.g. Global-CMVN, Utterance-CMVN
             if self.normalize is not None:
                 feats_lid, feats_lid_lengths = self.normalize(feats_lid, feats_lid_lengths)
-                feats_spk, feats_lengths = self.normalize(feats_spk, feats_spk_lengths)
+                # feats_spk, feats_lengths = self.normalize(feats_spk, feats_spk_lengths)
 
             if self.lid_weight > 0.0 or self.lid_condition:            
                 # hook_handle.remove()
@@ -522,6 +524,8 @@ class ESPnetJointASRLIDSVModel(ESPnetASRModel):
 
 
             # 4. Forward encoder for SV
+            if self.preencoder_spk is not None:
+                feats_spk, feats_spk_lengths = self.preencoder_spk(feats_spk, feats_spk_lengths)
 
             task_tokens = None
             # feats_spk, feats_lengths = self.frontend.featurizers_spk[index](feats_layers, feats_lengths_layers)
