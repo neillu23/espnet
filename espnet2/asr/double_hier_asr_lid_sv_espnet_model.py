@@ -86,7 +86,6 @@ class ESPnetDoubleHierASRLIDSVModel(ESPnetASRModel):
         lid_start_begin: bool = False,
         separate_forward: bool = True,
         combine_condition_method: str = "concat",
-        half_spk_condition: bool = False,
         interctc_weight: float = 0.0,
         ignore_id: int = -1,
         lsm_weight: float = 0.0,
@@ -160,7 +159,7 @@ class ESPnetDoubleHierASRLIDSVModel(ESPnetASRModel):
         self.separate_forward = separate_forward
         self.lid_condition_activate = lid_condition_activate
         self.combine_condition_method = combine_condition_method
-        self.half_spk_condition = half_spk_condition
+        # self.half_spk_condition = half_spk_condition
         
         if len(sep_layers) == 0:
             self.sep_layers = [self.frontend.upstream.num_layers - 1]

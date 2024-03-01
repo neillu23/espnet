@@ -54,6 +54,7 @@ class ESPnetHierASRLIDSVModel(ESPnetASRModel):
         normalize: Optional[AbsNormalize],
         preencoder: Optional[AbsPreEncoder],
         preencoder_lid: Union[AbsPreEncoder,torch.nn.modules.container.ModuleList],
+        preencoder_spk: Union[AbsPreEncoder,torch.nn.modules.container.ModuleList],
         encoder: AbsEncoder,
         encoder_lid: AbsEncoder,
         encoder_spk: Optional[AbsEncoder], 
@@ -141,6 +142,7 @@ class ESPnetHierASRLIDSVModel(ESPnetASRModel):
 
         )
         self.preencoder_lid = preencoder_lid
+        self.preencoder_spk = preencoder_spk
         self.encoder_lid = encoder_lid
         self.encoder_spk = encoder_spk
         self.postencoder_lid = postencoder_lid
@@ -160,7 +162,6 @@ class ESPnetHierASRLIDSVModel(ESPnetASRModel):
             self.sep_layers = [self.frontend.upstream.num_layers - 1]
         else:
             self.sep_layers = sep_layers
-        self.sep_layers = sep_layers
         self.preencoder_lid_nums = preencoder_lid_nums
         
         assert(separate_forward == True), "separate_forward must be True"
@@ -410,7 +411,7 @@ class ESPnetHierASRLIDSVModel(ESPnetASRModel):
         stats["loss_lid_ave"] = loss_lid_ave.detach()
         stats["loss_spk"] = loss_spk.detach()
 
-        loss = loss_asr + self.lid_weight * loss_lid_ave + self.spk_weight * loss_spk
+        loss = loss_asr + self.lid_weight * (loss_lid_ave + loss_lid) + self.spk_weight * loss_spk
         stats["loss"] = loss.detach()
 
 
@@ -657,6 +658,8 @@ class ESPnetHierASRLIDSVModel(ESPnetASRModel):
         batch_size = speech.shape[0]
 
         feats, feats_lengths = self.frontend.featurizer_spk(feats_layers, feats_lengths_layers)
+        if self.preencoder_spk is not None:
+            feats, feats_lengths = self.preencoder_spk(feats, feats_lengths)
         frame_level_feats = self.encoder_spk(feats)
         utt_level_feat = self.pooling_spk(frame_level_feats, task_tokens)
         spk_embd = self.project_spk_embd(utt_level_feat)

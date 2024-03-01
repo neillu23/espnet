@@ -910,7 +910,7 @@ class ASRTask(AbsTask):
                 )
             if model_class in [ESPnetHierASRLIDSVModel, ESPnetJointASRLIDSVModel, ESPnetDoubleHierASRLIDSVModel]:
                 # spk related modules
-                if preencoder_lid_nums > 1:
+                if preencoder_lid_nums > 1 and model_class == ESPnetDoubleHierASRLIDSVModel:
                     preencoder_spk_class = preencoder_choices.get_class(args.preencoder_spk)
                     preencoder_spk = torch.nn.ModuleList([preencoder_spk_class(**args.preencoder_spk_conf) for i in range(preencoder_lid_nums)])
 
