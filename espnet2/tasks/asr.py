@@ -59,6 +59,7 @@ from espnet2.asr.frontend.abs_frontend import AbsFrontend
 from espnet2.asr.frontend.default import DefaultFrontend
 from espnet2.asr.frontend.fused import FusedFrontends
 from espnet2.asr.frontend.s3prl import S3prlFrontend
+from espnet2.asr.frontend.s3prl_shalli import S3prlSHALLiFrontend
 from espnet2.asr.frontend.whisper import WhisperFrontend
 from espnet2.asr.frontend.windowing import SlidingWindow
 from espnet2.asr.maskctc_model import MaskCTCModel
@@ -66,6 +67,7 @@ from espnet2.asr.pit_espnet_model import ESPnetASRModel as PITESPnetModel
 from espnet2.asr.joint_asr_espnet_model import ESPnetJointASRModel
 from espnet2.asr.joint_asr_lid_sv_espnet_model import ESPnetJointASRLIDSVModel
 from espnet2.asr.double_hier_asr_lid_sv_espnet_model import ESPnetDoubleHierASRLIDSVModel
+from espnet2.asr.shalli_espnet_model import ESPnetSHALLiModel
 from espnet2.asr.hier_asr_espnet_model import ESPnetHierASRModel
 from espnet2.asr.hier_lid_espnet_model import ESPnetHierLIDModel
 from espnet2.asr.hier_asr_lid_sv_espnet_model import ESPnetHierASRLIDSVModel
@@ -117,6 +119,7 @@ frontend_choices = ClassChoices(
         default=DefaultFrontend,
         sliding_window=SlidingWindow,
         s3prl=S3prlFrontend,
+        s3prl_shalli=S3prlSHALLiFrontend,
         fused=FusedFrontends,
         whisper=WhisperFrontend,
     ),
@@ -154,7 +157,8 @@ model_choices = ClassChoices(
         joint_hier_espnet=ESPnetHierASRModel,
         lid_hier_espnet=ESPnetHierLIDModel,
         joint_hier_asr_lid_sv_espnet=ESPnetHierASRLIDSVModel,
-        lid_espnet=ESPnetLIDModel
+        lid_espnet=ESPnetLIDModel,
+        shalli_espnet=ESPnetSHALLiModel
     ),
     type_check=AbsESPnetModel,
     default="espnet",
@@ -301,8 +305,8 @@ preprocessor_choices = ClassChoices(
 )
 
 
-projector_choices = ClassChoices(
-    name="projector",
+projector_lid_choices = ClassChoices(
+    name="projector_lid",
     classes=dict(
         # TODO (Jee-weon): implement additional Projectors
         # one_layer=OneLayerProjector,
@@ -312,8 +316,8 @@ projector_choices = ClassChoices(
     default="rawnet3",
 )
 
-loss_choices = ClassChoices(
-    name="loss",
+loss_lid_choices = ClassChoices(
+    name="loss_lid",
     classes=dict(
         aamsoftmax=AAMSoftmax,
     ),
@@ -398,10 +402,10 @@ class ASRTask(AbsTask):
         decoder_choices,
         # --preprocessor and --preprocessor_conf
         preprocessor_choices,
-        # --projector and --projector_conf
-        projector_choices,
-        # --loss and --loss_conf
-        loss_choices,
+        # --projector_lid and --projector_lid_conf
+        projector_lid_choices,
+        # --loss_lid and --loss_lid_conf
+        loss_lid_choices,
         # --encoder_spk and --encoder_spk_conf
         encoder_spk_choices,
         # --pooling_spk and --pooling_spk_conf
@@ -848,10 +852,10 @@ class ASRTask(AbsTask):
         except AttributeError:
             model_class = model_choices.get_class("espnet")
 
-        # if model_class == ESPnetJointASRModel or model_class == ESPnetHierASRModel or model_class == ESPnetHierASRLIDSVModel  or model_class == ESPnetHierLIDModel or model_class == ESPnetDoubleHierASRLIDSVModel:
-        # # rewrite
-        if model_class in [ESPnetJointASRModel, ESPnetJointASRLIDSVModel, ESPnetHierASRModel, ESPnetHierASRLIDSVModel, ESPnetHierLIDModel, ESPnetDoubleHierASRLIDSVModel]:
-            preencoder_lid_nums = args.model_conf.get("preencoder_lid_nums", 1)
+        if model_class in [ESPnetSHALLiModel, ESPnetJointASRModel, ESPnetJointASRLIDSVModel, ESPnetHierASRModel, ESPnetHierASRLIDSVModel, ESPnetHierLIDModel, ESPnetDoubleHierASRLIDSVModel]: 
+            lid_layer_selections = args.frontend_conf.get("lid_layer_selections", None)
+            preencoder_lid_nums = len(lid_layer_selections) if lid_layer_selections is not None else 1
+
             if preencoder_lid_nums > 1:
                 preencoder_lid_class = preencoder_choices.get_class(args.preencoder_lid)
                 preencoder_lid = torch.nn.ModuleList([preencoder_lid_class(**args.preencoder_lid_conf) for i in range(preencoder_lid_nums)])
@@ -879,33 +883,34 @@ class ASRTask(AbsTask):
                 )
                 encoder_lid_output_size = postencoder_lid.output_size()
 
-            projector_class = projector_choices.get_class(args.projector)
-            projector = projector_class(**args.projector_conf)
+            projector_lid_class = projector_lid_choices.get_class(args.projector_lid)
+            projector_lid = projector_lid_class(**args.projector_lid_conf)
 
-            loss_class = loss_choices.get_class(args.loss)
-            loss = loss_class(**args.loss_conf)
+            loss_lid_class = loss_lid_choices.get_class(args.loss_lid)
+            loss_lid = loss_lid_class(**args.loss_lid_conf)
             
-            # if model_class == ESPnetJointASRModel or model_class == ESPnetHierASRModel or model_class == ESPnetHierLIDModel:
-            if model_class in [ESPnetJointASRModel, ESPnetHierASRModel, ESPnetHierLIDModel]:
+            if model_class in [ESPnetSHALLiModel, ESPnetJointASRModel, ESPnetHierASRModel, ESPnetHierLIDModel]:
                 model = model_class(
                     vocab_size=vocab_size,
                     frontend=frontend,
                     specaug=specaug,
                     normalize=normalize,
-                    preencoder_lid=preencoder_lid,
                     preencoder=preencoder,
-                    encoder_lid=encoder_lid,
                     encoder=encoder,
                     postencoder=postencoder,
+                    preencoder_lid=preencoder_lid,
+                    encoder_lid=encoder_lid,
                     postencoder_lid=postencoder_lid,
-                    projector=projector,
-                    loss=loss,
+                    projector_lid=projector_lid,
+                    loss_lid=loss_lid,
                     decoder=decoder,
                     ctc=ctc,
                     joint_network=joint_network,
                     token_list=token_list,
                     lid_tokens=lid_tokens,
                     langs_num=langs_num,
+                    asr_layer_selections=args.frontend_conf.get("asr_layer_selections", None),
+                    lid_layer_selections=args.frontend_conf.get("lid_layer_selections", None),
                     **args.model_conf,
                 )
             if model_class in [ESPnetHierASRLIDSVModel, ESPnetJointASRLIDSVModel, ESPnetDoubleHierASRLIDSVModel]:
@@ -957,7 +962,7 @@ class ASRTask(AbsTask):
                     encoder=encoder,
                     postencoder=postencoder,
                     postencoder_lid=postencoder_lid,
-                    projector=projector,
+                    projector_lid=projector_lid,
                     loss=loss,
                     decoder=decoder,
                     ctc=ctc,
@@ -976,11 +981,11 @@ class ASRTask(AbsTask):
 
         elif model_class == ESPnetLIDModel:
 
-            projector_class = projector_choices.get_class(args.projector)
-            projector = projector_class(**args.projector_conf)
+            projector_lid_class = projector_lid_choices.get_class(args.projector_lid)
+            projector_lid = projector_lid_class(**args.projector_lid_conf)
 
-            loss_class = loss_choices.get_class(args.loss)
-            loss = loss_class(**args.loss_conf)
+            loss_lid_class = loss_lid_choices.get_class(args.loss_lid)
+            loss_lid = loss_lid_class(**args.loss_conf)
 
             model = model_class(
                 vocab_size=vocab_size,
@@ -990,7 +995,7 @@ class ASRTask(AbsTask):
                 preencoder=preencoder,
                 encoder=encoder,
                 postencoder=postencoder,
-                projector=projector,
+                projector_lid=projector_lid,
                 loss=loss,
                 decoder=decoder,
                 ctc=ctc,
