@@ -206,7 +206,10 @@ class S3prlSHALLiFrontend(AbsFrontend):
 
             # logging.info("Encoding layer {},  x output size: {}, x output: {}".format(layer_index, x.size(), x))
             # import pdb; pdb.set_trace()
-            if layer_index == self.upstream.num_layers - 2 and self.upstream.upstream.model.encoder.layer_norm_first:
+            # if layer_index == self.upstream.num_layers - 2 and self.upstream.upstream.model.encoder.layer_norm_first:
+            #     x = self.upstream.upstream.model.encoder.layer_norm(x)
+            if layer_index == layers[1] - 1 and self.upstream.upstream.model.encoder.layer_norm_first:
+                intermediate_output = x.clone()
                 x = self.upstream.upstream.model.encoder.layer_norm(x)
 
             if self.upstream.normalize:
@@ -250,7 +253,7 @@ class S3prlSHALLiFrontend(AbsFrontend):
         # # feats_lengths_layers = feats_lengths_layers[:-1]
         feats_lengths_layers.extend([feats_lengths_layers[-1] for _ in range(len(layer_results))])
         
-        return x, feats_layers, feats_lengths_layers
+        return intermediate_output, feats_layers, feats_lengths_layers
 
 
     def encode_layers_ori(

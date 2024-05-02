@@ -16,7 +16,7 @@ def copy_model_parameters(asr_model, lid_model, joint_model):
     # asr_update_state_dict = {name: param for name, param in asr_state_dict.items() if name in joint_state_dict and param.shape == joint_state_dict[name].shape}
     asr_update_state_dict = {}
     for name, param in asr_state_dict.items():
-        name = name.replace("featurizer.", "featurizer2.")
+        name = name.replace("featurizer.", "asr_featurizers.0.")
         if name in joint_state_dict and param.shape == joint_state_dict[name].shape:
             asr_update_state_dict[name] = param
         else:
@@ -28,6 +28,8 @@ def copy_model_parameters(asr_model, lid_model, joint_model):
     for name, param in lid_state_dict.items():
         if "frontend.upstream.upstream.model." not in name:
             name = name.replace("encoder.", "encoder_lid.")
+            name = name.replace("projector.", "projector_lid.")
+            name = name.replace("loss.", "loss_lid.")
         # name = name.replace("ctc.", "ctc_lid.")
         if name in joint_state_dict and param.shape == joint_state_dict[name].shape:
             lid_update_state_dict[name] = param

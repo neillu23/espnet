@@ -855,6 +855,10 @@ class ASRTask(AbsTask):
         if model_class in [ESPnetSHALLiModel, ESPnetJointASRModel, ESPnetJointASRLIDSVModel, ESPnetHierASRModel, ESPnetHierASRLIDSVModel, ESPnetHierLIDModel, ESPnetDoubleHierASRLIDSVModel]: 
             lid_layer_selections = args.frontend_conf.get("lid_layer_selections", None)
             preencoder_lid_nums = len(lid_layer_selections) if lid_layer_selections is not None else 1
+            
+            if args.model_conf.get("preencoder_lid_nums", None) is not None:
+                preencoder_lid_nums = args.model_conf.get("preencoder_lid_nums", None)
+
 
             if preencoder_lid_nums > 1:
                 preencoder_lid_class = preencoder_choices.get_class(args.preencoder_lid)

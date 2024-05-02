@@ -9,7 +9,7 @@
 import torch
 from torch import nn
 # from espnet2.asr.layers.film_blocks import FiLM, DoubleFiLM
-from s3prl.upstream.wav2vec2.film_blocks import FiLM, DoubleFiLM
+from s3prl.upstream.wav2vec2.film_blocks import FiLM, DoubleFiLM,AttFiLM3
 import logging
 from espnet.nets.pytorch_backend.transformer.layer_norm import LayerNorm
 
@@ -69,9 +69,11 @@ class EncoderLayer(nn.Module):
             # logging.info("size: {}".format(size))
             # import pdb; pdb.set_trace()
             if self.embed_condition_method == "FiLM":
-                self.condition_layer = FiLM(size, embed_condition_size, "linear")
+                self.condition_layer = FiLM(size, embed_condition_size, film_type="linear")
             elif self.embed_condition_method == "DoubleFiLM":
-                self.condition_layer = DoubleFiLM(size, embed_condition_size, "linear")
+                self.condition_layer = DoubleFiLM(size, embed_condition_size, film_type="linear")
+            elif self.embed_condition_method == "AttFiLM3":
+                self.condition_layer = AttFiLM3(size, embed_condition_size, film_type="linear")
 
 
     def forward(self, x, mask, condition_features=None, cache=None):
@@ -119,7 +121,15 @@ class EncoderLayer(nn.Module):
             x = self.self_attn(x_q, x, x, mask)
             x = stoch_layer_coeff * self.dropout(x)
             if self.embed_condition:
+                if self.embed_condition_method == "AttFiLM3":
+                    x = x.permute(1, 0, 2)
+                    condition_features = condition_features.permute(1, 0, 2)
+                    # logging.info("x shape: {}".format(x.shape))
+                    # logging.info("condition_features shape: {}".format(condition_features.shape))
                 x = self.condition_layer(x, condition_features)
+                if self.embed_condition_method == "AttFiLM3":
+                    x = x.permute(1, 0, 2)
+                    condition_features = condition_features.permute(1, 0, 2)
                 # logging.info("use FiLM layer")
             x = residual + x
         if not self.normalize_before:
