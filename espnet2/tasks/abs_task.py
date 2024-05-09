@@ -83,7 +83,7 @@ if V(torch.__version__) >= V("1.5.0"):
     from torch.multiprocessing.spawn import ProcessContext
 else:
     from torch.multiprocessing.spawn import SpawnContext as ProcessContext
-
+import bitsandbytes as bnb
 
 optim_classes = dict(
     adam=torch.optim.Adam,
@@ -96,6 +96,7 @@ optim_classes = dict(
     lbfgs=torch.optim.LBFGS,
     rmsprop=torch.optim.RMSprop,
     rprop=torch.optim.Rprop,
+    paged_adamw_8bit = bnb.optim.PagedAdamW8bit,
 )
 if V(torch.__version__) >= V("1.10.0"):
     # From 1.10.0, RAdam is officially supported
@@ -721,6 +722,14 @@ class AbsTask(ABC):
             help="Freeze parameters",
         )
 
+        group.add_argument(
+            "--unfreeze_param",
+            type=str,
+            default=[],
+            nargs="*",
+            help="Unfreeze parameters after freezing",
+        )
+
         group = parser.add_argument_group("BatchSampler related")
         group.add_argument(
             "--num_iters_per_epoch",
@@ -1279,6 +1288,19 @@ class AbsTask(ABC):
                     if k.startswith(t + ".") or k == t:
                         logging.info(f"Setting {k}.requires_grad = False")
                         p.requires_grad = False
+
+             # import pdb; pdb.set_trace()
+            
+            for t in args.unfreeze_param:
+                for k, p in model.named_parameters():
+                    if t in k:
+                        logging.info(f"Setting {k}.requires_grad = True")
+                        p.requires_grad = True
+                
+                # if "lm_head" in t:
+                #     if hasattr(model.lm.model, 'lm_head') and isinstance(model.lm.model.lm_head, torch.nn.Module):
+                #         model.lm.model.lm_head.requires_grad = True
+                #         logging.info(f"Setting model.lm.model.lm_head.requires_grad = True")
 
             # Use adapter to finetune the large pre-trained foundation models
             if getattr(args, "use_adapter", False):

@@ -5,7 +5,7 @@ num_att_plot: 0
 
 lm: transformer_opt
 lm_conf:
-    opt_name: /projects/p32013/OutEffHop/OutEffHop/output/OutEffHop-opt-350m
+    opt_name: /projects/p32013/OutEffHop/OutEffHop/output/OutEffHop-opt-1.3b
     local_files_only: true
     
 model: lm_multitask

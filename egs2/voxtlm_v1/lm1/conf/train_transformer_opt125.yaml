@@ -1,13 +1,14 @@
-num_workers: 32
+num_workers: 8
 use_amp: true
 sharded_ddp: false
 num_att_plot: 0
 
 lm: transformer_opt
 lm_conf:
-    opt_name: /projects/p32013/OutEffHop/OutEffHop/output/OutEffHop-opt-350m
+    opt_name: /projects/p32222/ylu125/model_weight/softmax1_opt
     local_files_only: true
     
+
 model: lm_multitask
 model_conf:
     lsm_weight: 0.1
@@ -20,10 +21,11 @@ model_conf:
 # optimization related
 grad_clip: 1.0
 batch_type: length
-batch_bins: 10000
-accum_grad: 20
-num_iters_per_epoch: 25000
-max_epoch: 250
+batch_bins: 25000
+accum_grad: 8
+num_iters_per_epoch: 5000
+max_epoch: 43
+
 
 optim: adam
 optim_conf:

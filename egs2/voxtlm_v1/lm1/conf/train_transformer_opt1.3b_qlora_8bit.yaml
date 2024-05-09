@@ -1,13 +1,26 @@
-num_workers: 32
+num_workers: 8
 use_amp: true
 sharded_ddp: false
 num_att_plot: 0
 
 lm: transformer_opt
 lm_conf:
-    opt_name: /projects/p32013/OutEffHop/OutEffHop/output/OutEffHop-opt-350m
+    opt_name: /projects/p32013/OutEffHop/OutEffHop/output/OPT-1.3b
     local_files_only: true
-    
+    qlora: true
+    load_in_8bit: true
+    lora_config:
+        r: 256
+        lora_alpha: 256
+        target_modules: 
+            - "q_proj"
+            - "v_proj"
+            - "k_proj"
+            - "out_proj"
+            - "fc1"
+            - "fc2"
+        lora_dropout: 0.05
+        bias: "all"
 model: lm_multitask
 model_conf:
     lsm_weight: 0.1
@@ -24,6 +37,16 @@ batch_bins: 10000
 accum_grad: 20
 num_iters_per_epoch: 25000
 max_epoch: 250
+
+unfreeze_param: [
+    'model.decoder.embed_tokens',
+    'model.decoder.embed_positions',
+    'lm_head',
+    'project_out',
+    'project_in',
+    # "final_layer_norm"
+]
+
 
 optim: adam
 optim_conf:
