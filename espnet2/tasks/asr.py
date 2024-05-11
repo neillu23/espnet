@@ -877,22 +877,39 @@ class ASRTask(AbsTask):
                     else:
                         lid_input_size = args.input_size
 
-            encoder_lid_class = encoder_lid_choices.get_class(args.encoder_lid)
-            encoder_lid = encoder_lid_class(input_size=lid_input_size, **args.encoder_lid_conf)
-            encoder_lid_output_size = encoder_lid.output_size()
-            if getattr(args, "postencoder_lid", None) is not None:
-                postencoder_lid_class = postencoder_lid_choices.get_class(args.postencoder_lid)
-                postencoder_lid = postencoder_lid_class(
-                    input_size=encoder_lid_output_size, **args.postencoder_lid_conf
-                )
-                encoder_lid_output_size = postencoder_lid.output_size()
+            if args.model_conf.get("separate_lid_modules", False):
+                encoder_lid_class = encoder_lid_choices.get_class(args.encoder_lid)
+                encoder_lid = torch.nn.ModuleList([encoder_lid_class(input_size=lid_input_size, **args.encoder_lid_conf) for i in range(2)])
+                encoder_lid_output_size = encoder_lid[0].output_size()
+                if getattr(args, "postencoder_lid", None) is not None:
+                    postencoder_lid_class = postencoder_lid_choices.get_class(args.postencoder_lid)
+                    postencoder_lid = torch.nn.ModuleList([postencoder_lid_class(input_size=encoder_lid_output_size, **args.postencoder_lid_conf) for i in range(2)])
+                    encoder_lid_output_size = postencoder_lid[0].output_size()
+                projector_lid_class = projector_lid_choices.get_class(args.projector_lid)
+                projector_lid = torch.nn.ModuleList([projector_lid_class(**args.projector_lid_conf) for i in range(2)])
+                if getattr(args, "loss_lid", None) is not None:
+                    loss_lid_class = loss_lid_choices.get_class(args.loss_lid)
+                    loss_lid = torch.nn.ModuleList([loss_lid_class(**args.loss_lid_conf) for i in range(2)])
+            else: 
+                encoder_lid_class = encoder_lid_choices.get_class(args.encoder_lid)
+                encoder_lid = encoder_lid_class(input_size=lid_input_size, **args.encoder_lid_conf)
+                encoder_lid_output_size = encoder_lid.output_size()
+                if getattr(args, "postencoder_lid", None) is not None:
+                    postencoder_lid_class = postencoder_lid_choices.get_class(args.postencoder_lid)
+                    postencoder_lid = postencoder_lid_class(
+                        input_size=encoder_lid_output_size, **args.postencoder_lid_conf
+                    )
+                    encoder_lid_output_size = postencoder_lid.output_size()
 
-            projector_lid_class = projector_lid_choices.get_class(args.projector_lid)
-            projector_lid = projector_lid_class(**args.projector_lid_conf)
+                projector_lid_class = projector_lid_choices.get_class(args.projector_lid)
+                projector_lid = projector_lid_class(**args.projector_lid_conf)
 
-            loss_lid_class = loss_lid_choices.get_class(args.loss_lid)
-            loss_lid = loss_lid_class(**args.loss_lid_conf)
-            
+                if getattr(args, "loss_lid", None) is not None:
+                    loss_lid_class = loss_lid_choices.get_class(args.loss_lid)
+                    loss_lid = loss_lid_class(**args.loss_lid_conf)
+                else:
+                    loss_lid = None
+                
             if model_class in [ESPnetSHALLiModel, ESPnetJointASRModel, ESPnetHierASRModel, ESPnetHierLIDModel]:
                 model = model_class(
                     vocab_size=vocab_size,
@@ -989,7 +1006,7 @@ class ASRTask(AbsTask):
             projector_lid = projector_lid_class(**args.projector_lid_conf)
 
             loss_lid_class = loss_lid_choices.get_class(args.loss_lid)
-            loss_lid = loss_lid_class(**args.loss_conf)
+            loss_lid = loss_lid_class(**args.loss_lid_conf)
 
             model = model_class(
                 vocab_size=vocab_size,
@@ -1000,7 +1017,7 @@ class ASRTask(AbsTask):
                 encoder=encoder,
                 postencoder=postencoder,
                 projector_lid=projector_lid,
-                loss=loss,
+                loss_lid=loss_lid,
                 decoder=decoder,
                 ctc=ctc,
                 joint_network=joint_network,
