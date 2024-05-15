@@ -21,7 +21,7 @@ class S3prlSHALLiFrontend(AbsFrontend):
         download_dir: str = None,
         asr_layer_selections: Optional[list] = None,
         lid_layer_selections: Optional[list] = None,
-        spk_layer_selections: Optional[list] = None,
+        sv_layer_selections: Optional[list] = None,
         # feature_lid: Optional[str] = None, # can be "lid" or "hier_lid"
         # feature_spk: Optional[str] = None, # can be "spk" or "hier_spk"
     ):
@@ -64,7 +64,7 @@ class S3prlSHALLiFrontend(AbsFrontend):
 
         self.asr_layer_selections = asr_layer_selections
         self.lid_layer_selections = lid_layer_selections
-        self.spk_layer_selections = spk_layer_selections
+        self.sv_layer_selections = sv_layer_selections
 
         if self.asr_layer_selections is not None:
             self.asr_featurizers = torch.nn.ModuleList([Featurizer(upstream, layer_selections=[i for i in range(layer + 1)]) for layer in asr_layer_selections])
@@ -76,8 +76,8 @@ class S3prlSHALLiFrontend(AbsFrontend):
             self.hop_length = self.lid_featurizers[0].downsample_rate
             self.out_size = self.lid_featurizers[0].output_size
         
-        if self.spk_layer_selections is not None:
-            self.spk_featurizers = torch.nn.ModuleList([Featurizer(upstream, layer_selections=[i for i in range(layer + 1)]) for layer in spk_layer_selections])
+        if self.sv_layer_selections is not None:
+            self.spk_featurizers = torch.nn.ModuleList([Featurizer(upstream, layer_selections=[i for i in range(layer + 1)]) for layer in sv_layer_selections])
             self.hop_length = self.spk_featurizers[0].downsample_rate
             self.out_size = self.spk_featurizers[0].output_size
         
@@ -211,7 +211,9 @@ class S3prlSHALLiFrontend(AbsFrontend):
             if layer_index == layers[1] - 1 and self.upstream.upstream.model.encoder.layer_norm_first:
                 intermediate_output = x.clone()
                 x = self.upstream.upstream.model.encoder.layer_norm(x)
-
+            elif layer_index == layers[1] - 1 and not self.upstream.upstream.model.encoder.layer_norm_first:
+                intermediate_output = x
+                
             if self.upstream.normalize:
                 logging.info("Layer normalization needed")
 

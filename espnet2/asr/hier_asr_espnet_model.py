@@ -58,8 +58,8 @@ class ESPnetHierASRModel(ESPnetASRModel):
         postencoder: Optional[AbsPostEncoder],
         decoder: Optional[AbsDecoder],
         postencoder_lid: Optional[AbsPostEncoder],
-        projector: Optional[AbsProjector],
-        loss: Optional[AbsLoss],
+        projector_lid: Optional[AbsProjector],
+        loss_lid: Optional[AbsLoss],
         ctc: CTC,
         joint_network: Optional[torch.nn.Module],
         lid_tokens: Union[Tuple[str, ...], List[str]] = None,
@@ -93,6 +93,8 @@ class ESPnetHierASRModel(ESPnetASRModel):
         sym_eos: str = "<sos/eos>",
         extract_feats_in_collect_stats: bool = True,
         lang_token_id: int = -1,
+        asr_layer_selections:  Optional[list] = None,
+        lid_layer_selections:  Optional[list] = None,
     ):
         assert check_argument_types()
         assert 0.0 <= ctc_weight <= 1.0, ctc_weight
@@ -136,8 +138,8 @@ class ESPnetHierASRModel(ESPnetASRModel):
         self.preencoder_lid = preencoder_lid
         self.encoder_lid = encoder_lid
         self.postencoder_lid = postencoder_lid
-        self.projector = projector
-        self.loss = loss
+        self.projector_lid = projector_lid
+        self.loss_lid = loss_lid
         self.lid_weight = lid_weight
         self.lid_audio_length = lid_audio_length
         self.lid_start_begin = lid_start_begin
@@ -208,12 +210,31 @@ class ESPnetHierASRModel(ESPnetASRModel):
             encoder_out = encoder_out[0]
 
 
-        loss_lid_list = [self.loss(lid_embd, langs) for lid_embd in lid_embd_list]
-        # loss_lid = sum(loss_lid_list) / len(loss_lid_list)
+        loss_lid_list = [] #[self.loss_lid(lid_embd, langs) for lid_embd in lid_embd_list]
+        acc_lid_list = [] # None
+        # calculate accuracy lid for each lid layer, and use 1 best hypothesis
+        # do not use error_calculator
+        for i, lid_embd in enumerate(lid_embd_list):
+            loss_lid = self.loss_lid(lid_embd, langs)
+            loss_lid_list.append(loss_lid)
 
+            # Compute cosine similarity
+            cosine = F.linear(F.normalize(lid_embd), F.normalize(self.loss_lid.weight))
+            
+            # Get the predicted index
+            # import pdb; pdb.set_trace()
+            cosine_similarity = torch.max(cosine, dim=1)
+            langs_token = torch.argmax(cosine, dim=1)
+
+            acc_lid = (langs.squeeze(1) == langs_token).float().mean().item()
+            acc_lid_list.append(acc_lid)
+
+        
         loss_lid_ave = sum(loss_lid_list) / len(loss_lid_list)
         loss_lid = loss_lid_list[-1]
 
+        acc_lid_ave = sum(acc_lid_list) / len(acc_lid_list)
+        acc_lid = acc_lid_list[-1]
         loss_att, acc_att, cer_att, wer_att = None, None, None, None
         loss_ctc, cer_ctc = None, None
         loss_transducer, cer_transducer, wer_transducer = None, None, None
@@ -367,6 +388,8 @@ class ESPnetHierASRModel(ESPnetASRModel):
         stats["loss_asr"] = loss_asr.detach()
         stats["loss_lid"] = loss_lid.detach()
         stats["loss_lid_ave"] = loss_lid_ave.detach()
+        stats["acc_lid"] = acc_lid
+        stats["acc_lid_ave"] = acc_lid_ave
 
         loss = loss_asr + self.lid_weight * loss_lid_ave
         stats["loss"] = loss.detach()
@@ -378,8 +401,8 @@ class ESPnetHierASRModel(ESPnetASRModel):
 
 
     def project_lid_embd(self, utt_level_feat: torch.Tensor) -> torch.Tensor:
-        if self.projector is not None:
-            lid_embd = self.projector(utt_level_feat)
+        if self.projector_lid is not None:
+            lid_embd = self.projector_lid(utt_level_feat)
         else:
             lid_embd = utt_level_feat
 
@@ -422,7 +445,7 @@ class ESPnetHierASRModel(ESPnetASRModel):
             # 'input' is the input to the layer,
             # 'output' is the output of the layer.
             # Here you can do things with the output, for instance:
-            x, (attn, layer_result) = output  # Storing it in the instance for later use
+            x, (attn, layer_result, mask) = output  # Storing it in the instance for later use
             self.intermediate_outputs = x
 
 
@@ -435,6 +458,7 @@ class ESPnetHierASRModel(ESPnetASRModel):
         for index in range(len(self.sep_layers)):
             # condition_features = None for testing purpose
             # condition_features = None 
+            # condition_features = torch.ones((16,1,256)).to(speech.device)
             if index == 0:
                 start_layer = 0
             else:
@@ -461,6 +485,12 @@ class ESPnetHierASRModel(ESPnetASRModel):
                             lid_start = torch.randint(0, feats_lid_lengths.min() - lid_feats_lengths + 1, (1,)).item()
                             feats_lid = feats_lid[:, lid_start: lid_start + lid_feats_lengths]
                             feats_lid_lengths = feats_lid.new_full(feats_lid_lengths.shape, lid_feats_lengths, dtype=int)
+
+                # logging.info("index: {}".format(index))
+                # logging.info("feats_lid index {}: {}".format(index, feats_lid))
+                # for i in range(len(feats_layers)):
+                #     logging.info("feats_layers {}: {}".format(i, feats_layers[i]))
+                #     logging.info("feats_lengths_layers {}: {}".format(i, feats_lengths_layers[i]))
                 
                 # 2. Data augmentation
                 if self.specaug is not None and self.training:
@@ -501,7 +531,7 @@ class ESPnetHierASRModel(ESPnetASRModel):
             if self.embed_condition:
                 if self.lid_condition_feature == "hard":
                     # Compute cosine similarity
-                    cosine = F.linear(F.normalize(lid_embd), F.normalize(self.loss.weight))
+                    cosine = F.linear(F.normalize(lid_embd), F.normalize(self.loss_lid.weight))
                     
                     # Get the predicted speaker index
                     cosine_similarity = torch.max(cosine, dim=1)
@@ -524,7 +554,7 @@ class ESPnetHierASRModel(ESPnetASRModel):
                         condition_features = self.activation_fns[index](condition_features)
                         condition_features = self.dropouts[index](condition_features)
 
-
+        # exit()
         # 6. Forward encoder for ASR
 
         with autocast(False):
@@ -542,29 +572,49 @@ class ESPnetHierASRModel(ESPnetASRModel):
             # import pdb; pdb.set_trace()
             feats, feats_lengths = self.frontend.featurizer_asr(feats_layers, feats_lengths_layers)
 
-
+            # logging.info("asr feats: {}".format(feats))
             # feats, feats_lengths = self.frontend.featurizer2(feats_layers, feats_lengths_layers)
 
             # 2. Data augmentation
             if self.specaug is not None and self.training:
                 feats, feats_lengths = self.specaug(feats, feats_lengths)
 
+            # logging.info("asr feats specaug: {}".format(feats))
             # 3. Normalization for feature: e.g. Global-CMVN, Utterance-CMVN
             if self.normalize is not None:
+                # logging.info("doing asr feats normalize")
+                # logging.info("normalize : {}".format(self.normalize))
                 feats, feats_lengths = self.normalize(feats, feats_lengths)
+
+            # logging.info("asr feats normalize: {}".format(feats))
+
+        # import pickle
+        # data_to_save = {
+        #     "model_state_dict": self.preencoder.state_dict(),
+        #     "featurizer_state_dict": self.frontend.featurizer_asr.state_dict(),
+        #     "feats_lengths_layers": feats_lengths_layers,
+        #     "feats_layers": feats_layers,
+        #     "input_tensor": feats,
+        #     "input_lengths": feats_lengths
+        # }
+        # with open('/export/c06/ylu125/espnet_shalli/egs2/ml_superb/asr1/exp2/asr_train_asr_wav2vec2_xlsr_10min_asr_hier_lid_att_dev_multilingual_10min/preencoder.pkl', 'wb') as f:
+        #     pickle.dump(data_to_save, f)
 
         # Pre-encoder, e.g. used for raw input data
         if self.preencoder is not None:
+            # self.preencoder.eval()
             feats, feats_lengths = self.preencoder(feats, feats_lengths)
-
+        # exit()
         # 4. Forward encoder
         # feats: (Batch, Length, Dim)
         # -> encoder_out: (Batch, Length2, Dim2)
+        # self.encoder.eval()
         if self.encoder.interctc_use_conditioning:
             encoder_out, encoder_out_lens, _ = self.encoder(
                 feats, feats_lengths, ctc=self.ctc
             )
         else:
+            # logging.info("asr feats preencoded: {}".format(feats))
             encoder_out, encoder_out_lens, _ = self.encoder(feats, feats_lengths, condition_features=condition_features)
         intermediate_outs = None
         if isinstance(encoder_out, tuple):
@@ -592,6 +642,22 @@ class ESPnetHierASRModel(ESPnetASRModel):
 
         if intermediate_outs is not None:
             return (encoder_out, intermediate_outs), encoder_out_lens
+
+        # logging.info("encoder_out: {}".format(encoder_out))
+        # logging.info("encoder_out_lens: {}".format(encoder_out_lens))
+        # logging.info("lid_embd: {}".format(lid_embd_list))
+        # logging.info("encoder_lid_out_lens: {}".format(encoder_lid_out_lens))
+        
+        # import pickle
+        # data_to_save = {
+        #     "encoder_out": encoder_out,
+        #     "encoder_out_lens": encoder_out_lens,
+        #     "lid_embd_list": lid_embd_list,
+        #     "encoder_lid_out_lens": encoder_lid_out_lens
+        # }
+        # with open('/export/c06/ylu125/espnet_shalli/egs2/ml_superb/asr1/exp2/asr_train_asr_wav2vec2_xlsr_10min_asr_hier_lid_att_dev_multilingual_10min/preencoder.pkl', 'wb') as f:
+        #     pickle.dump(data_to_save, f)
+        # exit()
 
         return encoder_out, encoder_out_lens, lid_embd_list, encoder_lid_out_lens
 

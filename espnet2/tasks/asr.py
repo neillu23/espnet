@@ -333,7 +333,8 @@ encoder_spk_choices = ClassChoices(
         ecapa_tdnn=EcapaTdnnEncoder,
     ),
     type_check=AbsEncoder,
-    default="rawnet3",
+    default=None,
+    optional=True,
 )
 
 
@@ -343,7 +344,9 @@ pooling_spk_choices = ClassChoices(
         chn_attn_stat=ChnAttnStatPooling_spk,
     ),
     type_check=AbsPooling,
-    default="chn_attn_stat",
+    # default="chn_attn_stat",
+    default=None,
+    optional=True,
 )
 
 projector_spk_choices = ClassChoices(
@@ -354,7 +357,8 @@ projector_spk_choices = ClassChoices(
         rawnet3=RawNet3Projector,
     ),
     type_check=AbsProjector,
-    default="rawnet3",
+    default=None,
+    optional=True,
 )
 
 
@@ -364,7 +368,8 @@ loss_spk_choices = ClassChoices(
         aamsoftmax=AAMSoftmax,
         aamsoftmax_sc_topk=ArcMarginProduct_intertopk_subcenter,
     ),
-    default="aam",
+    default=None,
+    optional=True,
 )
 
 
@@ -841,6 +846,118 @@ class ASRTask(AbsTask):
             decoder = None
             joint_network = None
 
+        # 6. LID modules
+        if getattr(args, "preencoder_lid", None) is not None:
+            lid_layer_selections = args.frontend_conf.get("lid_layer_selections", None)
+            preencoder_lid_nums = len(lid_layer_selections) if lid_layer_selections is not None else 1
+            
+            if preencoder_lid_nums > 1:
+                preencoder_lid_class = preencoder_choices.get_class(args.preencoder_lid)
+                preencoder_lid = torch.nn.ModuleList([preencoder_lid_class(**args.preencoder_lid_conf) for i in range(preencoder_lid_nums)])
+                lid_input_size = preencoder_lid[0].output_size()
+            else:
+                preencoder_lid_class = preencoder_choices.get_class(args.preencoder_lid)
+                preencoder_lid = preencoder_lid_class(**args.preencoder_lid_conf)
+                lid_input_size = preencoder_lid.output_size()
+        else:
+            preencoder_lid = None
+            if args.input_size is None:
+                lid_input_size = frontend.output_size()
+            else:
+                lid_input_size = args.input_size
+
+        if getattr(args, "encoder_lid", None) is not None:
+            if args.model_conf.get("separate_lid_modules", False):
+                encoder_lid_class = encoder_lid_choices.get_class(args.encoder_lid)
+                encoder_lid = torch.nn.ModuleList([encoder_lid_class(input_size=lid_input_size, **args.encoder_lid_conf) for i in range(2)])
+                encoder_lid_output_size = encoder_lid[0].output_size()
+            else: 
+                encoder_lid_class = encoder_lid_choices.get_class(args.encoder_lid)
+                encoder_lid = encoder_lid_class(input_size=lid_input_size, **args.encoder_lid_conf)
+                encoder_lid_output_size = encoder_lid.output_size()
+
+
+        if getattr(args, "postencoder_lid", None) is not None:
+            if args.model_conf.get("separate_lid_modules", False):
+                postencoder_lid_class = postencoder_lid_choices.get_class(args.postencoder_lid)
+                postencoder_lid = torch.nn.ModuleList([postencoder_lid_class(input_size=encoder_lid_output_size, **args.postencoder_lid_conf) for i in range(2)])
+                encoder_lid_output_size = postencoder_lid[0].output_size()
+            else: 
+                postencoder_lid_class = postencoder_lid_choices.get_class(args.postencoder_lid)
+                postencoder_lid = postencoder_lid_class(
+                    input_size=encoder_lid_output_size, **args.postencoder_lid_conf
+                )
+                encoder_lid_output_size = postencoder_lid.output_size()
+
+        if getattr(args, "projector_lid", None) is not None:
+            if args.model_conf.get("separate_lid_modules", False):
+                projector_lid_class = projector_lid_choices.get_class(args.projector_lid)
+                projector_lid = torch.nn.ModuleList([projector_lid_class(**args.projector_lid_conf) for i in range(2)])
+            else: 
+                projector_lid_class = projector_lid_choices.get_class(args.projector_lid)
+                projector_lid = projector_lid_class(**args.projector_lid_conf)
+
+
+        if getattr(args, "loss_lid", None) is not None:
+            if args.model_conf.get("separate_lid_modules", False):
+                loss_lid_class = loss_lid_choices.get_class(args.loss_lid)
+                loss_lid = torch.nn.ModuleList([loss_lid_class(**args.loss_lid_conf) for i in range(2)])
+            else: 
+                loss_lid_class = loss_lid_choices.get_class(args.loss_lid)
+                loss_lid = loss_lid_class(**args.loss_lid_conf)
+
+        # 6. SV modules
+
+        # spk related modules
+        if getattr(args, "preencoder_spk", None) is not None:
+            if preencoder_lid_nums > 1 and model_choices.get_class(args.model) == ESPnetDoubleHierASRLIDSVModel:
+                preencoder_spk_class = preencoder_choices.get_class(args.preencoder_spk)
+                preencoder_spk = torch.nn.ModuleList([preencoder_spk_class(**args.preencoder_spk_conf) for i in range(preencoder_lid_nums)])
+
+                spk_input_size = preencoder_spk[0].output_size()
+            else:
+                preencoder_spk_class = preencoder_choices.get_class(args.preencoder_spk)
+                preencoder_spk = preencoder_spk_class(**args.preencoder_spk_conf)
+                spk_input_size = preencoder_spk.output_size()
+        else:
+            preencoder_spk = None
+            if args.input_size is None:
+                spk_input_size = frontend.output_size()
+            else:
+                spk_input_size = args.input_size
+
+        if getattr(args, "encoder_spk", None) is not None:
+            encoder_spk_class = encoder_spk_choices.get_class(args.encoder_spk)
+            encoder_spk = encoder_spk_class(input_size=spk_input_size, **args.encoder_spk_conf)
+            encoder_spk_output_size = encoder_spk.output_size()
+        else:
+            encoder_spk = None
+            
+    
+        if getattr(args, "pooling_spk", None) is not None:
+            pooling_spk_class = pooling_spk_choices.get_class(args.pooling_spk)
+            pooling_spk = pooling_spk_class(
+                input_size=encoder_spk_output_size, **args.pooling_spk_conf
+            )
+            pooling_spk_output_size = pooling_spk.output_size()
+        else:
+            pooling_spk = None
+
+        # import pdb; pdb.set_trace()
+        if getattr(args, "projector_spk", None) is not None:
+            projector_spk_class = projector_spk_choices.get_class(args.projector_spk)
+            projector_spk = projector_spk_class(input_size=pooling_spk_output_size, **args.projector_spk_conf)
+            projector_spk_output_size = projector_spk.output_size()
+        else:
+            projector_spk = None
+
+        if getattr(args, "loss_spk", None) is not None:
+            loss_spk_class = loss_spk_choices.get_class(args.loss_spk)
+            loss_spk = loss_spk_class(nout=projector_spk_output_size, nclasses=args.spk_num, **args.loss_spk_conf)
+        else:
+            loss_spk = None
+
+
         # 6. CTC
         ctc = CTC(
             odim=vocab_size, encoder_output_size=encoder_output_size, **args.ctc_conf
@@ -852,153 +969,58 @@ class ASRTask(AbsTask):
         except AttributeError:
             model_class = model_choices.get_class("espnet")
 
-        if model_class in [ESPnetSHALLiModel, ESPnetJointASRModel, ESPnetJointASRLIDSVModel, ESPnetHierASRModel, ESPnetHierASRLIDSVModel, ESPnetHierLIDModel, ESPnetDoubleHierASRLIDSVModel]: 
-            lid_layer_selections = args.frontend_conf.get("lid_layer_selections", None)
-            preencoder_lid_nums = len(lid_layer_selections) if lid_layer_selections is not None else 1
-            
-            if args.model_conf.get("preencoder_lid_nums", None) is not None:
-                preencoder_lid_nums = args.model_conf.get("preencoder_lid_nums", None)
-
-
-            if preencoder_lid_nums > 1:
-                preencoder_lid_class = preencoder_choices.get_class(args.preencoder_lid)
-                preencoder_lid = torch.nn.ModuleList([preencoder_lid_class(**args.preencoder_lid_conf) for i in range(preencoder_lid_nums)])
-
-                lid_input_size = preencoder_lid[0].output_size()
-            else:
-                if getattr(args, "preencoder_lid", None) is not None:
-                    preencoder_lid_class = preencoder_choices.get_class(args.preencoder_lid)
-                    preencoder_lid = preencoder_lid_class(**args.preencoder_lid_conf)
-                    lid_input_size = preencoder_lid.output_size()
-                else:
-                    preencoder_lid = None
-                    if args.input_size is None:
-                        lid_input_size = frontend.output_size()
-                    else:
-                        lid_input_size = args.input_size
-
-            if args.model_conf.get("separate_lid_modules", False):
-                encoder_lid_class = encoder_lid_choices.get_class(args.encoder_lid)
-                encoder_lid = torch.nn.ModuleList([encoder_lid_class(input_size=lid_input_size, **args.encoder_lid_conf) for i in range(2)])
-                encoder_lid_output_size = encoder_lid[0].output_size()
-                if getattr(args, "postencoder_lid", None) is not None:
-                    postencoder_lid_class = postencoder_lid_choices.get_class(args.postencoder_lid)
-                    postencoder_lid = torch.nn.ModuleList([postencoder_lid_class(input_size=encoder_lid_output_size, **args.postencoder_lid_conf) for i in range(2)])
-                    encoder_lid_output_size = postencoder_lid[0].output_size()
-                projector_lid_class = projector_lid_choices.get_class(args.projector_lid)
-                projector_lid = torch.nn.ModuleList([projector_lid_class(**args.projector_lid_conf) for i in range(2)])
-                if getattr(args, "loss_lid", None) is not None:
-                    loss_lid_class = loss_lid_choices.get_class(args.loss_lid)
-                    loss_lid = torch.nn.ModuleList([loss_lid_class(**args.loss_lid_conf) for i in range(2)])
-            else: 
-                encoder_lid_class = encoder_lid_choices.get_class(args.encoder_lid)
-                encoder_lid = encoder_lid_class(input_size=lid_input_size, **args.encoder_lid_conf)
-                encoder_lid_output_size = encoder_lid.output_size()
-                if getattr(args, "postencoder_lid", None) is not None:
-                    postencoder_lid_class = postencoder_lid_choices.get_class(args.postencoder_lid)
-                    postencoder_lid = postencoder_lid_class(
-                        input_size=encoder_lid_output_size, **args.postencoder_lid_conf
-                    )
-                    encoder_lid_output_size = postencoder_lid.output_size()
-
-                projector_lid_class = projector_lid_choices.get_class(args.projector_lid)
-                projector_lid = projector_lid_class(**args.projector_lid_conf)
-
-                if getattr(args, "loss_lid", None) is not None:
-                    loss_lid_class = loss_lid_choices.get_class(args.loss_lid)
-                    loss_lid = loss_lid_class(**args.loss_lid_conf)
-                else:
-                    loss_lid = None
-                
-            if model_class in [ESPnetSHALLiModel, ESPnetJointASRModel, ESPnetHierASRModel, ESPnetHierLIDModel]:
-                model = model_class(
-                    vocab_size=vocab_size,
-                    frontend=frontend,
-                    specaug=specaug,
-                    normalize=normalize,
-                    preencoder=preencoder,
-                    encoder=encoder,
-                    postencoder=postencoder,
-                    preencoder_lid=preencoder_lid,
-                    encoder_lid=encoder_lid,
-                    postencoder_lid=postencoder_lid,
-                    projector_lid=projector_lid,
-                    loss_lid=loss_lid,
-                    decoder=decoder,
-                    ctc=ctc,
-                    joint_network=joint_network,
-                    token_list=token_list,
-                    lid_tokens=lid_tokens,
-                    langs_num=langs_num,
-                    asr_layer_selections=args.frontend_conf.get("asr_layer_selections", None),
-                    lid_layer_selections=args.frontend_conf.get("lid_layer_selections", None),
-                    **args.model_conf,
-                )
-            if model_class in [ESPnetHierASRLIDSVModel, ESPnetJointASRLIDSVModel, ESPnetDoubleHierASRLIDSVModel]:
-                # spk related modules
-                if preencoder_lid_nums > 1 and model_class == ESPnetDoubleHierASRLIDSVModel:
-                    preencoder_spk_class = preencoder_choices.get_class(args.preencoder_spk)
-                    preencoder_spk = torch.nn.ModuleList([preencoder_spk_class(**args.preencoder_spk_conf) for i in range(preencoder_lid_nums)])
-
-                    spk_input_size = preencoder_spk[0].output_size()
-                else:
-                    if getattr(args, "preencoder_spk", None) is not None:
-                        preencoder_spk_class = preencoder_choices.get_class(args.preencoder_spk)
-                        preencoder_spk = preencoder_spk_class(**args.preencoder_spk_conf)
-                        spk_input_size = preencoder_spk.output_size()
-                    else:
-                        preencoder_spk = None
-                        if args.input_size is None:
-                            spk_input_size = frontend.output_size()
-                        else:
-                            spk_input_size = args.input_size
-
-                encoder_spk_class = encoder_spk_choices.get_class(args.encoder_spk)
-                encoder_spk = encoder_spk_class(input_size=spk_input_size, **args.encoder_spk_conf)
-                encoder_spk_output_size = encoder_spk.output_size()
-            
-                pooling_spk_class = pooling_spk_choices.get_class(args.pooling_spk)
-                pooling_spk = pooling_spk_class(
-                    input_size=encoder_spk_output_size, **args.pooling_spk_conf
-                )
-                pooling_spk_output_size = pooling_spk.output_size()
-
-                projector_spk_class = projector_spk_choices.get_class(args.projector_spk)
-                projector_spk = projector_spk_class(input_size=pooling_spk_output_size, **args.projector_spk_conf)
-                projector_spk_output_size = projector_spk.output_size()
-
-                loss_spk_class = loss_spk_choices.get_class(args.loss_spk)
-                loss_spk = loss_spk_class(nout=projector_spk_output_size, nclasses=args.spk_num, **args.loss_spk_conf)
-                
-                
-
-                model = model_class(
-                    vocab_size=vocab_size,
-                    frontend=frontend,
-                    specaug=specaug,
-                    normalize=normalize,
-                    preencoder_lid=preencoder_lid,
-                    preencoder=preencoder,
-                    encoder_lid=encoder_lid,
-                    encoder=encoder,
-                    postencoder=postencoder,
-                    postencoder_lid=postencoder_lid,
-                    projector_lid=projector_lid,
-                    loss=loss,
-                    decoder=decoder,
-                    ctc=ctc,
-                    joint_network=joint_network,
-                    token_list=token_list,
-                    lid_tokens=lid_tokens,
-                    langs_num=langs_num,
-                    preencoder_spk=preencoder_spk,
-                    encoder_spk=encoder_spk,
-                    pooling_spk=pooling_spk,
-                    projector_spk=projector_spk,
-                    loss_spk=loss_spk,
-
-                    **args.model_conf,
-                )
+        if model_class in [ESPnetJointASRModel, ESPnetHierASRModel, ESPnetHierLIDModel]:
+            model = model_class(
+                vocab_size=vocab_size,
+                frontend=frontend,
+                specaug=specaug,
+                normalize=normalize,
+                preencoder=preencoder,
+                encoder=encoder,
+                postencoder=postencoder,
+                preencoder_lid=preencoder_lid,
+                encoder_lid=encoder_lid,
+                postencoder_lid=postencoder_lid,
+                projector_lid=projector_lid,
+                loss_lid=loss_lid,
+                decoder=decoder,
+                ctc=ctc,
+                joint_network=joint_network,
+                token_list=token_list,
+                lid_tokens=lid_tokens,
+                langs_num=langs_num,
+                **args.model_conf,
+            )
+        elif model_class in [ESPnetSHALLiModel, ESPnetHierASRLIDSVModel, ESPnetJointASRLIDSVModel, ESPnetDoubleHierASRLIDSVModel]:
+            model = model_class(
+                vocab_size=vocab_size,
+                frontend=frontend,
+                specaug=specaug,
+                normalize=normalize,
+                preencoder=preencoder,
+                encoder=encoder,
+                postencoder=postencoder,
+                preencoder_lid=preencoder_lid,
+                encoder_lid=encoder_lid,
+                postencoder_lid=postencoder_lid,
+                projector_lid=projector_lid,
+                loss_lid=loss_lid,
+                decoder=decoder,
+                ctc=ctc,
+                joint_network=joint_network,
+                token_list=token_list,
+                lid_tokens=lid_tokens,
+                langs_num=langs_num,
+                preencoder_spk=preencoder_spk,
+                encoder_spk=encoder_spk,
+                pooling_spk=pooling_spk,
+                projector_spk=projector_spk,
+                loss_spk=loss_spk,
+                asr_layer_selections=args.frontend_conf.get("asr_layer_selections", None),
+                lid_layer_selections=args.frontend_conf.get("lid_layer_selections", None),
+                sv_layer_selections=args.frontend_conf.get("sv_layer_selections", None),
+                **args.model_conf,
+            )
 
         elif model_class == ESPnetLIDModel:
 

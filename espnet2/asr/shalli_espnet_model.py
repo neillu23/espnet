@@ -14,6 +14,7 @@ from espnet2.asr.espnet_model import ESPnetASRModel
 from espnet2.asr.frontend.abs_frontend import AbsFrontend
 from espnet2.asr.postencoder.abs_postencoder import AbsPostEncoder
 from espnet2.asr.preencoder.abs_preencoder import AbsPreEncoder
+from espnet2.spk.pooling.abs_pooling import AbsPooling
 from espnet2.asr.specaug.abs_specaug import AbsSpecAug
 from espnet2.asr.transducer.error_calculator import ErrorCalculatorTransducer
 from espnet2.asr_transducer.utils import get_transducer_task_io
@@ -60,6 +61,11 @@ class ESPnetSHALLiModel(ESPnetASRModel):
         postencoder_lid: Union[AbsPostEncoder, torch.nn.modules.container.ModuleList],
         projector_lid: Union[AbsProjector, torch.nn.modules.container.ModuleList],
         loss_lid: Union[AbsLoss, torch.nn.modules.container.ModuleList],
+        preencoder_spk: Optional[Union[AbsPreEncoder,torch.nn.modules.container.ModuleList]],
+        encoder_spk: Optional[AbsEncoder], 
+        pooling_spk: Optional[AbsPooling],
+        projector_spk: Optional[AbsProjector],
+        loss_spk: Optional[AbsLoss], 
         ctc: CTC,
         joint_network: Optional[torch.nn.Module],
         lid_tokens: Union[Tuple[str, ...], List[str]] = None,
@@ -71,8 +77,10 @@ class ESPnetSHALLiModel(ESPnetASRModel):
         aux_ctc: dict = None,
         ctc_weight: float = 0.5,
         lid_weight: float = 1.0,
+        spk_weight: float = 1.0,
         lid_ave_weight: float = 1.0,
         lid_audio_length: int = 0,
+        spk_audio_length: int = 0,
         interctc_weight: float = 0.0,
         ignore_id: int = -1,
         lsm_weight: float = 0.0,
@@ -91,9 +99,12 @@ class ESPnetSHALLiModel(ESPnetASRModel):
         lang_token_id: int = -1,
         asr_layer_selections:  Optional[list] = None,
         lid_layer_selections:  Optional[list] = None,
+        sv_layer_selections:  Optional[list] = None,
         separate_lid_modules: bool = True,
         last_condition: bool = True,
-        skip_asr: bool = False
+        skip_asr: bool = False,
+        twice_ssl_ablation: bool = False,
+        fix_lid_position: bool = True,
 
         # preencoder_lid_nums: int = 1,
         # sep_layers: List[int] = [],
@@ -139,6 +150,10 @@ class ESPnetSHALLiModel(ESPnetASRModel):
         self.separate_lid_modules = separate_lid_modules
         self.last_condition = last_condition 
         self.skip_asr = skip_asr
+        self.twice_ssl_ablation = twice_ssl_ablation
+        self.fix_lid_position = fix_lid_position
+        if twice_ssl_ablation:
+            assert(len(lid_layer_selections) == 2)
         
         self.preencoder_lid = preencoder_lid
         if not self.separate_lid_modules:
@@ -151,6 +166,14 @@ class ESPnetSHALLiModel(ESPnetASRModel):
             self.postencoder_lid, self.postencoder_lid_last = postencoder_lid
             self.projector_lid, self.projector_lid_last = projector_lid
             self.loss_lid, self.loss_lid_last = loss_lid
+        self.preencoder_spk = preencoder_spk
+        self.encoder_spk = encoder_spk
+        self.pooling_spk = pooling_spk
+        self.projector_spk = projector_spk
+        self.loss_spk = loss_spk
+        self.spk_weight = spk_weight
+        self.spk_audio_length = spk_audio_length
+
 
         self.lid_weight = lid_weight
         self.lid_ave_weight = lid_ave_weight
@@ -159,6 +182,7 @@ class ESPnetSHALLiModel(ESPnetASRModel):
         self.lid_condition_activate = lid_condition_activate
         self.asr_layer_selections = asr_layer_selections
         self.lid_layer_selections = lid_layer_selections
+        self.sv_layer_selections = sv_layer_selections
         
         # self.preencoder_lid_nums = len(self.lid_layer_selections)
         
@@ -186,6 +210,7 @@ class ESPnetSHALLiModel(ESPnetASRModel):
         text: torch.Tensor,
         text_lengths: torch.Tensor,
         langs: torch.Tensor = None,
+        spk_labels: torch.Tensor = None,
         **kwargs,
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor], torch.Tensor]:
         """Frontend + Encoder + Decoder + Calc loss
@@ -210,13 +235,19 @@ class ESPnetSHALLiModel(ESPnetASRModel):
         text[text == -1] = self.ignore_id
 
         asr_valid_indices = [i for i, label in enumerate(text) if label[0] != -1]
-
+        langs_valid_indices = [i for i, label in enumerate(langs) if label[0] != -1]
+        
+        if self.sv_layer_selections is not None:
+            spk_valid_indices = [i for i, label in enumerate(spk_labels) if label[0] != -1]
+        #     logging.info("spk_valid_indices: {}".format(spk_valid_indices))
+        # logging.info("asr_valid_indices: {}".format(asr_valid_indices))
+        # logging.info("langs_valid_indices: {}".format(langs_valid_indices))
 
         # for data-parallel
         text = text[:, : text_lengths.max()]
 
         # 1. Encoder
-        encoder_out, encoder_out_lens, lid_embd_list, encoder_lid_out_lens =  self.encode(speech, speech_lengths, langs)
+        encoder_out, encoder_out_lens, lid_embd_list, encoder_lid_out_lens, spk_embd =  self.encode(speech, speech_lengths, langs)
         intermediate_outs = None
         if isinstance(encoder_out, tuple):
             intermediate_outs = encoder_out[1]
@@ -227,36 +258,40 @@ class ESPnetSHALLiModel(ESPnetASRModel):
         acc_lid_list = [] # None
         # calculate accuracy lid for each lid layer, and use 1 best hypothesis
         # do not use error_calculator
-        for i, lid_embd in enumerate(lid_embd_list):
-            if i == len(lid_embd_list) - 1:
-                loss_lid = self.loss_lid_last(lid_embd, langs)
 
-                # Compute cosine similarity
-                cosine = F.linear(F.normalize(lid_embd), F.normalize(self.loss_lid_last.weight))
-            else:
-                loss_lid = self.loss_lid(lid_embd, langs)
+        loss_lid_ave = None
+        acc_lid_ave = None
 
-                # Compute cosine similarity
-                cosine = F.linear(F.normalize(lid_embd), F.normalize(self.loss_lid.weight))
-            loss_lid_list.append(loss_lid)
-            
-            # Get the predicted index
-            # import pdb; pdb.set_trace()
-            cosine_similarity = torch.max(cosine, dim=1)
-            langs_token = torch.argmax(cosine, dim=1)
+        if len(langs_valid_indices) > 0:
+            lid_embd_list = [lid_embd[langs_valid_indices] for lid_embd in lid_embd_list]
+            langs = langs[langs_valid_indices]
 
-            acc_lid = (langs.squeeze(1) == langs_token).float().mean().item()
-            acc_lid_list.append(acc_lid)
+            for i, lid_embd in enumerate(lid_embd_list):
+                if i == len(lid_embd_list) - 1 and self.separate_lid_modules:
+                    loss_lid = self.loss_lid_last(lid_embd, langs)
+                    cosine = F.linear(F.normalize(lid_embd), F.normalize(self.loss_lid_last.weight))
+                else:
+                    loss_lid = self.loss_lid(lid_embd, langs)
+                    cosine = F.linear(F.normalize(lid_embd), F.normalize(self.loss_lid.weight))
+                loss_lid_list.append(loss_lid)
+                cosine_similarity = torch.max(cosine, dim=1)
+                langs_token = torch.argmax(cosine, dim=1)
 
-        if len(loss_lid_list) > 1:
-            loss_lid_ave = sum(loss_lid_list[:-1]) / (len(loss_lid_list) - 1)
-            acc_lid_ave = sum(acc_lid_list[:-1]) / (len(loss_lid_list) - 1)
+                acc_lid = (langs.squeeze(1) == langs_token).float().mean().item()
+                acc_lid_list.append(acc_lid)
+
+            if len(self.lid_layer_selections) > 1:
+                loss_lid_ave = sum(loss_lid_list[:-1]) / (len(loss_lid_list) - 1)
+                acc_lid_ave = sum(acc_lid_list[:-1]) / (len(loss_lid_list) - 1)
+            loss_lid = loss_lid_list[-1]
+            acc_lid = acc_lid_list[-1]
         else:
-            loss_lid_ave = None
-            acc_lid_ave = None
+            if len(self.lid_layer_selections) > 1:
+                loss_lid_ave = torch.tensor(0.0)
+                acc_lid_ave = torch.tensor(0.0)
+            loss_lid = torch.tensor(0.0)
+            acc_lid = torch.tensor(0.0)
 
-        loss_lid = loss_lid_list[-1]
-        acc_lid = acc_lid_list[-1]
         stats = dict()
 
         stats["loss_lid"] = loss_lid.detach() if loss_lid is not None else None
@@ -277,6 +312,16 @@ class ESPnetSHALLiModel(ESPnetASRModel):
             return loss, stats, weight
             # return {"loss":loss, "loss_lid":loss_lid, "loss_asr":loss_asr}, stats, weight
 
+
+        if self.sv_layer_selections is not None:
+            loss_spk = torch.tensor(0.0)
+            if len(spk_valid_indices) > 0:
+                spk_embd = spk_embd[spk_valid_indices]
+                spk_labels = spk_labels[spk_valid_indices]
+                loss_spk = self.loss_spk(spk_embd, spk_labels)
+            stats["loss_spk"] = loss_spk.detach()
+        else:
+            loss_spk = None
 
 
         loss_att, acc_att, cer_att, wer_att = None, None, None, None
@@ -430,13 +475,19 @@ class ESPnetSHALLiModel(ESPnetASRModel):
         # Collect total loss stats
         stats["loss_asr"] = loss_asr.detach()
 
+        loss = loss_asr.to(speech.device) + self.lid_weight * loss_lid.to(speech.device)
         if loss_lid_ave is not None:
-            loss = loss_asr + self.lid_ave_weight * loss_lid_ave + self.lid_weight * loss_lid
-        else:
-            loss = loss_asr + self.lid_weight * loss_lid
+            loss += self.lid_ave_weight * loss_lid_ave.to(speech.device)
+        if loss_spk is not None:
+            loss += self.spk_weight * loss_spk.to(speech.device)
             
         stats["loss"] = loss.detach()
 
+        # logging.info("loss_asr: {}".format(loss_asr))
+        # logging.info("loss_lid: {}".format(loss_lid))
+        # logging.info("loss_lid_ave: {}".format(loss_lid_ave))
+        # logging.info("loss_spk: {}".format(loss_spk))
+        # logging.info("stats: {}".format(stats))
         # force_gatherable: to-device and to-tensor if scalar for DataParallel
         loss, stats, weight = force_gatherable((loss, stats, batch_size), loss.device)
         return loss, stats, weight
@@ -459,6 +510,14 @@ class ESPnetSHALLiModel(ESPnetASRModel):
 
         return lid_embd
 
+    def project_spk_embd(self, utt_level_feat: torch.Tensor) -> torch.Tensor:
+        if self.projector_spk is not None:
+            lid_embd = self.projector_spk(utt_level_feat)
+        else:
+            lid_embd = utt_level_feat
+
+        return lid_embd
+
 
 
 
@@ -475,7 +534,7 @@ class ESPnetSHALLiModel(ESPnetASRModel):
         condition_features = None
         # import pdb; pdb.set_trace()
         
-        condition_features = self.lang_embedding(langs)
+        # condition_features = self.lang_embedding(langs)
             
         feats, feats_lengths, feats_layers, feats_lengths_layers  = self._extract_feats(speech, speech_lengths, condition_features)
         return {"feats": feats, "feats_lengths": feats_lengths}
@@ -491,15 +550,26 @@ class ESPnetSHALLiModel(ESPnetASRModel):
         """
 
 
-        def my_hook(module, input, output):
+        def my_hook_asr(module, input, output):
             # This will be executed upon the forward pass of the hooked layer.
             # 'module' is the layer the hook is attached to,
             # 'input' is the input to the layer,
             # 'output' is the output of the layer.
             # Here you can do things with the output, for instance:
             x, (attn, layer_result, self_attn_padding_mask) = output  # Storing it in the instance for later use
-            self.intermediate_outputs = x
-            self.mask = self_attn_padding_mask
+            self.intermediate_outputs_asr = x
+            self.mask_asr = self_attn_padding_mask
+
+
+        def my_hook_lid(module, input, output):
+            # This will be executed upon the forward pass of the hooked layer.
+            # 'module' is the layer the hook is attached to,
+            # 'input' is the input to the layer,
+            # 'output' is the output of the layer.
+            # Here you can do things with the output, for instance:
+            x, (attn, layer_result, self_attn_padding_mask) = output  # Storing it in the instance for later use
+            self.intermediate_outputs_lid = x
+            self.mask_lid = self_attn_padding_mask
 
         
         speech = speech[:, : speech_lengths.max()]
@@ -507,53 +577,67 @@ class ESPnetSHALLiModel(ESPnetASRModel):
         lid_embd_list = []
         padding_mask = None
         condition_features = None
+        if self.lid_audio_length > 0: # and self.skip_asr: 
+                # Random cropping
+                if speech_lengths.min() > self.lid_audio_length:
+                    lid_start = torch.randint(0, speech_lengths.min() - self.lid_audio_length + 1, (1,)).item()
+                    lid_speech = speech[:, lid_start: lid_start + self.lid_audio_length]
+                    lid_speech_lengths = lid_speech.new_full(speech_lengths.shape, self.lid_audio_length, dtype=int) 
+                else:
+                    lid_speech = speech
+                    lid_speech_lengths = speech_lengths  
 
-        if self.skip_asr and self.lid_audio_length > 0:
-            # Random cropping
-            if speech_lengths.min() > self.lid_audio_length:
-                lid_start = torch.randint(0, speech_lengths.min() - self.lid_audio_length + 1, (1,)).item()
-                speech = speech[:, lid_start: lid_start + self.lid_audio_length]
-                speech_lengths = speech.new_full(speech_lengths.shape, self.lid_audio_length, dtype=int)   
-        
         for index in range(len(self.lid_layer_selections)):
-            if index == 0:
+            if index == 0 or self.twice_ssl_ablation:
                 # logging.info("register hook for layer {}".format(self.lid_layer_selections[index]))
-                hook_handle = self.frontend.upstream.upstream.model.encoder.layers[self.lid_layer_selections[0]-1].register_forward_hook(my_hook)
+                hook_handle = self.frontend.upstream.upstream.model.encoder.layers[self.lid_layer_selections[0]-1].register_forward_hook(my_hook_asr)
                 feats_layers, feats_lengths_layers = self.frontend(
                                                         speech, speech_lengths, 
-                                                        condition_features=None, 
+                                                        condition_features=condition_features, 
                                                         layer=self.lid_layer_selections[index]
                                                         )
                 hook_handle.remove()
+
+                if self.lid_audio_length > 0 and speech_lengths.min() > self.lid_audio_length:
+                    hook_handle = self.frontend.upstream.upstream.model.encoder.layers[self.lid_layer_selections[0]-1].register_forward_hook(my_hook_lid)
+                    feats_layers_lid, feats_lengths_layers_lid = self.frontend(
+                                                            lid_speech, lid_speech_lengths, 
+                                                            condition_features=condition_features, 
+                                                            layer=self.lid_layer_selections[index]
+                                                            )
+                    hook_handle.remove()
+                else:
+                    feats_layers_lid = feats_layers
+                    feats_lengths_layers_lid = feats_lengths_layers
             else:
 
-                self.intermediate_outputs, feats_layers, feats_lengths_layers = self.frontend.encode_layers(
+                self.intermediate_outputs_asr, feats_layers, feats_lengths_layers = self.frontend.encode_layers(
                                                         speech, speech_lengths, 
                                                         condition_features=condition_features,
-                                                        last_layer_result=self.intermediate_outputs, 
+                                                        last_layer_result=self.intermediate_outputs_asr, 
                                                         layers=(self.lid_layer_selections[index-1], self.lid_layer_selections[index]),
                                                         feats_layers=feats_layers,
                                                         feats_lengths_layers=feats_lengths_layers,
-                                                        padding_mask=self.mask
+                                                        padding_mask=self.mask_asr
                                                         )
 
+                if self.lid_audio_length > 0 and speech_lengths.min() > self.lid_audio_length:
+                    self.intermediate_outputs_lid, feats_layers_lid, feats_lengths_layers_lid = self.frontend.encode_layers(
+                                                            lid_speech, lid_speech_lengths, 
+                                                            condition_features=condition_features,
+                                                            last_layer_result=self.intermediate_outputs_lid, 
+                                                            layers=(self.lid_layer_selections[index-1], self.lid_layer_selections[index]),
+                                                            feats_layers=feats_layers_lid,
+                                                            feats_lengths_layers=feats_lengths_layers_lid,
+                                                            padding_mask=self.mask_lid
+                                                            )
+                else:
+                    feats_layers_lid = feats_layers
+                    feats_lengths_layers_lid = feats_lengths_layers
 
-            feats_layers_lid = feats_layers
-            feats_lengths_layers_lid = feats_lengths_layers
-            if self.lid_audio_length > 0:
-                # Random cropping
-                # import pdb; pdb.set_trace()
-                lid_feats_lengths = self.lid_audio_length // 150
-                feats_lid_lengths = feats_lengths_layers[0]
-                if feats_lid_lengths.min() > lid_feats_lengths:
-                    lid_start = torch.randint(0, feats_lid_lengths.min() - lid_feats_lengths + 1, (1,)).item()
-                    feats_layers_lid = [feats[:, lid_start: lid_start + lid_feats_lengths] for feats in feats_layers]
-                    feats_lengths_layers_lid = [feats_len.new_full(feats_lid_lengths.shape, lid_feats_lengths, dtype=int) for feats_len in feats_lengths_layers]
-                    # feats_lid = feats_lid[:, lid_start: lid_start + lid_feats_lengths]
-                    # feats_lid_lengths = feats_lid.new_full(feats_lid_lengths.shape, lid_feats_lengths, dtype=int)
-                
-            # import pdb; pdb.set_trace()
+
             feats_lid, feats_lid_lengths = self.frontend.lid_featurizers[index](feats_layers_lid, feats_lengths_layers_lid)
+
 
             # 2. Data augmentation
             if self.specaug is not None and self.training:
@@ -622,8 +706,9 @@ class ESPnetSHALLiModel(ESPnetASRModel):
                     condition_features = self.dropouts[index](condition_features)
             # # for sanity check
             # condition_features = None
+
         if self.skip_asr:
-            return _, _, lid_embd_list, encoder_lid_out_lens
+            return _, _, lid_embd_list, encoder_lid_out_lens, _
 
 
         # 6. Forward encoder for ASR
@@ -642,19 +727,29 @@ class ESPnetSHALLiModel(ESPnetASRModel):
                 
             # ori_feats_layers, ori_feats_lengths_layers = self.frontend.upstream(speech, speech_lengths, condition_features)
 
+            # ori_feats_layers_lid, ori_feats_lengths_layers_lid = self.frontend.upstream(lid_speech, lid_speech_lengths, condition_features)
+
             # for i in range(25):
             #     # logging.info("ori_feats_layers {}: {}".format(i, ori_feats_layers[i]))
             #     # logging.info("feats_layers {}: {}".format(i, feats_layers[i]))
             #     same = torch.all(torch.eq(ori_feats_layers[i],feats_layers[i]))
+            #     same_lid = torch.all(torch.eq(ori_feats_layers_lid[i],feats_layers_lid[i]))
             #     logging.info("feats_layers {} is the same as ori_feats_layers or not: {}".format(i, same))
+            #     logging.info("feats_layers_lid {} is the same as ori_feats_layers_lid or not: {}".format(i, same_lid))
             #     if not same:
-            #         logging.info("ori_feats_layers: {}".format(ori_feats_layers[i]))
-            #         logging.info("feats_layers: {}".format(feats_layers[i]))
+            #         # logging.info("ori_feats_layers: {}".format(ori_feats_layers[i]))
+            #         # logging.info("feats_layers: {}".format(feats_layers[i]))
             #         logging.info("same part of feats_layers {} is: {}".format(i, torch.eq(ori_feats_layers[i],feats_layers[i])))
             #         # import pdb; pdb.set_trace()
             #         # logging.info("same part of feats_layers {} with {} is: {}".format(i, i+1, torch.eq(ori_feats_layers[i],feats_layers[i+1])))
             #     # logging.info("feats_layers {} is the same as ori_feats_layers or not: {}".format(i, torch.all(torch.eq(ori_feats_layers[i],feats_layers[i]))))
-            # # exit()            
+            #     if not same_lid:
+            #         # logging.info("ori_feats_layers: {}".format(ori_feats_layers[i]))
+            #         # logging.info("feats_layers: {}".format(feats_layers[i]))
+            #         logging.info("same part of feats_layers_lid {} is: {}".format(i, torch.eq(ori_feats_layers_lid[i],feats_layers_lid[i])))
+            #         # import pdb; pdb.set_trace()
+            #         # logging.info("same part of feats_layers {} with {} is: {}".format(i, i+1, torch.eq(ori_feats_layers[i],feats_layers[i+1])))
+            # exit()            
 
             feats, feats_lengths = self.frontend.asr_featurizers[-1](feats_layers, feats_lengths_layers)
 
@@ -704,10 +799,25 @@ class ESPnetSHALLiModel(ESPnetASRModel):
                 encoder_out_lens.max(),
             )
 
-        if intermediate_outs is not None:
-            return (encoder_out, intermediate_outs), encoder_out_lens
 
-        return encoder_out, encoder_out_lens, lid_embd_list, encoder_lid_out_lens
+        # 7. Forward encoder for SV
+        if self.sv_layer_selections is not None:
+            task_tokens = None
+            batch_size = speech.shape[0]
+
+            feats, feats_lengths = self.frontend.spk_featurizers[-1](feats_layers, feats_lengths_layers)
+            if self.preencoder_spk is not None:
+                feats, feats_lengths = self.preencoder_spk(feats, feats_lengths)
+            frame_level_feats = self.encoder_spk(feats)
+            utt_level_feat = self.pooling_spk(frame_level_feats, task_tokens)
+            spk_embd = self.project_spk_embd(utt_level_feat)
+        else:
+            spk_embd = None
+
+        if intermediate_outs is not None:
+            return (encoder_out, intermediate_outs), encoder_out_lens, spk_embd
+
+        return encoder_out, encoder_out_lens, lid_embd_list, encoder_lid_out_lens, spk_embd
 
     def _extract_feats(
         self, speech: torch.Tensor, speech_lengths: torch.Tensor, condition_features: torch.Tensor = None,

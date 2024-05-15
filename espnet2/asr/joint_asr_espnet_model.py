@@ -58,8 +58,8 @@ class ESPnetJointASRModel(ESPnetASRModel):
         postencoder: Optional[AbsPostEncoder],
         decoder: Optional[AbsDecoder],
         postencoder_lid: Optional[AbsPostEncoder],
-        projector: Optional[AbsProjector],
-        loss: Optional[AbsLoss],
+        projector_lid: Optional[AbsProjector],
+        loss_lid: Optional[AbsLoss],
         ctc: CTC,
         joint_network: Optional[torch.nn.Module],
         lid_tokens: Union[Tuple[str, ...], List[str]] = None,
@@ -91,6 +91,8 @@ class ESPnetJointASRModel(ESPnetASRModel):
         sym_eos: str = "<sos/eos>",
         extract_feats_in_collect_stats: bool = True,
         lang_token_id: int = -1,
+        asr_layer_selections:  Optional[list] = None,
+        lid_layer_selections:  Optional[list] = None,
     ):
         assert check_argument_types()
         assert 0.0 <= ctc_weight <= 1.0, ctc_weight
@@ -136,8 +138,8 @@ class ESPnetJointASRModel(ESPnetASRModel):
         self.preencoder_lid = preencoder_lid
         self.encoder_lid = encoder_lid
         self.postencoder_lid = postencoder_lid
-        self.projector = projector
-        self.loss = loss
+        self.projector_lid = projector_lid
+        self.loss_lid = loss_lid
         self.lid_weight = lid_weight
         self.lid_audio_length = lid_audio_length
         self.lid_start_begin = lid_start_begin
@@ -201,7 +203,8 @@ class ESPnetJointASRModel(ESPnetASRModel):
             encoder_out = encoder_out[0]
 
 
-        loss_lid =self.loss(lid_embd, langs)
+        loss_lid =self.loss_lid(lid_embd, langs)
+        # acc_lid = 
 
         loss_att, acc_att, cer_att, wer_att = None, None, None, None
         loss_ctc, cer_ctc = None, None
@@ -325,8 +328,8 @@ class ESPnetJointASRModel(ESPnetASRModel):
 
 
     def project_lid_embd(self, utt_level_feat: torch.Tensor) -> torch.Tensor:
-        if self.projector is not None:
-            lid_embd = self.projector(utt_level_feat)
+        if self.projector_lid is not None:
+            lid_embd = self.projector_lid(utt_level_feat)
         else:
             lid_embd = utt_level_feat
 
@@ -433,7 +436,7 @@ class ESPnetJointASRModel(ESPnetASRModel):
         if self.embed_condition:
             if self.lid_condition_feature == "hard":
                 # Compute cosine similarity
-                cosine = F.linear(F.normalize(lid_embd), F.normalize(self.loss.weight))
+                cosine = F.linear(F.normalize(lid_embd), F.normalize(self.loss_lid.weight))
                 
                 # Get the predicted speaker index
                 cosine_similarity = torch.max(cosine, dim=1)
@@ -443,7 +446,7 @@ class ESPnetJointASRModel(ESPnetASRModel):
                 condition_features = self.lang_embedding(langs_token).unsqueeze(1)
             elif self.lid_condition_feature == "weighted_cosine":
                 # Compute cosine similarity
-                cosine = F.linear(F.normalize(lid_embd), F.normalize(self.loss.weight))
+                cosine = F.linear(F.normalize(lid_embd), F.normalize(self.loss_lid.weight))
                 cosine_probabilities = F.softmax(cosine, dim=-1)
                 if self.lid_condition_activate == "LeakyReLU":
                     condition_features = self.lang_embedding(cosine).unsqueeze(1)
