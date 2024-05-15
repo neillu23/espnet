@@ -1994,7 +1994,7 @@ class AbsTask(ABC):
         ]
         num_iters_per_epoch_list = [
             (
-                (iter_options.num_iters_per_epoch + i) // num_splits
+                (iter_options.num_iters_per_epoch + i) // (num_splits//8)
                 if iter_options.num_iters_per_epoch is not None
                 else None
             )

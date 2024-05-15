@@ -28,7 +28,13 @@ class MultipleIterFactory(AbsIterFactory):
         if shuffle:
             np.random.RandomState(epoch + self.seed).shuffle(build_funcs)
 
-        for i, build_func in enumerate(build_funcs):
+        split_num = len(build_funcs)
+        assert(split_num % 8 == 0)
+
+        iter_factory_nums = split_num // 8
+        iter_factory_group = epoch % iter_factory_nums
+        for i in range(iter_factory_nums):
+            build_func = build_funcs[i + iter_factory_group * iter_factory_nums]
             logging.info(f"Building {i}th iter-factory...")
             iter_factory = build_func()
             assert isinstance(iter_factory, AbsIterFactory), type(iter_factory)
