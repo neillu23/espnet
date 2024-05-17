@@ -97,10 +97,11 @@ from espnet2.train.preprocessor import (
     AbsPreprocessor,
     CommonPreprocessor,
     CommonPreprocessor_multi,
+    JointASRLIDPreprocessor,
     JointASRLIDSVPreprocessor,
     MutliTokenizerCommonPreprocessor,
 )
-from espnet2.train.trainer import Trainer
+from espnet2.train.joint_trainer import JointTrainer as Trainer
 from espnet2.utils.get_default_kwargs import get_default_kwargs
 from espnet2.utils.nested_dict_action import NestedDictAction
 from espnet2.utils.types import float_or_none, int_or_none, str2bool, str_or_none
@@ -298,6 +299,7 @@ preprocessor_choices = ClassChoices(
         default=CommonPreprocessor,
         multi=CommonPreprocessor_multi,
         multi_tokenizer=MutliTokenizerCommonPreprocessor,
+        joint_asr_lid=JointASRLIDPreprocessor,
         joint_asr_lid_spk=JointASRLIDSVPreprocessor,
     ),
     type_check=AbsPreprocessor,

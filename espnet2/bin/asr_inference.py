@@ -103,6 +103,7 @@ class Speech2Text:
         nbest: int = 1,
         streaming: bool = False,
         enh_s2t_task: bool = False,
+        second_last_lid: bool = False,
         lid_task: bool = False,
         lid_asr_joint_task: bool = False,
         sv_lid_asr_joint_task: bool = False,
@@ -449,7 +450,7 @@ class Speech2Text:
                 )
         logging.info(f"Text tokenizer: {tokenizer}")
 
-        if lid_asr_joint_task:
+        if lid_asr_joint_task or lid_task:
             with open(lid_token_list, encoding="utf-8") as f:
                 lid_token_list = [line.rstrip() for line in f]
             converter_lid = TokenIDConverter(token_list=list(lid_token_list))
@@ -473,6 +474,7 @@ class Speech2Text:
         self.nbest = nbest
         self.enh_s2t_task = enh_s2t_task
         self.lid_task = lid_task
+        self.second_last_lid = second_last_lid
         self.lid_asr_joint_task = lid_asr_joint_task
         self.sv_lid_asr_joint_task = sv_lid_asr_joint_task
         self.multi_asr = multi_asr
@@ -513,9 +515,12 @@ class Speech2Text:
         # a. To device
         batch = to_device(batch, device=self.device)
 
-        if not self.lid_asr_joint_task:
+        if not self.lid_asr_joint_task and not self.lid_task:
             # b. Forward Encoder
-            enc, enc_olens = self.asr_model.encode(**batch)
+            enc, enc_olens, _ = self.asr_model.encode(**batch)
+        # if self.lid_task:
+        #     _, _, enc, enc_olens = self.asr_model.encode(**batch)
+            # enc, enc_olens = self.asr_model.encode(**batch)
 
         # logging.info("encoder shape:" + str(enc.shape))
         if self.multi_asr:
@@ -541,15 +546,24 @@ class Speech2Text:
                 results.append(ret)
 
         elif self.lid_task: # LID
-            enc, enc_olens = self.asr_model.encode(**batch)
+
+            _, _, enc, enc_olens, _ = self.asr_model.encode(**batch)
+            if self.second_last_lid:
+                enc = enc[-2]
+            else:
+                enc = enc[-1]
+            # enc, enc_olens = self.asr_model.encode(**batch)
             # Compute cosine similarity
-            cosine = F.linear(F.normalize(enc), F.normalize(self.asr_model.loss.weight))
+            cosine = F.linear(F.normalize(enc), F.normalize(self.asr_model.loss_lid.weight))
             
             # Get the predicted speaker index
             cosine_similarity = torch.max(cosine, dim=1).values.item()
             langs_token = torch.argmax(cosine, dim=1)
             # import pdb;pdb.set_trace()
-            langs = self.converter.ids2tokens(langs_token)
+            # if self.converter_lid is not None:
+            langs = self.converter_lid.ids2tokens(langs_token)
+            # else:
+            #     langs = self.converter.ids2tokens(langs_token)
             
             logging.info(f"Cosine Similarity: {cosine_similarity:.2f}")
             logging.info(
@@ -563,7 +577,7 @@ class Speech2Text:
             for i in range(self.nbest):
                 langs_token = topk_cosine.indices.view(-1,1)[i]
                 cosine_similarity = topk_cosine.values.view(-1,1)[i].item()
-                langs = self.converter.ids2tokens(langs_token)
+                langs = self.converter_lid.ids2tokens(langs_token)
                 hyp = Hypothesis(score=cosine_similarity, yseq=langs_token)
                 # import pdb;pdb.set_trace()
                 results.append((langs[0], langs, langs_token, hyp))
@@ -579,15 +593,19 @@ class Speech2Text:
 
 
         elif self.lid_asr_joint_task: # LID + ASR Joint
-            if self.sv_lid_asr_joint_task:
-                enc, enc_olens, lid_embd, enc_lid_olens, _ = self.asr_model.encode(**batch)
-            else:
-                enc, enc_olens, lid_embd, enc_lid_olens = self.asr_model.encode(**batch)
+            # if self.sv_lid_asr_joint_task:
+            enc, enc_olens, lid_embd, enc_lid_olens, _ = self.asr_model.encode(**batch)
+            # else:
+            #     enc, enc_olens, lid_embd, enc_lid_olens  = self.asr_model.encode(**batch)
             # if lid_embd is list
+            
             if isinstance(lid_embd, list):
-                lid_embd = lid_embd[-1]
+                if self.second_last_lid:
+                    lid_embd = lid_embd[-2]
+                else:
+                    lid_embd = lid_embd[-1]
             # Compute cosine similarity
-            cosine = F.linear(F.normalize(lid_embd), F.normalize(self.asr_model.loss.weight))
+            cosine = F.linear(F.normalize(lid_embd), F.normalize(self.asr_model.loss_lid.weight))
             
             # Get the predicted speaker index
             cosine_similarity = torch.max(cosine, dim=1).values.item()
@@ -848,6 +866,7 @@ def inference(
     streaming: bool,
     enh_s2t_task: bool,
     lid_task: bool,
+    second_last_lid: bool,
     lid_asr_joint_task: bool,
     sv_lid_asr_joint_task: bool,
     lid_token_list: str,
@@ -907,6 +926,7 @@ def inference(
         streaming=streaming,
         enh_s2t_task=enh_s2t_task,
         lid_task=lid_task,
+        second_last_lid=second_last_lid,
         lid_asr_joint_task=lid_asr_joint_task,
         sv_lid_asr_joint_task=sv_lid_asr_joint_task,
         lid_token_list=lid_token_list,
@@ -1135,6 +1155,13 @@ def get_parser():
         type=str2bool,
         default=False,
         help="Whether we are using an enhancement and ASR joint model",
+    )
+
+    group.add_argument(
+        "--second_last_lid",
+        type=str2bool,
+        default=False,
+        help="Whether we are using the second last result from language identification model",
     )
 
     group.add_argument(

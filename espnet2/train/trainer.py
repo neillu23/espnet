@@ -174,7 +174,7 @@ class Trainer:
         optimizers: Sequence[torch.optim.Optimizer],
         schedulers: Sequence[Optional[AbsScheduler]],
         train_iter_factory: AbsIterFactory,
-        valid_iter_factory: AbsIterFactory,
+        valid_iter_factory: Union[AbsIterFactory, Tuple],
         plot_attention_iter_factory: Optional[AbsIterFactory],
         trainer_options,
         distributed_option: DistributedOption,
@@ -342,14 +342,37 @@ class Trainer:
                     distributed_option=distributed_option,
                 )
 
-            with reporter.observe("valid") as sub_reporter:
-                cls.validate_one_epoch(
-                    model=dp_model,
-                    iterator=valid_iter_factory.build_iter(iepoch),
-                    reporter=sub_reporter,
-                    options=trainer_options,
-                    distributed_option=distributed_option,
-                )
+                # determine valid_iter_factory is AbsIterFactory or a tuple:
+            if valid_iter_factory is not tuple:
+                with reporter.observe("valid") as sub_reporter:
+                    cls.validate_one_epoch(
+                        model=dp_model,
+                        iterator=valid_iter_factory.build_iter(iepoch),
+                        reporter=sub_reporter,
+                        options=trainer_options,
+                        distributed_option=distributed_option,
+                    )
+            else:
+                valid_iter_factory_asr, valid_iter_factory_spk = valid_iter_factory
+                logging.info("Validating SV model")
+                with reporter.observe("valid_spk") as sub_reporter:
+                    cls.validate_one_epoch_spk(
+                        model=dp_model,
+                        iterator=valid_iter_factory_spk.build_iter(iepoch),
+                        reporter=sub_reporter,
+                        options=trainer_options,
+                        distributed_option=distributed_option,
+                    )
+                logging.info("Validating ASR model")
+                with reporter.observe("valid_asr") as sub_reporter:
+                    cls.validate_one_epoch(
+                        model=dp_model,
+                        iterator=valid_iter_factory_asr.build_iter(iepoch),
+                        reporter=sub_reporter,
+                        options=trainer_options,
+                        distributed_option=distributed_option,
+                    )
+
             if not distributed_option.distributed or distributed_option.dist_rank == 0:
                 # att_plot doesn't support distributed
                 if plot_attention_iter_factory is not None:
@@ -625,6 +648,7 @@ class Trainer:
                 **autocast_args,
             ):
                 with reporter.measure_time("forward_time"):
+                    # reporter.get_total_count() returns the number of steps
                     retval = model(**batch)
 
                     # Note(kamo):
