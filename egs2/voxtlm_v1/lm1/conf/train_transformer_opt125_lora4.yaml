@@ -1,13 +1,27 @@
-num_workers: 32
+num_workers: 16
 use_amp: true
 sharded_ddp: false
 num_att_plot: 0
 
 lm: transformer_opt
 lm_conf:
-    opt_name: facebook/opt-1.3b
+    opt_name: /projects/p32222/ylu125/model_weight/softmax1_opt
     local_files_only: true
+    lora: true
+    lora_config:
+        r: 128
+        lora_alpha: 128
+        target_modules: 
+            - "q_proj"
+            - "v_proj"
+            - "k_proj"
+            - "out_proj"
+            - "fc1"
+            - "fc2"
+        lora_dropout: 0.05
+        bias: "all"
     
+
 model: lm_multitask
 model_conf:
     lsm_weight: 0.1
@@ -17,14 +31,21 @@ model_conf:
     - "<generatespeech>"
     eos_sym: "<sos/eos>"
 
+
+
 # optimization related
 grad_clip: 1.0
 batch_type: length
-batch_bins: 10000
-accum_grad: 20
-num_iters_per_epoch: 25000
-max_epoch: 250
+batch_bins: 12500
+accum_grad: 16
+num_iters_per_epoch: 5000
+max_epoch: 58
 
+unfreeze_param: [
+    'model.decoder.embed_tokens',
+    'model.decoder.embed_positions',
+    'lm_head',
+]
 optim: adam
 optim_conf:
    lr: 0.0003

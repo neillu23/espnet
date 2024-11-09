@@ -21,7 +21,7 @@ model_conf:
 grad_clip: 1.0
 batch_type: length
 batch_bins: 10000
-accum_grad: 10
+accum_grad: 40
 num_iters_per_epoch: 12500
 max_epoch: 70
 

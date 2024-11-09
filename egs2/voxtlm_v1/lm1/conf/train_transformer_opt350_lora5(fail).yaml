@@ -1,0 +1,61 @@
+num_workers: 8
+use_amp: true
+sharded_ddp: false
+num_att_plot: 0
+
+lm: transformer_opt
+lm_conf:
+    opt_name: /projects/p32013/OutEffHop/OutEffHop/output/OutEffHop-opt-350m-1
+    local_files_only: true
+    lora: true
+    lora_config:
+        r: 512
+        lora_alpha: 256
+        target_modules: 
+            - "q_proj"
+            - "v_proj"
+            - "k_proj"
+            - "out_proj"
+            - "fc1"
+            - "fc2"
+        lora_dropout: 0.05
+        bias: "all"
+
+model: lm_multitask
+model_conf:
+    lsm_weight: 0.01
+    length_normalized_loss: true
+    sos_syms:   # multiple sos symbols are used
+    - "<generatetext>"
+    - "<generatespeech>"
+    eos_sym: "<sos/eos>"
+
+# optimization related
+grad_clip: 1.0
+batch_type: length
+batch_bins: 5000
+accum_grad: 40
+num_iters_per_epoch: 12500
+max_epoch: 50
+
+unfreeze_param: [
+    'model.decoder.embed_tokens',
+    'model.decoder.embed_positions',
+    'lm_head',
+    'project_out',
+    'project_in',
+]
+
+optim: adam
+optim_conf:
+   lr: 0.0001
+   weight_decay: 1.0e-06
+scheduler: warmuplr
+scheduler_conf:
+   warmup_steps: 2500
+
+best_model_criterion:
+-   - valid
+    - acc
+    - max
+keep_nbest_models: 10

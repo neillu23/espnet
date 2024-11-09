@@ -1,0 +1,61 @@
+num_workers: 8
+use_amp: true
+sharded_ddp: false
+num_att_plot: 0
+use_wandb: false
+wandb_project: voxtlm
+
+lm: transformer_opt
+lm_conf:
+    opt_name: /projects/p32222/ylu125/model_weight/softmax1_opt
+    local_files_only: true
+    lora: true
+    lora_config:
+        r: 256
+        lora_alpha: 32
+        target_modules: 
+            - "q_proj"
+            - "v_proj"
+            - "k_proj"
+            - "out_proj"
+        lora_dropout: 0.05
+        bias: "all"
+        # task_type: "CAUSAL_LM"
+
+model: lm_multitask
+model_conf:
+    lsm_weight: 0.1
+    length_normalized_loss: true
+    sos_syms:   # multiple sos symbols are used
+    - "<generatetext>"
+    - "<generatespeech>"
+    eos_sym: "<sos/eos>"
+
+# optimization related
+grad_clip: 1.0
+batch_type: length
+batch_bins: 50000
+accum_grad: 4
+num_iters_per_epoch: 5000
+max_epoch: 61
+
+unfreeze_param: [
+    'model.decoder.embed_tokens',
+    'model.decoder.embed_positions',
+    'lm_head',
+    "final_layer_norm"
+]
+
+optim: adam
+optim_conf:
+   lr: 0.0003
+   weight_decay: 1.0e-06
+scheduler: warmuplr
+scheduler_conf:
+   warmup_steps: 2500
+
+best_model_criterion:
+-   - valid
+    - acc
+    - max
+keep_nbest_models: 10

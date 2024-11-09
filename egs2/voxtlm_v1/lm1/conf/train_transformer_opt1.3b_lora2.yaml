@@ -5,9 +5,22 @@ num_att_plot: 0
 
 lm: transformer_opt
 lm_conf:
-    opt_name: facebook/opt-350m
+    opt_name: facebook/opt-1.3b
     local_files_only: false
-    
+    lora: true
+    lora_config:
+        r: 256
+        lora_alpha: 256
+        target_modules: 
+            - "q_proj"
+            - "v_proj"
+            - "k_proj"
+            - "out_proj"
+            - "fc1"
+            - "fc2"
+        lora_dropout: 0.05
+        bias: "all"
+        
 model: lm_multitask
 model_conf:
     lsm_weight: 0.01
@@ -20,11 +33,18 @@ model_conf:
 # optimization related
 grad_clip: 1.0
 batch_type: length
-batch_bins: 10000
-accum_grad: 10
+batch_bins: 5000
+accum_grad: 20
 num_iters_per_epoch: 12500
-max_epoch: 70
-
+max_epoch: 80
+unfreeze_param: [
+    'model.decoder.embed_tokens',
+    'model.decoder.embed_positions',
+    'lm_head',
+    'project_out',
+    'project_in',
+    # "final_layer_norm"
+]
 optim: adam
 optim_conf:
    lr: 0.0003

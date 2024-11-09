@@ -5,7 +5,7 @@ num_att_plot: 0
 
 lm: transformer_opt
 lm_conf:
-    opt_name: facebook/opt-350m
+    opt_name: facebook/opt-1.3b
     local_files_only: false
     
 model: lm_multitask
@@ -20,8 +20,8 @@ model_conf:
 # optimization related
 grad_clip: 1.0
 batch_type: length
-batch_bins: 10000
-accum_grad: 10
+batch_bins: 5000
+accum_grad: 40
 num_iters_per_epoch: 12500
 max_epoch: 70
 
