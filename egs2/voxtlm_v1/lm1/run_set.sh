@@ -11,7 +11,8 @@ test_sets="test"
 
 nbpe=5000
 km_dir="" #Add pretrained km_directory path
-lm_config=conf/train_transformer_opt1.3b_qlora_8bit.yaml
+lm_config=conf/train_transformer_opt350_lora.yaml
+# lm_config=conf/train_transformer_opt1.3b_qlora_8bit.yaml
 lm_inference_asr_config=conf/decode_lm_asr.yaml
 lm_inference_tts_config=conf/decode_lm_tts.yaml
 
@@ -20,7 +21,7 @@ lm_inference_tts_config=conf/decode_lm_tts.yaml
     --stop_stage 9 \
     --num_splits_lm 32 \
     --nj 32 \
-    --ngpu 4 \
+    --ngpu 2 \
     --expdir exp_set/ \
     --gpu_inference true \
     --inference_nj 32 \

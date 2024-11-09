@@ -30,13 +30,15 @@
 # Select the backend used by run.sh from "local", "stdout", "sge", "slurm", or "ssh"
 cmd_backend='local'
 
+# cmd_backend='slurm'
 # Local machine, without any Job scheduling system
 if [ "${cmd_backend}" = local ]; then
 
     # The other usage
     export train_cmd="run.pl"
     # Used for "*_train.py": "--gpu" is appended optionally by run.sh
-    export cuda_cmd="run.pl"
+    #export cuda_cmd="run.pl"
+    export cuda_cmd="run.pl --max-jobs-run 8"
     # Used for "*_recog.py"
     export decode_cmd="run.pl"
 

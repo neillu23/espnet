@@ -9,18 +9,19 @@ train_set="train"
 valid_set="dev"
 test_sets="test"
 
-nbpe=10000
+nbpe=5000
 km_dir="" #Add pretrained km_directory path
-lm_config=conf/train_transformer_size768_e12.yaml
+lm_config=conf/train_transformer_opt350.yaml
 lm_inference_asr_config=conf/decode_lm_asr.yaml
 lm_inference_tts_config=conf/decode_lm_tts.yaml
 
 ./lm.sh \
     --stage 1 \
     --stop_stage 9 \
-    --num_splits_lm 1 \
-    --nj 16 \
+    --num_splits_lm 32 \
+    --nj 32 \
     --ngpu 4 \
+    --expdir exp_set/ \
     --gpu_inference true \
     --inference_nj 8 \
     --lang en \

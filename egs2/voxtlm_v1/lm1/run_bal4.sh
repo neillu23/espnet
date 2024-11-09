@@ -11,7 +11,8 @@ test_sets="test"
 
 nbpe=5000
 km_dir="" #Add pretrained km_directory path
-lm_config=conf/train_transformer_opt125_2048_lora.yaml
+#lm_config=conf/train_transformer_opt125_qlora_8bit_2.yaml
+lm_config=conf/train_transformer_opt125_lora2.yaml
 lm_inference_asr_config=conf/decode_lm_asr.yaml
 lm_inference_tts_config=conf/decode_lm_tts.yaml
 
@@ -23,7 +24,7 @@ lm_inference_tts_config=conf/decode_lm_tts.yaml
     --ngpu 2 \
     --expdir exp_bal/ \
     --gpu_inference true \
-    --inference_nj 8 \
+    --inference_nj 16 \
     --lang en_bal \
     --token_type bpe \
     --nbpe "${nbpe}" \
@@ -41,3 +42,4 @@ lm_inference_tts_config=conf/decode_lm_tts.yaml
     --lm_test_text_tts dump/raw/${test_sets}/text.tts \
     --lm_test_text_textlm dump/raw/${test_sets}/text.textlm \
     --lm_test_text_speechlm dump/raw/${test_sets}/text.speechlm "$@"
+

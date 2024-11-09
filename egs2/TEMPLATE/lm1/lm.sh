@@ -749,6 +749,24 @@ if [ ${stage} -le 8 ] && [ ${stop_stage} -ge 8 ] && ! [[ " ${skip_stages} " =~ [
                 ${_opts}
         log "PPL: ${lm_test_text_speechlm}: $(cat ${_output_dir}/ppl)"
     fi
+
+    if [ -f ${lm_test_text_asr} ]; then
+        log "Stage 8c: Calc perplexity for ASR: ${lm_test_text_asr}"
+        _opts=
+        _output_dir="${lm_exp}/perplexity_test_asrlm/$(basename ${lm_test_text_asr})"
+        _ngpu=1     # always use a single GPU since the data is usually small
+        log "Perplexity calculation started... log: '${_output_dir}/lm_calc_perplexity.log'"
+        # shellcheck disable=SC2086
+        ${cuda_cmd} --gpu "${_ngpu}" "${lm_exp}"/perplexity_test_asrlm/lm_calc_perplexity.log \
+            ${python} -m espnet2.bin.lm_calc_perplexity \
+                --ngpu "${_ngpu}" \
+                --data_path_and_name_and_type "${lm_test_text_asr},text,text" \
+                --train_config "${lm_exp}"/config.yaml \
+                --model_file "${lm_exp}/${inference_lm}" \
+                --output_dir "${_output_dir}" \
+                ${_opts}
+        log "PPL: ${lm_test_text_asrlm}: $(cat ${_output_dir}/ppl)"
+    fi
 fi
 
 
@@ -835,6 +853,7 @@ if [ ${stage} -le 9 ] && [ ${stop_stage} -ge 9 ] && ! [[ " ${skip_stages} " =~ [
 fi
 
 if [ ${stage} -le 10 ] && [ ${stop_stage} -ge 10 ] && ! [[ " ${skip_stages} " =~ [[:space:]]10[[:space:]] ]]; then
+    echo ${lm_test_text_tts}
     if [ -f ${lm_test_text_tts} ]; then
         log "Stage 10: LM decoding for TTS: ${lm_test_text_tts}"
         _dir="${lm_exp}/decode_test_tts/$(basename ${lm_test_text_tts})"
