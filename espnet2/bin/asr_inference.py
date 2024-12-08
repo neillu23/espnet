@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 import torch
 import torch.quantization
+import torch.nn.functional as F
+
 from typeguard import typechecked
 
 from espnet2.asr.decoder.hugging_face_transformers_decoder import (
@@ -103,6 +105,11 @@ class Speech2Text:
         normalize_length: bool = False,
         streaming: bool = False,
         enh_s2t_task: bool = False,
+        second_last_lid: bool = False,
+        lid_task: bool = False,
+        lid_asr_joint_task: bool = False,
+        sv_lid_asr_joint_task: bool = False,
+        lid_token_list: str = "",
         quantize_asr_model: bool = False,
         quantize_lm: bool = False,
         quantize_modules: List[str] = ["Linear"],
@@ -461,6 +468,14 @@ class Speech2Text:
                 )
         logging.info(f"Text tokenizer: {tokenizer}")
 
+        if lid_asr_joint_task or lid_task:
+            with open(lid_token_list, encoding="utf-8") as f:
+                lid_token_lists = [line.rstrip() for line in f]
+            converter_lid = TokenIDConverter(token_list=list(lid_token_lists))
+            self.converter_lid = converter_lid
+
+
+
         self.asr_model = asr_model
         self.asr_train_args = asr_train_args
         self.converter = converter
@@ -476,11 +491,15 @@ class Speech2Text:
         self.dtype = dtype
         self.nbest = nbest
         self.enh_s2t_task = enh_s2t_task
+        self.lid_task = lid_task
+        self.second_last_lid = second_last_lid
+        self.lid_asr_joint_task = lid_asr_joint_task
+        self.sv_lid_asr_joint_task = sv_lid_asr_joint_task
         self.multi_asr = multi_asr
 
     @torch.no_grad()
     @typechecked
-    def __call__(self, speech: Union[torch.Tensor, np.ndarray]) -> Union[
+    def __call__(self, speech: Union[torch.Tensor, np.ndarray], langs: torch.Tensor = None) -> Union[
         ListOfHypothesis,
         List[ListOfHypothesis],
         Tuple[
@@ -503,16 +522,24 @@ class Speech2Text:
 
         # data: (Nsamples,) -> (1, Nsamples)
         speech = speech.unsqueeze(0).to(getattr(torch, self.dtype))
+        if langs is not None:
+            langs = langs.unsqueeze(0)
         # lengths: (1,)
         lengths = speech.new_full([1], dtype=torch.long, fill_value=speech.size(1))
-        batch = {"speech": speech, "speech_lengths": lengths}
+        batch = {"speech": speech, "speech_lengths": lengths, "langs":langs}
         logging.info("speech length: " + str(speech.size(1)))
 
         # a. To device
         batch = to_device(batch, device=self.device)
 
-        # b. Forward Encoder
-        enc, enc_olens = self.asr_model.encode(**batch)
+        if not self.lid_asr_joint_task and not self.lid_task:
+            # b. Forward Encoder
+            enc, enc_olens, _ = self.asr_model.encode(**batch)
+        # if self.lid_task:
+        #     _, _, enc, enc_olens = self.asr_model.encode(**batch)
+            # enc, enc_olens = self.asr_model.encode(**batch)
+
+        # logging.info("encoder shape:" + str(enc.shape))
         if self.multi_asr:
             enc = enc.unbind(dim=1)  # (batch, num_inf, ...) -> num_inf x [batch, ...]
         if self.enh_s2t_task or self.multi_asr:
@@ -534,13 +561,132 @@ class Speech2Text:
                 ret = self._decode_single_sample(enc_spk[0])
                 results.append(ret)
 
+        elif self.lid_task: # LID
+
+            _, _, enc, enc_olens, _ = self.asr_model.encode(**batch, inference=True)
+            if self.second_last_lid:
+                enc = enc[-2]
+            else:
+                enc = enc[-1]
+            # enc, enc_olens = self.asr_model.encode(**batch)
+            # Compute cosine similarity
+            cosine = F.linear(F.normalize(enc), F.normalize(self.asr_model.loss_lid.weight))
+            
+            # Get the predicted speaker index
+            cosine_similarity = torch.max(cosine, dim=1).values.item()
+            langs_token = torch.argmax(cosine, dim=1)
+            # import pdb;pdb.set_trace()
+            # if self.converter_lid is not None:
+            pred_langs = self.converter_lid.ids2tokens(langs_token)
+            # else:
+            #     langs = self.converter.ids2tokens(langs_token)
+            
+            logging.info(f"Cosine Similarity: {cosine_similarity:.2f}")
+            logging.info(
+                "best hypo: " + "".join(pred_langs) + "\n"
+            )
+
+            # import pdb;pdb.set_trace()
+            topk_cosine = torch.topk(cosine, self.nbest, dim=1)
+            results = []
+            # import pdb;pdb.set_trace()
+            for i in range(self.nbest):
+                langs_token = topk_cosine.indices.view(-1,1)[i]
+                cosine_similarity = topk_cosine.values.view(-1,1)[i].item()
+                pred_langs = self.converter_lid.ids2tokens(langs_token)
+                hyp = Hypothesis(score=cosine_similarity, yseq=langs_token)
+                # import pdb;pdb.set_trace()
+                results.append((pred_langs[0], pred_langs, langs_token, hyp))
+                # show nbest hypo
+                # logging.info(
+                #     f"nbest {i}: "
+                #     + "".join(langs)
+                #     + f" score:{cosine_similarity:.2f}"
+                #     + "\n"
+                # )
+        
+            return results
+
+
+        elif self.lid_asr_joint_task: # LID + ASR Joint
+            # if self.sv_lid_asr_joint_task:
+            enc, enc_olens, lid_embd, enc_lid_olens, _ = self.asr_model.encode(**batch, inference=True)
+            # else:
+            #     enc, enc_olens, lid_embd, enc_lid_olens  = self.asr_model.encode(**batch)
+            # if lid_embd is list
+            
+            if isinstance(lid_embd, list):
+                if self.second_last_lid:
+                    lid_embd = lid_embd[-2]
+                else:
+                    lid_embd = lid_embd[-1]
+            # Compute cosine similarity
+            cosine = F.linear(F.normalize(lid_embd), F.normalize(self.asr_model.loss_lid.weight))
+            
+            # Get the predicted speaker index
+            cosine_similarity = torch.max(cosine, dim=1).values.item()
+            langs_token = torch.argmax(cosine, dim=1)
+            # import pdb;pdb.set_trace()
+            pred_langs = self.converter_lid.ids2tokens(langs_token)
+            
+            logging.info(f"Cosine Similarity: {cosine_similarity:.2f}")
+            logging.info(
+                "best hypo: " + "".join(pred_langs) + "\n"
+            )
+
+            # import pdb;pdb.set_trace()
+            topk_cosine = torch.topk(cosine, self.nbest, dim=1)
+            lid_results = []
+            # import pdb;pdb.set_trace()
+            for i in range(self.nbest):
+                langs_token = topk_cosine.indices.view(-1,1)[i]
+                cosine_similarity = topk_cosine.values.view(-1,1)[i].item()
+                pred_langs = self.converter_lid.ids2tokens(langs_token)
+                hyp = Hypothesis(score=cosine_similarity, yseq=langs_token)
+                # import pdb;pdb.set_trace()
+                lid_results.append((pred_langs[0], pred_langs, langs_token, hyp))
+        
+            # ASR part
+            intermediate_outs = None
+            if isinstance(enc, tuple):
+                intermediate_outs = enc[1]
+                enc = enc[0]
+            # assert len(enc) == 1, len(enc)
+
+            # c. Passed the encoder result and the beam search
+            asr_results = self._decode_single_sample(enc[0])
+            # logging.info("encoder shape:" + str(enc.shape))
+            # logging.info("result 1")
+            # results_1 = self._decode_single_sample(enc[0])
+            # logging.info("result 2")
+            # results_2 = self._decode_single_sample(enc[1])
+            # results = results_1
+            # Encoder intermediate CTC predictions
+            if intermediate_outs is not None:
+                encoder_interctc_res = self._decode_interctc(intermediate_outs)
+                asr_results = (asr_results, encoder_interctc_res)
+            assert asr_results
+
+
+            # combine lid text into ASR text
+            #(text, token, token_int, hyp)
+            results = []
+            for i in range(self.nbest):
+                results_text = lid_results[i][0] + " " + asr_results[i][0]
+                results.append((results_text, asr_results[i][1], asr_results[i][2], asr_results[i][3]))
+            
+            return results
+
+            # return (asr_results, lid_results)
+
+
         else:
             # Normal ASR
             intermediate_outs = None
             if isinstance(enc, tuple):
                 intermediate_outs = enc[1]
                 enc = enc[0]
-            assert len(enc) == 1, len(enc)
+            # assert len(enc) == 1, len(enc)
 
             # c. Passed the encoder result and the beam search
             results = self._decode_single_sample(enc[0])
@@ -732,6 +878,11 @@ def inference(
     transducer_conf: Optional[dict],
     streaming: bool,
     enh_s2t_task: bool,
+    lid_task: bool,
+    second_last_lid: bool,
+    lid_asr_joint_task: bool,
+    sv_lid_asr_joint_task: bool,
+    lid_token_list: str,
     quantize_asr_model: bool,
     quantize_lm: bool,
     quantize_modules: List[str],
@@ -791,6 +942,11 @@ def inference(
         normalize_length=normalize_length,
         streaming=streaming,
         enh_s2t_task=enh_s2t_task,
+        lid_task=lid_task,
+        second_last_lid=second_last_lid,
+        lid_asr_joint_task=lid_asr_joint_task,
+        sv_lid_asr_joint_task=sv_lid_asr_joint_task,
+        lid_token_list=lid_token_list,
         multi_asr=multi_asr,
         quantize_asr_model=quantize_asr_model,
         quantize_lm=quantize_lm,
@@ -992,6 +1148,43 @@ def get_parser():
         default=False,
         help="Whether we are using an enhancement and ASR joint model",
     )
+
+    group.add_argument(
+        "--second_last_lid",
+        type=str2bool,
+        default=False,
+        help="Whether we are using the second last result from language identification model",
+    )
+
+    group.add_argument(
+        "--lid_task",
+        type=str2bool,
+        default=False,
+        help="Whether we are using a language identification model",
+    )
+
+    group.add_argument(
+        "--lid_asr_joint_task",
+        type=str2bool,
+        default=False,
+        help="Whether we are using a language identification and ASR joint model",
+    )
+
+    group.add_argument(
+        "--sv_lid_asr_joint_task",
+        type=str2bool,
+        default=False,
+        help="Whether we are using a speaker verification, language identification and ASR joint model",
+    )
+
+    group.add_argument(
+        "--lid_token_list",
+        type=str,
+        default="",
+        help="The token list for the language identification model",
+    )
+
+
     group.add_argument(
         "--multi_asr",
         type=str2bool,

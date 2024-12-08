@@ -40,6 +40,7 @@ from espnet2.asr.encoder.hubert_encoder import (
     TorchAudioHuBERTPretrainEncoder,
 )
 from espnet2.asr.encoder.longformer_encoder import LongformerEncoder
+from espnet2.asr.encoder.resnet_encoder import ResNetEncoder
 from espnet2.asr.encoder.multiconvformer_encoder import MultiConvConformerEncoder
 from espnet2.asr.encoder.rnn_encoder import RNNEncoder
 from espnet2.asr.encoder.transformer_encoder import TransformerEncoder
@@ -54,10 +55,13 @@ from espnet2.asr.frontend.abs_frontend import AbsFrontend
 from espnet2.asr.frontend.default import DefaultFrontend
 from espnet2.asr.frontend.fused import FusedFrontends
 from espnet2.asr.frontend.s3prl import S3prlFrontend
+from espnet2.asr.frontend.ca_sslr_s3prl import S3prlCASSLRFrontend
 from espnet2.asr.frontend.whisper import WhisperFrontend
 from espnet2.asr.frontend.windowing import SlidingWindow
 from espnet2.asr.maskctc_model import MaskCTCModel
 from espnet2.asr.pit_espnet_model import ESPnetASRModel as PITESPnetModel
+from espnet2.asr.ca_sslr_espnet_model import ESPnetCASSLRModel
+
 from espnet2.asr.postencoder.abs_postencoder import AbsPostEncoder
 from espnet2.asr.postencoder.hugging_face_transformers_postencoder import (
     HuggingFaceTransformersPostEncoder,
@@ -69,6 +73,20 @@ from espnet2.asr.preencoder.sinc import LightweightSincConvs
 from espnet2.asr.specaug.abs_specaug import AbsSpecAug
 from espnet2.asr.specaug.specaug import SpecAug
 from espnet2.asr_transducer.joint_network import JointNetwork
+from espnet2.spk.loss.aamsoftmax import AAMSoftmax
+from espnet2.spk.loss.abs_loss import AbsLoss
+from espnet2.spk.projector.abs_projector import AbsProjector
+from espnet2.spk.projector.rawnet3_projector import RawNet3Projector
+from espnet2.spk.pooling.abs_pooling import AbsPooling
+from espnet2.spk.pooling.chn_attn_stat_pooling import ChnAttnStatPooling
+
+
+from espnet2.spk.loss.aamsoftmax_subcenter_intertopk import (
+    ArcMarginProduct_intertopk_subcenter,
+)
+from espnet2.spk.encoder.ecapa_tdnn_encoder import EcapaTdnnEncoder
+from espnet2.spk.encoder.rawnet3_encoder import RawNet3Encoder
+
 from espnet2.layers.abs_normalize import AbsNormalize
 from espnet2.layers.global_mvn import GlobalMVN
 from espnet2.layers.utterance_mvn import UtteranceMVN
@@ -82,8 +100,11 @@ from espnet2.train.preprocessor import (
     AbsPreprocessor,
     CommonPreprocessor,
     CommonPreprocessor_multi,
+    JointASRLIDPreprocessor,
+    JointASRLIDSVPreprocessor,
 )
-from espnet2.train.trainer import Trainer
+# from espnet2.train.trainer import Trainer
+from espnet2.train.joint_trainer import JointTrainer as Trainer
 from espnet2.utils.get_default_kwargs import get_default_kwargs
 from espnet2.utils.nested_dict_action import NestedDictAction
 from espnet2.utils.types import float_or_none, int_or_none, str2bool, str_or_none
@@ -94,6 +115,7 @@ frontend_choices = ClassChoices(
         default=DefaultFrontend,
         sliding_window=SlidingWindow,
         s3prl=S3prlFrontend,
+        s3prl_casslr=S3prlCASSLRFrontend,
         fused=FusedFrontends,
         whisper=WhisperFrontend,
     ),
@@ -125,6 +147,7 @@ model_choices = ClassChoices(
         espnet=ESPnetASRModel,
         maskctc=MaskCTCModel,
         pit_espnet=PITESPnetModel,
+        casslr_espnet=ESPnetCASSLRModel,
     ),
     type_check=AbsESPnetModel,
     default="espnet",
@@ -139,6 +162,29 @@ preencoder_choices = ClassChoices(
     default=None,
     optional=True,
 )
+preencoder_lid_choices = ClassChoices(
+    name="preencoder_lid",
+    classes=dict(
+        sinc=LightweightSincConvs,
+        linear=LinearProjection,
+    ),
+    type_check=AbsPreEncoder,
+    default=None,
+    optional=True,
+)
+
+
+preencoder_spk_choices = ClassChoices(
+    name="preencoder_spk",
+    classes=dict(
+        sinc=LightweightSincConvs,
+        linear=LinearProjection,
+    ),
+    type_check=AbsPreEncoder,
+    default=None,
+    optional=True,
+)
+
 encoder_choices = ClassChoices(
     "encoder",
     classes=dict(
@@ -148,6 +194,7 @@ encoder_choices = ClassChoices(
         contextual_block_transformer=ContextualBlockTransformerEncoder,
         contextual_block_conformer=ContextualBlockConformerEncoder,
         vgg_rnn=VGGRNNEncoder,
+        resnet_enc=ResNetEncoder,
         rnn=RNNEncoder,
         wav2vec2=FairSeqWav2Vec2Encoder,
         hubert=FairseqHubertEncoder,
@@ -163,6 +210,16 @@ encoder_choices = ClassChoices(
     type_check=AbsEncoder,
     default="rnn",
 )
+
+encoder_lid_choices = ClassChoices(
+    "encoder_lid",
+    classes=dict(
+        resnet_enc=ResNetEncoder,
+    ),
+    type_check=AbsEncoder,
+    default="rnn",
+)
+
 postencoder_choices = ClassChoices(
     name="postencoder",
     classes=dict(
@@ -173,6 +230,17 @@ postencoder_choices = ClassChoices(
     default=None,
     optional=True,
 )
+
+postencoder_lid_choices = ClassChoices(
+    name="postencoder_lid",
+    classes=dict(
+        chn_attn_stat=ChnAttnStatPooling,
+    ),
+    type_check=AbsPooling, #AbsPostEncoder,
+    default=None,
+    optional=True,
+)
+
 decoder_choices = ClassChoices(
     "decoder",
     classes=dict(
@@ -197,10 +265,80 @@ preprocessor_choices = ClassChoices(
     classes=dict(
         default=CommonPreprocessor,
         multi=CommonPreprocessor_multi,
+        joint_asr_lid=JointASRLIDPreprocessor,
+        joint_asr_lid_spk=JointASRLIDSVPreprocessor,
     ),
     type_check=AbsPreprocessor,
     default="default",
 )
+
+projector_lid_choices = ClassChoices(
+    name="projector_lid",
+    classes=dict(
+        rawnet3=RawNet3Projector,
+    ),
+    type_check=AbsProjector,
+    default="rawnet3",
+)
+
+loss_lid_choices = ClassChoices(
+    name="loss_lid",
+    classes=dict(
+        aamsoftmax=AAMSoftmax,
+    ),
+    type_check=AbsLoss,
+    default="aam",
+)
+
+ 
+encoder_spk_choices = ClassChoices(
+    name="encoder_spk",
+    classes=dict(
+        rawnet3=RawNet3Encoder,
+        ecapa_tdnn=EcapaTdnnEncoder,
+    ),
+    type_check=AbsEncoder,
+    default=None,
+    optional=True,
+)
+
+
+pooling_spk_choices = ClassChoices(
+    name="pooling_spk",
+    classes=dict(
+        chn_attn_stat=ChnAttnStatPooling,
+    ),
+    type_check=AbsPooling,
+    # default="chn_attn_stat",
+    default=None,
+    optional=True,
+)
+
+projector_spk_choices = ClassChoices(
+    name="projector_spk",
+    classes=dict(
+        # TODO (Jee-weon): implement additional Projectors
+        # one_layer=OneLayerProjector,
+        rawnet3=RawNet3Projector,
+    ),
+    type_check=AbsProjector,
+    default=None,
+    optional=True,
+)
+
+
+loss_spk_choices = ClassChoices(
+    name="loss_spk",
+    classes=dict(
+        aamsoftmax=AAMSoftmax,
+        aamsoftmax_sc_topk=ArcMarginProduct_intertopk_subcenter,
+    ),
+    default=None,
+    optional=True,
+)
+
+
+
 
 
 class ASRTask(AbsTask):
@@ -219,14 +357,36 @@ class ASRTask(AbsTask):
         model_choices,
         # --preencoder and --preencoder_conf
         preencoder_choices,
+        # --preencoder_lid and --preencoder_lid_conf
+        preencoder_lid_choices,
+        # --preencoder_spk and --preencoder_spk_conf
+        preencoder_spk_choices,
         # --encoder and --encoder_conf
         encoder_choices,
+        # # --encoder_lid and --encoder_lid_conf
+        encoder_lid_choices,
         # --postencoder and --postencoder_conf
         postencoder_choices,
+        # # --postencoder_lid and --postencoder_lid_conf
+        postencoder_lid_choices,
         # --decoder and --decoder_conf
         decoder_choices,
         # --preprocessor and --preprocessor_conf
         preprocessor_choices,
+        # --projector_lid and --projector_lid_conf
+        projector_lid_choices,
+        # --loss_lid and --loss_lid_conf
+        loss_lid_choices,
+        # --encoder_spk and --encoder_spk_conf
+        encoder_spk_choices,
+        # --pooling_spk and --pooling_spk_conf
+        pooling_spk_choices,
+        # --projector_spk and --projector_spk_conf
+        projector_spk_choices,
+        # --loss_spk and --loss_spk_conf
+        loss_spk_choices,
+
+
     ]
 
     # If you need to modify train() or eval() procedures, change Trainer class here
@@ -247,6 +407,30 @@ class ASRTask(AbsTask):
             default=None,
             help="A text mapping int-id to token",
         )
+
+        group.add_argument(
+            "--lid_tokens",
+            type=str_or_none,
+            default=None,
+            help="A text mapping int-id to lid token",
+        )
+        
+        group.add_argument(
+            "--spk2utt",
+            type=str_or_none,
+            default=None,
+            help="Directory of spk2utt file to be used in label mapping",
+        )
+
+
+        group.add_argument(
+            "--spk_num",
+            type=int,
+            default=None,
+            help="specify the number of speakers during training",
+        )
+
+        
         group.add_argument(
             "--init",
             type=lambda x: str_or_none(x.lower()),
@@ -399,6 +583,14 @@ class ASRTask(AbsTask):
             help="Auxillary tasks to train on using CTC loss. ",
         )
 
+        group.add_argument(
+            "--pretrained_models",
+            type=str,
+            nargs="+",
+            default=[],
+
+        )
+
         for class_choices in cls.class_choices_list:
             # Append --<name> and --<name>_conf.
             # e.g. --encoder and --encoder_conf
@@ -466,6 +658,9 @@ class ASRTask(AbsTask):
                 use_nlp_prompt=(
                     args.use_nlp_prompt if hasattr(args, "use_nlp_prompt") else None
                 ),
+                spk2utt=(
+                    args.spk2utt if hasattr(args, "spk2utt") else None
+                ),
             )
         else:
             retval = None
@@ -489,6 +684,8 @@ class ASRTask(AbsTask):
         MAX_REFERENCE_NUM = 4
 
         retval = ["text_spk{}".format(n) for n in range(2, MAX_REFERENCE_NUM + 1)]
+        retval.append("langs")
+        retval.append("spk_labels")
         retval = retval + ["prompt"]
         retval = tuple(retval)
 
@@ -508,6 +705,21 @@ class ASRTask(AbsTask):
             token_list = list(args.token_list)
         else:
             raise RuntimeError("token_list must be str or list")
+        
+        # for lid_tokens
+        if isinstance(args.lid_tokens, str):
+            with open(args.lid_tokens, encoding="utf-8") as f:
+                lid_tokens = [line.rstrip() for line in f]
+
+            # Overwriting lid_tokens to keep it as "portable".
+            args.lid_tokens = list(lid_tokens)
+            langs_num = len(lid_tokens)
+        elif isinstance(args.lid_tokens, (tuple, list)):
+            lid_tokens = list(args.lid_tokens)
+            langs_num = len(lid_tokens)
+        else:
+            lid_tokens= None
+            langs_num = 0
 
         # If use multi-blank transducer criterion,
         # big blank symbols are added just before the standard blank
@@ -526,6 +738,8 @@ class ASRTask(AbsTask):
         if args.input_size is None:
             # Extract features in the model
             frontend_class = frontend_choices.get_class(args.frontend)
+            if "extra_conf" in args.frontend_conf:
+                args.frontend_conf["frontend_conf"]["extra_conf"]["langs_num"] = langs_num
             frontend = frontend_class(**args.frontend_conf)
             input_size = frontend.output_size()
         else:
@@ -602,6 +816,138 @@ class ASRTask(AbsTask):
             decoder = None
             joint_network = None
 
+        # 6. LID modules
+        if getattr(args, "preencoder_lid", None) is not None:
+            lid_layer_selections = args.frontend_conf.get("lid_layer_selections", None)
+            preencoder_lid_nums = len(lid_layer_selections) if lid_layer_selections is not None else 1
+            
+            if preencoder_lid_nums > 1:
+                preencoder_lid_class = preencoder_choices.get_class(args.preencoder_lid)
+                preencoder_lid = torch.nn.ModuleList([preencoder_lid_class(**args.preencoder_lid_conf) for i in range(preencoder_lid_nums)])
+                lid_input_size = preencoder_lid[0].output_size()
+            else:
+                preencoder_lid_class = preencoder_choices.get_class(args.preencoder_lid)
+                preencoder_lid = preencoder_lid_class(**args.preencoder_lid_conf)
+                lid_input_size = preencoder_lid.output_size()
+        else:
+            preencoder_lid = None
+            if args.input_size is None:
+                lid_input_size = frontend.output_size()
+            else:
+                lid_input_size = args.input_size
+
+        if getattr(args, "encoder_lid", None) is not None:
+            if args.model_conf.get("separate_lid_modules", False):
+                encoder_lid_class = encoder_lid_choices.get_class(args.encoder_lid)
+                encoder_lid = torch.nn.ModuleList([encoder_lid_class(input_size=lid_input_size, **args.encoder_lid_conf) for i in range(2)])
+                encoder_lid_output_size = encoder_lid[0].output_size()
+            else: 
+                encoder_lid_class = encoder_lid_choices.get_class(args.encoder_lid)
+                encoder_lid = encoder_lid_class(input_size=lid_input_size, **args.encoder_lid_conf)
+                encoder_lid_output_size = encoder_lid.output_size()
+
+
+        if getattr(args, "postencoder_lid", None) is not None:
+            if args.model_conf.get("separate_lid_modules", False):
+                postencoder_lid_class = postencoder_lid_choices.get_class(args.postencoder_lid)
+                postencoder_lid = torch.nn.ModuleList([postencoder_lid_class(input_size=encoder_lid_output_size, **args.postencoder_lid_conf) for i in range(2)])
+                encoder_lid_output_size = postencoder_lid[0].output_size()
+            else: 
+                postencoder_lid_class = postencoder_lid_choices.get_class(args.postencoder_lid)
+                postencoder_lid = postencoder_lid_class(
+                    input_size=encoder_lid_output_size, **args.postencoder_lid_conf
+                )
+                encoder_lid_output_size = postencoder_lid.output_size()
+
+        if getattr(args, "projector_lid", None) is not None:
+            if args.model_conf.get("separate_lid_modules", False):
+                projector_lid_class = projector_lid_choices.get_class(args.projector_lid)
+                projector_lid = torch.nn.ModuleList([projector_lid_class(**args.projector_lid_conf) for i in range(2)])
+            else: 
+                projector_lid_class = projector_lid_choices.get_class(args.projector_lid)
+                projector_lid = projector_lid_class(**args.projector_lid_conf)
+
+
+        if getattr(args, "loss_lid", None) is not None:
+            if args.model_conf.get("separate_lid_modules", False):
+                loss_lid_class = loss_lid_choices.get_class(args.loss_lid)
+                loss_lid = torch.nn.ModuleList([loss_lid_class(**args.loss_lid_conf) for i in range(2)])
+            else: 
+                loss_lid_class = loss_lid_choices.get_class(args.loss_lid)
+                loss_lid = loss_lid_class(**args.loss_lid_conf)
+
+        # 7. SV modules
+        if getattr(args, "preencoder_spk", None) is not None:
+            sv_layer_selections = args.frontend_conf.get("sv_layer_selections", None)
+            preencoder_sv_nums = len(sv_layer_selections) if sv_layer_selections is not None else 1
+
+            if preencoder_sv_nums > 1:
+                preencoder_spk_class = preencoder_choices.get_class(args.preencoder_spk)
+                preencoder_spk = torch.nn.ModuleList([preencoder_spk_class(**args.preencoder_spk_conf) for i in range(preencoder_sv_nums)])
+
+                spk_input_size = preencoder_spk[0].output_size()
+            else:
+                preencoder_spk_class = preencoder_choices.get_class(args.preencoder_spk)
+                preencoder_spk = preencoder_spk_class(**args.preencoder_spk_conf)
+                spk_input_size = preencoder_spk.output_size()
+        else:
+            preencoder_spk = None
+            if args.input_size is None:
+                spk_input_size = frontend.output_size()
+            else:
+                spk_input_size = args.input_size
+
+        if getattr(args, "encoder_spk", None) is not None:
+            if args.model_conf.get("separate_sv_modules", False):
+                encoder_spk_class = encoder_spk_choices.get_class(args.encoder_spk)
+                encoder_spk = torch.nn.ModuleList([encoder_spk_class(input_size=spk_input_size, **args.encoder_spk_conf) for i in range(2)])
+                encoder_spk_output_size = encoder_spk[0].output_size()
+            else:
+                encoder_spk_class = encoder_spk_choices.get_class(args.encoder_spk)
+                encoder_spk = encoder_spk_class(input_size=spk_input_size, **args.encoder_spk_conf)
+                encoder_spk_output_size = encoder_spk.output_size()
+        else:
+            encoder_spk = None
+            
+    
+        if getattr(args, "pooling_spk", None) is not None:
+            if args.model_conf.get("separate_sv_modules", False):
+                pooling_spk_class = pooling_spk_choices.get_class(args.pooling_spk)
+                pooling_spk = torch.nn.ModuleList([pooling_spk_class(input_size=encoder_spk_output_size, **args.pooling_spk_conf) for i in range(2)])
+                pooling_spk_output_size = pooling_spk[0].output_size()
+            else:
+                pooling_spk_class = pooling_spk_choices.get_class(args.pooling_spk)
+                pooling_spk = pooling_spk_class(
+                    input_size=encoder_spk_output_size, **args.pooling_spk_conf
+                )
+                pooling_spk_output_size = pooling_spk.output_size()
+        else:
+            pooling_spk = None
+
+        # import pdb; pdb.set_trace()
+        if getattr(args, "projector_spk", None) is not None:
+            if args.model_conf.get("separate_sv_modules", False):
+                projector_spk_class = projector_spk_choices.get_class(args.projector_spk)
+                projector_spk = torch.nn.ModuleList([projector_spk_class(input_size=pooling_spk_output_size, **args.projector_spk_conf) for i in range(2)])
+                projector_spk_output_size = projector_spk[0].output_size()
+            else:    
+                projector_spk_class = projector_spk_choices.get_class(args.projector_spk)
+                projector_spk = projector_spk_class(input_size=pooling_spk_output_size, **args.projector_spk_conf)
+                projector_spk_output_size = projector_spk.output_size()
+        else:
+            projector_spk = None
+
+        if getattr(args, "loss_spk", None) is not None:
+            if args.model_conf.get("separate_sv_modules", False):
+                loss_spk_class = loss_spk_choices.get_class(args.loss_spk)
+                loss_spk = torch.nn.ModuleList([loss_spk_class(nout=projector_spk_output_size, nclasses=args.spk_num, **args.loss_spk_conf) for i in range(2)])
+            else:
+                loss_spk_class = loss_spk_choices.get_class(args.loss_spk)
+                loss_spk = loss_spk_class(nout=projector_spk_output_size, nclasses=args.spk_num, **args.loss_spk_conf)
+        else:
+            loss_spk = None
+
+
         # 6. CTC
         ctc = CTC(
             odim=vocab_size, encoder_output_size=encoder_output_size, **args.ctc_conf
@@ -612,20 +958,82 @@ class ASRTask(AbsTask):
             model_class = model_choices.get_class(args.model)
         except AttributeError:
             model_class = model_choices.get_class("espnet")
-        model = model_class(
-            vocab_size=vocab_size,
-            frontend=frontend,
-            specaug=specaug,
-            normalize=normalize,
-            preencoder=preencoder,
-            encoder=encoder,
-            postencoder=postencoder,
-            decoder=decoder,
-            ctc=ctc,
-            joint_network=joint_network,
-            token_list=token_list,
-            **args.model_conf,
-        )
+        
+        if model_class == ESPnetCASSLRModel:
+            model = model_class(
+                vocab_size=vocab_size,
+                frontend=frontend,
+                specaug=specaug,
+                normalize=normalize,
+                preencoder=preencoder,
+                encoder=encoder,
+                postencoder=postencoder,
+                preencoder_lid=preencoder_lid,
+                encoder_lid=encoder_lid,
+                postencoder_lid=postencoder_lid,
+                projector_lid=projector_lid,
+                loss_lid=loss_lid,
+                decoder=decoder,
+                ctc=ctc,
+                joint_network=joint_network,
+                token_list=token_list,
+                lid_tokens=lid_tokens,
+                langs_num=langs_num,
+                preencoder_spk=preencoder_spk,
+                encoder_spk=encoder_spk,
+                pooling_spk=pooling_spk,
+                projector_spk=projector_spk,
+                loss_spk=loss_spk,
+                asr_layer_selections=args.frontend_conf.get("asr_layer_selections", None),
+                lid_layer_selections=args.frontend_conf.get("lid_layer_selections", None),
+                sv_layer_selections=args.frontend_conf.get("sv_layer_selections", None),
+                pretrained_asr_path=args.pretrained_models.get("asr_path", None),
+                pretrained_lid_path=args.pretrained_models.get("lid_path", None),
+                pretrained_sv_path=args.pretrained_models.get("sv_path", None),
+                **args.model_conf,
+            )
+        elif model_class == ESPnetLIDModel:
+
+            projector_lid_class = projector_lid_choices.get_class(args.projector_lid)
+            projector_lid = projector_lid_class(**args.projector_lid_conf)
+
+            loss_lid_class = loss_lid_choices.get_class(args.loss_lid)
+            loss_lid = loss_lid_class(**args.loss_lid_conf)
+
+            model = model_class(
+                vocab_size=vocab_size,
+                frontend=frontend,
+                specaug=specaug,
+                normalize=normalize,
+                preencoder=preencoder,
+                encoder=encoder,
+                postencoder=postencoder,
+                projector_lid=projector_lid,
+                loss_lid=loss_lid,
+                decoder=decoder,
+                ctc=ctc,
+                joint_network=joint_network,
+                token_list=token_list,
+                lid_tokens=lid_tokens,
+                langs_num=langs_num,
+                **args.model_conf,
+            )
+
+        else:
+            model = model_class(
+                vocab_size=vocab_size,
+                frontend=frontend,
+                specaug=specaug,
+                normalize=normalize,
+                preencoder=preencoder,
+                encoder=encoder,
+                postencoder=postencoder,
+                decoder=decoder,
+                ctc=ctc,
+                joint_network=joint_network,
+                token_list=token_list,
+                **args.model_conf,
+            )
 
         # FIXME(kamo): Should be done in model?
         # 8. Initialize

@@ -8,7 +8,8 @@
 
 import torch
 from torch import nn
-
+from s3prl.upstream.wav2vec2.cond_blocks import CC, DoubleCC, TCAC, DoubleTCAC
+import logging
 from espnet.nets.pytorch_backend.transformer.layer_norm import LayerNorm
 
 
@@ -43,6 +44,9 @@ class EncoderLayer(nn.Module):
         normalize_before=True,
         concat_after=False,
         stochastic_depth_rate=0.0,
+        embed_condition: bool = False,
+        embed_condition_size: int = 0,
+        embed_condition_method: str = "CC",
     ):
         """Construct an EncoderLayer object."""
         super(EncoderLayer, self).__init__()
@@ -57,8 +61,23 @@ class EncoderLayer(nn.Module):
         if self.concat_after:
             self.concat_linear = nn.Linear(size + size, size)
         self.stochastic_depth_rate = stochastic_depth_rate
+        self.embed_condition = embed_condition
+        self.embed_condition_size = embed_condition_size
+        self.embed_condition_method = embed_condition_method
+        if self.embed_condition:
+            # logging.info("size: {}".format(size))
+            # import pdb; pdb.set_trace()
+            if self.embed_condition_method == "CC":
+                self.condition_layer = CC(size, embed_condition_size)
+            elif self.embed_condition_method == "DoubleCC":
+                self.condition_layer = DoubleCC(size, embed_condition_size)
+            elif self.embed_condition_method == "TCAC":
+                self.condition_layer = TCAC(size, embed_condition_size)
+            elif self.embed_condition_method == "DoubleTCAC":
+                self.condition_layer = DoubleTCAC(size, embed_condition_size)
 
-    def forward(self, x, mask, cache=None):
+
+    def forward(self, x, mask, condition_features=None, cache=None):
         """Compute encoded features.
 
         Args:
@@ -100,9 +119,30 @@ class EncoderLayer(nn.Module):
             x_concat = torch.cat((x, self.self_attn(x_q, x, x, mask)), dim=-1)
             x = residual + stoch_layer_coeff * self.concat_linear(x_concat)
         else:
-            x = residual + stoch_layer_coeff * self.dropout(
-                self.self_attn(x_q, x, x, mask)
-            )
+            x = self.self_attn(x_q, x, x, mask)
+            x = stoch_layer_coeff * self.dropout(x)
+            # logging.info("x in EncoderLayer: {}".format(x))
+            if self.embed_condition:
+                if self.embed_condition_method in ["TCAC", "DoubleTCAC"]:
+                    x = x.permute(1, 0, 2)
+                    if self.embed_condition_method in ["DoubleTCAC"]:
+                        condition_features[0] = condition_features[0].permute(1, 0, 2)
+                        if condition_features[1] is not None:
+                            condition_features[1] = condition_features[1].permute(1, 0, 2)
+                    else:
+                        condition_features = condition_features.permute(1, 0, 2)
+                    # logging.info("x shape: {}".format(x.shape))
+                    # logging.info("condition_features shape: {}".format(condition_features.shape))
+                x = self.condition_layer(x, condition_features)
+                if self.embed_condition_method in ["TCAC", "DoubleTCAC"]:
+                    x = x.permute(1, 0, 2)
+                    if self.embed_condition_method in ["DoubleTCAC"]:
+                        condition_features[0] = condition_features[0].permute(1, 0, 2)
+                        if condition_features[1] is not None:
+                            condition_features[1] = condition_features[1].permute(1, 0, 2)
+                    else:
+                        condition_features = condition_features.permute(1, 0, 2)
+            x = residual + x
         if not self.normalize_before:
             x = self.norm1(x)
 
@@ -116,4 +156,5 @@ class EncoderLayer(nn.Module):
         if cache is not None:
             x = torch.cat([cache, x], dim=1)
 
-        return x, mask
+        # logging.info("x out of EncoderLayer: {}".format(x))
+        return x, mask, condition_features

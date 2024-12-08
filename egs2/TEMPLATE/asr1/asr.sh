@@ -41,6 +41,8 @@ gpu_inference=false     # Whether to perform gpu decoding.
 dumpdir=dump            # Directory to dump features.
 expdir=exp              # Directory to save experiments.
 python=python3          # Specify python to execute espnet commands.
+use_lid_asr=False
+use_sv_asr=False
 
 # Data preparation related
 local_data_opts= # The options given to local/data.sh.
@@ -112,6 +114,13 @@ num_inf=    # Number of inferences output by the model
             # Note that if it is not specified, it will be the same as num_ref. Otherwise, it will be overwritten.
             # In MixIT, number of outputs is larger than that of references.
 sot_asr=false   # Whether to use Serialized Output Training (SOT)
+lid_task=false # Whether doing LID task
+multiple_valid_iterator=false # Whether to use multiple valid iterators for ASR/SV
+spk_valid_iterator=false
+
+second_last_lid=false 
+lid_asr_joint_task=false # Whether doing joint LID and ASR task
+sv_lid_asr_joint_task=false # Whether doing joint LID, SV, and ASR task
 
 # Upload model related
 hf_repo=
@@ -144,11 +153,14 @@ inference_asr_model=valid.acc.ave.pth # ASR model path for decoding.
                                       # inference_asr_model=valid.acc.best.pth
                                       # inference_asr_model=valid.loss.ave.pth
 download_model= # Download a model from Model Zoo and use it for decoding.
+allow_variable_data_keys=false
 
 # [Task dependent] Set the datadir name created by local/data.sh
 train_set=       # Name of training set.
 valid_set=       # Name of validation set used for monitoring/tuning network training.
+valid_spk_set=   # Name of validation set for sv used for monitoring/tuning network training.
 test_sets=       # Names of test sets. Multiple items (e.g., both dev and eval sets) can be specified.
+extra_spk2utt=   # Names of extra spk2utt files to combine with the original spk2utt file or use it instead of the original one.
 bpe_train_text=  # Text file path of bpe training set.
 lm_train_text=   # Text file path of language model training set.
 lm_dev_text=     # Text file path of language model development set.
@@ -1260,6 +1272,24 @@ if [ ${stage} -le 10 ] && [ ${stop_stage} -ge 10 ] && ! [[ " ${skip_stages} " =~
         _opts+="--use_nlp_prompt ${use_nlp_prompt} "
     fi
 
+
+    if [ "${use_sv_asr}" = true ]; then
+        _opts+="--train_data_path_and_name_and_type ${_asr_train_dir}/utt2spk,spk_labels,text "
+        _opts+="--valid_data_path_and_name_and_type ${_asr_valid_dir}/utt2spk,spk_labels,text "
+        # if ${extra_spk2utt} exists, use it to get the number of speakers
+        if [ -f "${extra_spk2utt}" ]; then
+            _opts+="--spk2utt ${extra_spk2utt} "
+            _opts+="--spk_num $(wc -l ${extra_spk2utt} | cut -f1 -d" ") "
+            
+        else
+            # warning
+            log "WARNING: ${extra_spk2utt} does not exist. Using ${_asr_train_dir}/spk2utt instead."
+            _opts+="--spk2utt ${_asr_train_dir}/spk2utt "
+            _opts+="--spk_num $(wc -l ${_asr_train_dir}/spk2utt | cut -f1 -d" ") "
+        fi
+        
+    fi
+
     # shellcheck disable=SC2046,SC2086
     ${train_cmd} JOB=1:"${_nj}" "${_logdir}"/stats.JOB.log \
         ${python} -m espnet2.bin.${asr_task}_train \
@@ -1305,7 +1335,8 @@ fi
 if [ ${stage} -le 11 ] && [ ${stop_stage} -ge 11 ] && ! [[ " ${skip_stages} " =~ [[:space:]]11[[:space:]] ]]; then
     _asr_train_dir="${data_feats}/${train_set}"
     _asr_valid_dir="${data_feats}/${valid_set}"
-    log "Stage 11: ASR Training: train_set=${_asr_train_dir}, valid_set=${_asr_valid_dir}"
+    _sv_valid_dir="${data_feats}/${valid_spk_set}"
+    log "Stage 11: ASR Training: train_set=${_asr_train_dir}, valid_set=${_asr_valid_dir}, sv_valid_set=${_sv_valid_dir}"
 
     _opts=
     if [ -n "${asr_config}" ]; then
@@ -1389,6 +1420,35 @@ if [ ${stage} -le 11 ] && [ ${stop_stage} -ge 11 ] && ! [[ " ${skip_stages} " =~
             _opts+="--train_data_path_and_name_and_type ${_asr_train_dir}/${ref_text_files[$i]},${ref_text_names[$i]},text "
             _opts+="--train_shape_file ${asr_stats_dir}/train/${ref_text_names[$i]}_shape.${token_type} "
         done
+
+        #For Conditional ASR
+        if [ "${use_lid_asr}" = true ]; then
+            _opts+="--train_data_path_and_name_and_type ${_asr_train_dir}/langs_idx,langs,text "
+            _opts+="--valid_data_path_and_name_and_type ${_asr_valid_dir}/langs_idx,langs,text "
+            _opts+="--lid_tokens ${_asr_train_dir}/all_langs "
+        fi
+
+        if [ "${use_sv_asr}" = true ]; then
+            _opts+="--valid_spk_data_path_and_name_and_type ${_sv_valid_dir}/trial.scp,speech,${_type} "
+            _opts+="--valid_spk_data_path_and_name_and_type ${_sv_valid_dir}/trial2.scp,speech2,${_type} "
+            _opts+="--valid_spk_data_path_and_name_and_type ${_sv_valid_dir}/trial_label,spk_labels,text "
+            _opts+="--valid_spk_shape_file ${asr_stats_dir}/valid_spk/speech_shape "
+
+            _opts+="--train_data_path_and_name_and_type ${_asr_train_dir}/utt2spk,spk_labels,text "
+            _opts+="--valid_data_path_and_name_and_type ${_asr_valid_dir}/utt2spk,spk_labels,text "
+            # if ${extra_spk2utt} exists, use it to get the number of speakers
+            if [ -f "${extra_spk2utt}" ]; then
+                _opts+="--spk2utt ${extra_spk2utt} "
+                _opts+="--spk_num $(wc -l ${extra_spk2utt} | cut -f1 -d" ") "
+                
+            else
+                # warning
+                log "WARNING: ${extra_spk2utt} does not exist. Using ${_asr_train_dir}/spk2utt instead."
+                _opts+="--spk2utt ${_asr_train_dir}/spk2utt "
+                _opts+="--spk_num $(wc -l ${_asr_train_dir}/spk2utt | cut -f1 -d" ") "
+            fi
+            
+        fi
     fi
 
     # shellcheck disable=SC2068
@@ -1434,6 +1494,9 @@ if [ ${stage} -le 11 ] && [ ${stop_stage} -ge 11 ] && ! [[ " ${skip_stages} " =~
             --g2p "${g2p}" \
             --valid_data_path_and_name_and_type "${_asr_valid_dir}/${_scp},speech,${_type}" \
             --valid_shape_file "${asr_stats_dir}/valid/speech_shape" \
+            --multiple_valid_iterator "${multiple_valid_iterator}" \
+            --spk_valid_iterator "${spk_valid_iterator}" \
+            --allow_variable_data_keys "${allow_variable_data_keys}" \
             --resume true \
             ${pretrained_model:+--init_param $pretrained_model} \
             --ignore_init_mismatch ${ignore_init_mismatch} \
@@ -1552,6 +1615,18 @@ if [ ${stage} -le 12 ] && [ ${stop_stage} -ge 12 ] && ! [[ " ${skip_stages} " =~
             _scp=feats.scp
             _type=kaldi_ark
         fi
+            
+        _lid_opts=""
+        #For Conditional ASR
+        if [ "${use_lid_asr}" = true ]; then
+            _lid_opts+="--data_path_and_name_and_type ${_data}/langs_idx,langs,text "
+            _lid_opts+="--lid_token_list ${_data}/all_langs "
+        fi
+
+        _lid_opts+="--lid_task ${lid_task} "
+        _lid_opts+="--second_last_lid ${second_last_lid} "
+        _lid_opts+="--lid_asr_joint_task ${lid_asr_joint_task} "
+        _lid_opts+="--sv_lid_asr_joint_task ${sv_lid_asr_joint_task} "
 
         # 1. Split the key file
         key_file=${_data}/${_scp}
@@ -1582,7 +1657,7 @@ if [ ${stage} -le 12 ] && [ ${stop_stage} -ge 12 ] && ! [[ " ${skip_stages} " =~
                 --asr_train_config "${asr_exp}"/config.yaml \
                 --asr_model_file "${asr_exp}"/"${inference_asr_model}" \
                 --output_dir "${_logdir}"/output.JOB \
-                ${_opts} ${inference_args} || { cat $(grep -l -i error "${_logdir}"/asr_inference.*.log) ; exit 1; }
+                ${_opts} ${_lid_opts} ${inference_args} || { cat $(grep -l -i error "${_logdir}"/asr_inference.*.log) ; exit 1; }
 
         # 3. Calculate and report RTF based on decoding logs
         if [ ${asr_task} == "asr" ] && [ -z ${inference_bin_tag} ]; then
@@ -1618,6 +1693,7 @@ fi
 
 
 if [ ${stage} -le 13 ] && [ ${stop_stage} -ge 13 ] && ! [[ " ${skip_stages} " =~ [[:space:]]13[[:space:]] ]]; then
+    . ./path.sh || exit 1;
     log "Stage 13: Scoring"
     if [ "${token_type}" = phn ]; then
         log "Error: Not implemented for token_type=phn"

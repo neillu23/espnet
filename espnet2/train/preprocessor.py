@@ -548,6 +548,737 @@ class CommonPreprocessor(AbsPreprocessor):
         return data
 
 
+class JointASRLIDPreprocessor(CommonPreprocessor):
+    def __init__(
+        self,
+        train: bool,
+        use_lang_prompt: bool = False,
+        use_nlp_prompt: bool = False,
+        token_type: str = None,
+        token_list: Union[Path, str, Iterable[str]] = None,
+        bpemodel: Union[Path, str, Iterable[str]] = None,
+        text_cleaner: Collection[str] = None,
+        g2p_type: str = None,
+        unk_symbol: str = "<unk>",
+        space_symbol: str = "<space>",
+        non_linguistic_symbols: Union[Path, str, Iterable[str]] = None,
+        delimiter: str = None,
+        rir_scp: str = None,
+        rir_apply_prob: float = 1.0,
+        noise_scp: str = None,
+        noise_apply_prob: float = 1.0,
+        noise_db_range: str = "3_10",
+        short_noise_thres: float = 0.5,
+        aux_task_names: Collection[str] = None,
+        speech_volume_normalize: float = None,
+        speech_name: str = "speech",
+        text_name: str = "text",
+        fs: int = 0,
+        nonsplit_symbol: Iterable[str] = None,
+        data_aug_effects: List = None,
+        data_aug_num: List[int] = [1, 1],
+        data_aug_prob: float = 0.0,
+        # only use for whisper
+        whisper_language: str = None,
+        whisper_task: str = None,
+        spk2utt: str = None,
+        target_duration: float= 3.0,  # in seconds
+        sample_rate: int = 16000,
+    ):
+        super().__init__(
+            train=train,
+            token_type=token_type,
+            token_list=token_list,
+            bpemodel=bpemodel,
+            text_cleaner=text_cleaner,
+            g2p_type=g2p_type,
+            unk_symbol=unk_symbol,
+            space_symbol=space_symbol,
+            non_linguistic_symbols=non_linguistic_symbols,
+            delimiter=delimiter,
+            rir_scp=rir_scp,
+            rir_apply_prob=rir_apply_prob,
+            noise_scp=noise_scp,
+            noise_apply_prob=noise_apply_prob,
+            noise_db_range=noise_db_range,
+            short_noise_thres=short_noise_thres,
+            speech_volume_normalize=speech_volume_normalize,
+            speech_name=speech_name,
+            text_name=text_name,
+            fs=fs,
+            data_aug_effects=data_aug_effects,
+            data_aug_num=data_aug_num,
+            data_aug_prob=data_aug_prob,
+        )
+        self.spk2label = None
+        if spk2utt is not None:
+            with open(spk2utt, "r") as f_s2u:
+                self.spk2utt = f_s2u.readlines()
+            self._make_label_mapping()
+            self.nspk = len(self.spk2utt)
+
+        self.target_duration = int(target_duration * sample_rate)
+        self.sample_rate = sample_rate
+
+
+
+    def _make_label_mapping(self):
+        label_idx = 0
+        self.spk2label = {}
+        for spk in self.spk2utt:
+            spk = spk.strip().split(" ")[0]
+            self.spk2label[spk] = label_idx
+            label_idx += 1
+
+    def _speech_process(
+        self, data: Dict[str, Union[str, np.ndarray]]
+    ) -> Dict[str, Union[str, np.ndarray]]:
+        # assert check_argument_types()
+
+
+        # if self.text_name in data and data[self.text_name] == "-1" and data["langs"] == "-1":
+        if "spk_labels" in data and data["spk_labels"] != "-1":
+            audio = data[self.speech_name]
+            # logging.info("no text:{}".format(data[self.text_name]))
+            # duplicate if utt is shorter than minimum required duration
+            if len(audio) < self.target_duration:
+                shortage = self.target_duration - len(audio) + 1
+                audio = np.pad(audio, (0, shortage), "wrap")
+
+            startframe = np.array(
+                [np.int64(random.random() * (len(audio) - self.target_duration))]
+            )
+
+            data[self.speech_name] = audio[
+                int(startframe) : int(startframe) + self.target_duration
+            ]
+
+        if self.speech_name in data:
+            if self.train and (self.rirs is not None or self.noises is not None):
+                speech = data[self.speech_name]
+
+                # speech: (Nmic, Time)
+                if speech.ndim == 1:
+                    speech = speech[None, :]
+                else:
+                    speech = speech.T
+                # Calc power on non silence region
+                power = (speech[detect_non_silence(speech)] ** 2).mean()
+
+                # 1. Convolve RIR
+                if self.rirs is not None and self.rir_apply_prob >= np.random.random():
+                    speech, _ = self._convolve_rir(speech, power, self.rirs)
+
+                # 2. Add Noise
+                if (
+                    self.noises is not None
+                    and self.noise_apply_prob >= np.random.random()
+                ):
+                    speech, _ = self._add_noise(
+                        speech,
+                        power,
+                        self.noises,
+                        self.noise_db_low,
+                        self.noise_db_high,
+                    )
+
+                speech = speech.T
+                ma = np.max(np.abs(speech))
+                if ma > 1.0:
+                    speech /= ma
+                data[self.speech_name] = speech
+
+            if self.train and self.data_aug:
+                if self.data_aug_prob > 0 and self.data_aug_prob >= np.random.random():
+                    data[self.speech_name] = self.data_aug(
+                        data[self.speech_name], self.fs
+                    )
+
+            if self.speech_volume_normalize is not None:
+                speech = data[self.speech_name]
+                ma = np.max(np.abs(speech))
+                data[self.speech_name] = speech * self.speech_volume_normalize / ma
+        # assert check_return_type(data)
+        return data
+
+    def _text_process(
+        self, data: Dict[str, Union[str, np.ndarray]]
+    ) -> Dict[str, np.ndarray]:
+        # logging.info("self.text_name:{}".format(self.text_name))
+        # logging.info("self.aux_task_names:{}".format(self.aux_task_names))
+        # logging.info("names in data:{}".format(data.keys()))
+        # logging.info("self.token_id_converter:{}".format(self.token_id_converter))
+        # logging.info("self.tokenizer:{}".format(self.tokenizer))
+        # logging.info("spk_labels:{}".format(data["spk_labels"]))
+        # logging.info("langs:{}".format(data["langs"]))
+        # logging.info("text:{}".format(data["text"]))
+        
+        if self.text_name in data and data[self.text_name] == "-1":
+            data[self.text_name] = np.array([-1], dtype=np.int64)
+
+        elif self.text_name in data and self.tokenizer is not None:
+            text = data[self.text_name]
+            if isinstance(text, np.ndarray):
+                return data
+            text = self.text_cleaner(text)
+            tokens = self.tokenizer.text2tokens(text)
+            text_ints = self.token_id_converter.tokens2ids(tokens)
+            if len(text_ints) > 500:
+                logging.warning(
+                    "The length of the text output exceeds 500, "
+                    "which may cause OOM on the GPU."
+                    "Please ensure that the data processing is correct and verify it."
+                )
+            if "prompt" in data:
+                actual_token = (
+                    self.token_id_converter.tokenizer.tokenizer.convert_ids_to_tokens(
+                        text_ints
+                    )
+                )
+                if self.use_lang_prompt:
+                    if data["prompt"] == "<|nospeech|>":
+                        actual_token = [data["prompt"]]
+                    else:
+                        actual_token = data["prompt"].split() + actual_token[2:]
+                elif self.use_nlp_prompt:
+                    prompt_tokens = self.tokenizer.text2tokens(data["prompt"])
+                    actual_token = [actual_token[0]] + prompt_tokens + actual_token[2:]
+                else:
+                    if len(data["prompt"].split()) > 1:
+                        actual_token = (
+                            [actual_token[0]]
+                            + data["prompt"].split()
+                            + actual_token[2:]
+                        )
+                    else:
+                        actual_token[1] = data["prompt"]
+                text_ints = (
+                    self.token_id_converter.tokenizer.tokenizer.convert_tokens_to_ids(
+                        actual_token
+                    )
+                )
+            data[self.text_name] = np.array(text_ints, dtype=np.int64)
+            if "prompt" in data:
+                whisper_tokenizer = self.token_id_converter.tokenizer.tokenizer
+                if len(data["prompt"].split()) > 1:
+                    data["prompt"] = np.array(
+                        whisper_tokenizer.convert_tokens_to_ids(data["prompt"].split()),
+                        dtype=np.int64,
+                    )
+                else:
+                    data["prompt"] = np.array(
+                        [whisper_tokenizer.convert_tokens_to_ids(data["prompt"])],
+                        dtype=np.int64,
+                    )
+
+        if self.aux_task_names is not None and self.tokenizer is not None:
+            for name in self.aux_task_names:
+                if name in data:
+                    text = data[name]
+                    text = self.text_cleaner(text)
+                    tokens = self.tokenizer.text2tokens(text)
+                    text_ints = self.token_id_converter.tokens2ids(tokens)
+                    data[name] = np.array(text_ints, dtype=np.int64)
+        
+        if "langs" in data:
+            data["langs"] = np.array([data["langs"]], dtype=np.int64)
+
+        if "spk_labels" in data:
+            # check if the spk_labels is in the spk2label
+            # if not, warning and return
+            if data["spk_labels"] == "-1":
+                data["spk_labels"] = np.asarray([-1], dtype=np.int64)
+            
+            else:
+                if data["spk_labels"] not in self.spk2label:
+                    logging.warning(f"spk_labels {data['spk_labels']} not in spk2label, return")
+                    return data
+
+                int_label = self.spk2label[data["spk_labels"]]
+                data["spk_labels"] = np.asarray([int_label], dtype=np.int64)
+
+        # assert check_return_type(data)
+        return data
+
+    def __call__(
+        self, uid: str, data: Dict[str, Union[str, np.ndarray]]
+    ) -> Dict[str, np.ndarray]:
+        # assert check_argument_types()
+
+        # logging.info("self.text_name",self.text_name)
+        # logging.info("self.aux_task_names",self.aux_task_names)
+        # logging.info("names in data",data.keys())
+        data = self._speech_process(data)
+        data = self._text_process(data)
+        return data
+
+
+
+class JointASRLIDSVPreprocessor(CommonPreprocessor):
+    def __init__(
+        self,
+        train: bool,
+        use_lang_prompt: bool = False,
+        use_nlp_prompt: bool = False,
+        token_type: str = None,
+        token_list: Union[Path, str, Iterable[str]] = None,
+        bpemodel: Union[Path, str, Iterable[str]] = None,
+        text_cleaner: Collection[str] = None,
+        g2p_type: str = None,
+        unk_symbol: str = "<unk>",
+        space_symbol: str = "<space>",
+        non_linguistic_symbols: Union[Path, str, Iterable[str]] = None,
+        delimiter: str = None,
+        rir_scp: str = None,
+        rir_apply_prob: float = 1.0,
+        noise_scp: str = None,
+        noise_apply_prob: float = 1.0,
+        noise_db_range: str = "3_10",
+        short_noise_thres: float = 0.5,
+        aux_task_names: Collection[str] = None,
+        speech_volume_normalize: float = None,
+        speech_name: str = "speech",
+        text_name: str = "text",
+        fs: int = 0,
+        nonsplit_symbol: Iterable[str] = None,
+        data_aug_effects: List = None,
+        data_aug_num: List[int] = [1, 1],
+        data_aug_prob: float = 0.0,
+        # only use for whisper
+        whisper_language: str = None,
+        whisper_task: str = None,
+        spk2utt: str = None,
+        target_duration: float= 3.0,  # in seconds
+        sample_rate: int = 16000,
+        spk_num_eval: int = 1,
+        spk_noise_apply_prob: float = 1.0,
+        spk_noise_info: List[
+            Tuple[float, str, Tuple[int, int], Tuple[float, float]]
+        ] = None,
+        spk_rir_apply_prob: float = 1.0,
+        spk_rir_scp:str = None,
+    ):
+        super().__init__(
+            train=train,
+            token_type=token_type,
+            token_list=token_list,
+            bpemodel=bpemodel,
+            text_cleaner=text_cleaner,
+            g2p_type=g2p_type,
+            unk_symbol=unk_symbol,
+            space_symbol=space_symbol,
+            non_linguistic_symbols=non_linguistic_symbols,
+            delimiter=delimiter,
+            rir_scp=rir_scp,
+            rir_apply_prob=rir_apply_prob,
+            noise_scp=noise_scp,
+            noise_apply_prob=noise_apply_prob,
+            noise_db_range=noise_db_range,
+            short_noise_thres=short_noise_thres,
+            speech_volume_normalize=speech_volume_normalize,
+            speech_name=speech_name,
+            text_name=text_name,
+            fs=fs,
+            data_aug_effects=data_aug_effects,
+            data_aug_num=data_aug_num,
+            data_aug_prob=data_aug_prob,
+        )
+        self.spk2label = None
+        if spk2utt is not None:
+            with open(spk2utt, "r") as f_s2u:
+                self.spk2utt = f_s2u.readlines()
+            self._make_label_mapping()
+            self.nspk = len(self.spk2utt)
+
+        self.target_duration = int(target_duration * sample_rate)
+        self.sample_rate = sample_rate
+
+
+        self.spk_num_eval = spk_num_eval
+        self.spk_rir_scp = spk_rir_scp
+        self.spk_noise_apply_prob = spk_noise_apply_prob
+        self.spk_rir_apply_prob = spk_rir_apply_prob
+
+        self.spk_noises = []
+        self.spk_noise_probs = []
+        self.spk_noise_db_ranges = []
+        self.spk_noise_num_to_mix = []
+        if spk_noise_apply_prob > 0:
+            for prob, noise_scp, num_to_mix, db_range in spk_noise_info:
+                if prob > 0:
+                    assert len(db_range) == 2, db_range
+                    assert db_range[0] <= db_range[1], db_range
+                    assert len(num_to_mix) == 2, num_to_mix
+                    assert num_to_mix[0] <= num_to_mix[1], num_to_mix
+                    self.spk_noise_probs.append(prob)
+                    self.spk_noise_db_ranges.append(tuple(db_range))
+                    self.spk_noise_num_to_mix.append(num_to_mix)
+                    noises = []
+                    with open(noise_scp, "r", encoding="utf-8") as f:
+                        for line in f:
+                            sps = line.strip().split(None, 1)
+                            if len(sps) == 1:
+                                noises.append(sps[0])
+                            else:
+                                noises.append(sps[1])
+                    self.spk_noises.append(noises)
+        
+        if train and spk_rir_scp is not None:
+            self.spk_rirs = []
+            spk_rir_scp = [spk_rir_scp] if not isinstance(spk_rir_scp, (list, tuple)) else spk_rir_scp
+            for scp in spk_rir_scp:
+                with open(scp, "r", encoding="utf-8") as f:
+                    for line in f:
+                        sps = line.strip().split(None, 1)
+                        if len(sps) == 1:
+                            self.spk_rirs.append(sps[0])
+                        else:
+                            self.spk_rirs.append(sps[1])
+        else:
+            self.spk_rirs = None
+
+    def __repr__(self):
+        name = self.__class__.__module__ + "." + self.__class__.__name__
+        msg = f"{name}(train={self.train}"
+        if self.spk2label:
+            msg += f", len(spk2label)={len(self.spk2label)}"
+        for key in ("target_duration", "sample_rate", "spk_num_eval"):
+            if getattr(self, key):
+                msg += f", {key}={getattr(self, key)}"
+        if self.spk_rirs is not None and self.spk_rir_apply_prob > 0:
+            msg += f", spk_rir_scp={self.spk_rir_scp}, spk_rir_apply_prob={self.spk_rir_apply_prob}"
+        if self.spk_noise_apply_prob > 0 and self.spk_noises:
+            msg += f", spk_noise_apply_prob={self.spk_noise_apply_prob}"
+            msg += f", spk_noises.shapes={[len(n) for n in self.spk_noises]}"
+            msg += f", spk_noise_probs={self.spk_noise_probs}"
+            msg += f", spk_noise_db_ranges={self.spk_noise_db_ranges}"
+            msg += f", spk_noise_num_to_mix={self.spk_noise_num_to_mix}"
+        return msg + ")"
+
+    def _spk_convolve_rir(self, speech, rirs):
+        rir_path = np.random.choice(rirs)
+        rir = None
+        if rir_path is not None:
+            rir, _ = soundfile.read(rir_path, dtype=np.float64, always_2d=True)
+
+            # rir: (Nmic, Time)
+            rir = rir.T
+
+            # normalize rir
+            rir = rir / np.sqrt(np.sum(rir**2))
+
+            # speech: (Nmic, Time)
+            # Note that this operation doesn't change the signal length
+            speech = scipy.signal.convolve(speech, rir, mode="full")[
+                :, : speech.shape[1]
+            ]
+        return speech, rir
+
+    def _load_noise(self, speech, speech_db, noises, noise_db_low, noise_db_high):
+        nsamples = speech.shape[1]
+        noise_path = np.random.choice(noises)
+        noise = None
+        if noise_path is not None:
+            noise_snr = np.random.uniform(noise_db_low, noise_db_high)
+            with soundfile.SoundFile(noise_path) as f:
+                if f.frames == nsamples:
+                    noise = f.read(dtype=np.float64)
+                elif f.frames < nsamples:
+                    # noise: (Time,)
+                    noise = f.read(dtype=np.float64)
+                    # Repeat noise
+                    noise = np.pad(
+                        noise,
+                        (0, nsamples - f.frames),
+                        mode="wrap",
+                    )
+                else:
+                    offset = np.random.randint(0, f.frames - nsamples)
+                    f.seek(offset)
+                    # noise: (Time,)
+                    noise = f.read(nsamples, dtype=np.float64)
+                    if len(noise) != nsamples:
+                        raise RuntimeError(f"Something wrong: {noise_path}")
+            # noise: (Nmic, Time)
+            noise = noise[None, :]
+
+            noise_power = np.mean(noise**2)
+            noise_db = 10 * np.log10(noise_power + 1e-4)
+            scale = np.sqrt(10 ** ((speech_db - noise_db - noise_snr) / 10))
+
+            noise = noise * scale
+        return noise
+
+    def _apply_data_augmentation(self, speech):
+        # speech: (Nmic, Time)
+        if speech.ndim == 1:
+            speech = speech[None, :]
+        else:
+            speech = speech.T
+
+        if self.spk_rirs is not None and self.spk_rir_apply_prob >= np.random.random():
+            speech, _ = self._spk_convolve_rir(speech, self.spk_rirs)
+
+        if self.spk_noises and self.spk_noise_apply_prob >= np.random.random():
+            idx = random.choices(
+                range(len(self.spk_noises)), weights=self.spk_noise_probs, k=1
+            )[0]
+            low, high = self.spk_noise_num_to_mix[idx]
+            if low == high:
+                num_to_mix = low
+            else:
+                num_to_mix = np.random.randint(low, high + 1)
+
+            # add eps of 1e-4 to avoid negative value before log
+            speech_db = 10 * np.log10(np.mean(speech**2) + 1e-4)
+            noiselist = []
+            for _ in range(num_to_mix):
+                noise = self._load_noise(
+                    speech,  # original speech
+                    speech_db,  # db of speech
+                    self.spk_noises[idx],  # a list of a type of noise
+                    self.spk_noise_db_ranges[idx][0],  # min db
+                    self.spk_noise_db_ranges[idx][1],  # max db
+                )
+                noiselist.append(noise)
+            noise = np.sum(np.concatenate(noiselist, axis=0), axis=0, keepdims=True)
+            speech = speech + noise
+
+        speech = np.squeeze(speech, axis=0)
+        return speech
+
+    def _make_label_mapping(self):
+        label_idx = 0
+        self.spk2label = {}
+        for spk in self.spk2utt:
+            spk = spk.strip().split(" ")[0]
+            self.spk2label[spk] = label_idx
+            label_idx += 1
+
+    def _speech_process_spk(self, data: Dict[np.ndarray, str]):
+        if self.train:
+            audio = data["speech"]
+
+            # duplicate if utt is shorter than minimum required duration
+            if len(audio) < self.target_duration:
+                shortage = self.target_duration - len(audio) + 1
+                audio = np.pad(audio, (0, shortage), "wrap")
+
+            startframe = np.array(
+                [np.int64(random.random() * (len(audio) - self.target_duration))]
+            )
+
+            data["speech"] = audio[
+                int(startframe) : int(startframe) + self.target_duration
+            ]
+
+            if self.noise_apply_prob > 0 or self.rir_apply_prob > 0:
+                data["speech"] = self._apply_data_augmentation(data["speech"])
+        else:
+            audio = data["speech"]
+            audio2 = data["speech2"]
+
+            # duplicate if utt is shorter than minimum required duration
+            if len(audio) < self.target_duration:
+                shortage = self.target_duration - len(audio) + 1
+                audio = np.pad(audio, (0, shortage), "wrap")
+            if len(audio2) < self.target_duration:
+                shortage = self.target_duration - len(audio2) + 1
+                audio2 = np.pad(audio2, (0, shortage), "wrap")
+
+            startframe = np.linspace(
+                0, len(audio) - self.target_duration, num=self.spk_num_eval
+            )
+            audios = []
+            for frame in startframe:
+                audios.append(audio[int(frame) : int(frame) + self.target_duration])
+            audios = np.stack(audios, axis=0)
+
+            startframe2 = np.linspace(
+                0, len(audio2) - self.target_duration, num=self.spk_num_eval
+            )
+            audios2 = []
+            for frame in startframe2:
+                audios2.append(audio2[int(frame) : int(frame) + self.target_duration])
+            audios2 = np.stack(audios2, axis=0)
+
+            data["speech"] = audios
+            data["speech2"] = audios2
+
+        return data
+
+    def _speech_process(
+        self, data: Dict[str, Union[str, np.ndarray]]
+    ) -> Dict[str, Union[str, np.ndarray]]:
+        # assert check_argument_types()
+
+        if "spk_labels" in data and data["spk_labels"] != "-1":
+            assert(self.text_name not in data or data[self.text_name] == "-1")
+            data = self._speech_process_spk(data)
+        
+        elif self.speech_name in data:
+            if self.train and (self.rirs is not None or self.noises is not None):
+                speech = data[self.speech_name]
+
+                # speech: (Nmic, Time)
+                if speech.ndim == 1:
+                    speech = speech[None, :]
+                else:
+                    speech = speech.T
+                # Calc power on non silence region
+                power = (speech[detect_non_silence(speech)] ** 2).mean()
+
+                # 1. Convolve RIR
+                if self.rirs is not None and self.rir_apply_prob >= np.random.random():
+                    speech, _ = self._convolve_rir(speech, power, self.rirs)
+
+                # 2. Add Noise
+                if (
+                    self.noises is not None
+                    and self.noise_apply_prob >= np.random.random()
+                ):
+                    speech, _ = self._add_noise(
+                        speech,
+                        power,
+                        self.noises,
+                        self.noise_db_low,
+                        self.noise_db_high,
+                    )
+
+                speech = speech.T
+                ma = np.max(np.abs(speech))
+                if ma > 1.0:
+                    speech /= ma
+                data[self.speech_name] = speech
+
+            if self.train and self.data_aug:
+                if self.data_aug_prob > 0 and self.data_aug_prob >= np.random.random():
+                    data[self.speech_name] = self.data_aug(
+                        data[self.speech_name], self.fs
+                    )
+
+            if self.speech_volume_normalize is not None:
+                speech = data[self.speech_name]
+                ma = np.max(np.abs(speech))
+                data[self.speech_name] = speech * self.speech_volume_normalize / ma
+        # assert check_return_type(data)
+        return data
+
+    def _text_process(
+        self, data: Dict[str, Union[str, np.ndarray]]
+    ) -> Dict[str, np.ndarray]:
+        # logging.info("self.text_name:{}".format(self.text_name))
+        # logging.info("self.aux_task_names:{}".format(self.aux_task_names))
+        # logging.info("names in data:{}".format(data.keys()))
+        # logging.info("self.token_id_converter:{}".format(self.token_id_converter))
+        # logging.info("self.tokenizer:{}".format(self.tokenizer))
+        # logging.info("spk_labels:{}".format(data["spk_labels"]))
+        # logging.info("langs:{}".format(data["langs"]))
+        # logging.info("text:{}".format(data["text"]))
+        
+        if self.text_name in data and data[self.text_name] == "-1":
+            data[self.text_name] = np.array([-1], dtype=np.int64)
+
+        elif self.text_name in data and self.tokenizer is not None:
+            text = data[self.text_name]
+            if isinstance(text, np.ndarray):
+                return data
+            text = self.text_cleaner(text)
+            tokens = self.tokenizer.text2tokens(text)
+            text_ints = self.token_id_converter.tokens2ids(tokens)
+            if len(text_ints) > 500:
+                logging.warning(
+                    "The length of the text output exceeds 500, "
+                    "which may cause OOM on the GPU."
+                    "Please ensure that the data processing is correct and verify it."
+                )
+            if "prompt" in data:
+                actual_token = (
+                    self.token_id_converter.tokenizer.tokenizer.convert_ids_to_tokens(
+                        text_ints
+                    )
+                )
+                if self.use_lang_prompt:
+                    if data["prompt"] == "<|nospeech|>":
+                        actual_token = [data["prompt"]]
+                    else:
+                        actual_token = data["prompt"].split() + actual_token[2:]
+                elif self.use_nlp_prompt:
+                    prompt_tokens = self.tokenizer.text2tokens(data["prompt"])
+                    actual_token = [actual_token[0]] + prompt_tokens + actual_token[2:]
+                else:
+                    if len(data["prompt"].split()) > 1:
+                        actual_token = (
+                            [actual_token[0]]
+                            + data["prompt"].split()
+                            + actual_token[2:]
+                        )
+                    else:
+                        actual_token[1] = data["prompt"]
+                text_ints = (
+                    self.token_id_converter.tokenizer.tokenizer.convert_tokens_to_ids(
+                        actual_token
+                    )
+                )
+            data[self.text_name] = np.array(text_ints, dtype=np.int64)
+            if "prompt" in data:
+                whisper_tokenizer = self.token_id_converter.tokenizer.tokenizer
+                if len(data["prompt"].split()) > 1:
+                    data["prompt"] = np.array(
+                        whisper_tokenizer.convert_tokens_to_ids(data["prompt"].split()),
+                        dtype=np.int64,
+                    )
+                else:
+                    data["prompt"] = np.array(
+                        [whisper_tokenizer.convert_tokens_to_ids(data["prompt"])],
+                        dtype=np.int64,
+                    )
+
+        if self.aux_task_names is not None and self.tokenizer is not None:
+            for name in self.aux_task_names:
+                if name in data:
+                    text = data[name]
+                    text = self.text_cleaner(text)
+                    tokens = self.tokenizer.text2tokens(text)
+                    text_ints = self.token_id_converter.tokens2ids(tokens)
+                    data[name] = np.array(text_ints, dtype=np.int64)
+        
+        if "langs" in data:
+            data["langs"] = np.array([data["langs"]], dtype=np.int64)
+
+        if "spk_labels" in data:
+            if self.train:
+                # check if the spk_labels is in the spk2label
+                # if not, warning and return
+                if data["spk_labels"] == "-1":
+                    data["spk_labels"] = np.asarray([-1], dtype=np.int64)
+                else:
+                    if data["spk_labels"] not in self.spk2label:
+                        logging.warning(f"spk_labels {data['spk_labels']} not in spk2label, return")
+                        return data
+
+                    int_label = self.spk2label[data["spk_labels"]]
+                    data["spk_labels"] = np.asarray([int_label], dtype=np.int64)
+            else:
+                data["spk_labels"] = np.asarray([int(data["spk_labels"])])
+
+
+        # assert check_return_type(data)
+        return data
+
+    def __call__(
+        self, uid: str, data: Dict[str, Union[str, np.ndarray]]
+    ) -> Dict[str, np.ndarray]:
+        # assert check_argument_types()
+
+        # logging.info("self.text_name",self.text_name)
+        # logging.info("self.aux_task_names",self.aux_task_names)
+        # logging.info("names in data",data.keys())
+        data = self._speech_process(data)
+        data = self._text_process(data)
+        return data
+
+
 class SLUPreprocessor(CommonPreprocessor):
     def __init__(
         self,
@@ -2431,7 +3162,7 @@ class SpeechLMPreprocessor(AbsPreprocessor):
     def __call__(
         self, uid: str, data: Dict[str, Union[str, np.ndarray]]
     ) -> Dict[str, np.ndarray]:
-        assert check_argument_types()
+        # assert check_argument_types()
 
         # (1) task parsing
         task_name = uid.strip().split(" ")[0]

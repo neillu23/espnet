@@ -712,6 +712,12 @@ class AbsTask(ABC):
             help="Configuration for efficient finetuning",
         )
 
+        group.add_argument(
+            "--validate_spk",
+            type=str2bool,
+            default=False,
+        )
+
         group = parser.add_argument_group("Pretraining model related")
         group.add_argument("--pretrain_path", help="This option is obsoleted")
         group.add_argument(
@@ -746,6 +752,23 @@ class AbsTask(ABC):
             default=[],
             nargs="*",
             help="Freeze parameters",
+        )
+
+        group.add_argument(
+            "--unfreeze_param",
+            type=str,
+            default=[],
+            nargs="*",
+            help="Unfreeze parameters after freezing",
+        )
+
+
+        group.add_argument(
+            "--eval_param",
+            type=str,
+            default=[],
+            nargs="*",
+            help="Eval parameters during training",
         )
 
         group = parser.add_argument_group("BatchSampler related")
@@ -789,6 +812,7 @@ class AbsTask(ABC):
 
         group.add_argument("--train_shape_file", type=str, action="append", default=[])
         group.add_argument("--valid_shape_file", type=str, action="append", default=[])
+        group.add_argument("--valid_spk_shape_file", type=str, action="append", default=[])
 
         group = parser.add_argument_group("Sequence iterator related")
         _batch_type_help = ""
@@ -930,6 +954,24 @@ class AbsTask(ABC):
             help="If true, input data is organized by json file. "
             "This is usually used for multi-task training, like SpeechLM task"
             "e.g., --train_data_path_and_name_and_type foo.json,foo_task,json",
+        )
+
+        group.add_argument(
+            "--multiple_valid_iterator",
+            type=str2bool,
+            default=False,
+        )
+        group.add_argument(
+            "--spk_valid_iterator",
+            type=str2bool,
+            default=False,
+        )
+
+        group.add_argument(
+            "--valid_spk_data_path_and_name_and_type",
+            type=str2triple_str,
+            action="append",
+            default=[],
         )
         group.add_argument(
             "--allow_variable_data_keys",
@@ -1355,6 +1397,12 @@ class AbsTask(ABC):
                         logging.info(f"Setting {k}.requires_grad = False")
                         p.requires_grad = False
 
+            for t in args.unfreeze_param:
+                for k, p in model.named_parameters():
+                    if t in k:
+                        logging.info(f"Setting {k}.requires_grad = True")
+                        p.requires_grad = True
+
             # Use adapter to finetune the large pre-trained foundation models
             if getattr(args, "use_adapter", False):
                 create_adapter(model, args.adapter, args.adapter_conf)
@@ -1486,11 +1534,36 @@ class AbsTask(ABC):
                     distributed_option=distributed_option,
                     mode="train",
                 )
-            valid_iter_factory = cls.build_iter_factory(
-                args=args,
-                distributed_option=distributed_option,
-                mode="valid",
-            )
+            # import pdb; pdb.set_trace()
+            if args.multiple_valid_iterator:
+                logging.info("building multiple valid iterator")
+                assert(not args.spk_valid_iterator)
+                assert(len(args.valid_spk_data_path_and_name_and_type) > 0)
+                valid_iter_factory_asr = cls.build_iter_factory(
+                    args=args,
+                    distributed_option=distributed_option,
+                    mode="valid_asr",
+                )
+                valid_iter_factory_spk = cls.build_iter_factory(
+                    args=args,
+                    distributed_option=distributed_option,
+                    mode="valid_spk",
+                )
+                valid_iter_factory = (valid_iter_factory_asr, valid_iter_factory_spk)
+            elif args.spk_valid_iterator:
+                logging.info("building spk valid iterator")
+                valid_iter_factory = cls.build_iter_factory(
+                    args=args,
+                    distributed_option=distributed_option,
+                    mode="valid_spk",
+                )
+            else:
+                logging.info("building valid iterator")
+                valid_iter_factory = cls.build_iter_factory(
+                    args=args,
+                    distributed_option=distributed_option,
+                    mode="valid",
+                )
             if not args.use_matplotlib and args.num_att_plot != 0:
                 args.num_att_plot = 0
                 logging.info("--use_matplotlib false => Changing --num_att_plot to 0")
@@ -1602,11 +1675,15 @@ class AbsTask(ABC):
             num_iters_per_epoch = args.num_iters_per_epoch
             train = True
 
-        elif mode == "valid":
+        elif mode in ["valid", "valid_asr", "valid_spk"]:
             preprocess_fn = cls.build_preprocess_fn(args, train=False)
             collate_fn = cls.build_collate_fn(args, train=False)
-            data_path_and_name_and_type = args.valid_data_path_and_name_and_type
-            shape_files = args.valid_shape_file
+            if mode == "valid_spk":
+                data_path_and_name_and_type = args.valid_spk_data_path_and_name_and_type
+                shape_files = args.valid_spk_shape_file
+            else:
+                data_path_and_name_and_type = args.valid_data_path_and_name_and_type
+                shape_files = args.valid_shape_file
 
             if args.valid_batch_type is None:
                 batch_type = args.batch_type
@@ -1709,7 +1786,7 @@ class AbsTask(ABC):
             for k, v in kwargs.items():
                 setattr(iter_options, k, v)
 
-        if mode == "valid" and args.valid_iterator_type is not None:
+        if mode in ["valid", "valid_asr", "valid_spk"] and args.valid_iterator_type is not None:
             iterator_type = args.valid_iterator_type
         else:
             iterator_type = args.iterator_type
@@ -1783,9 +1860,17 @@ class AbsTask(ABC):
         else:
             utt2category_file = None
 
+        shape_files = iter_options.shape_files
+        for index in range(len(shape_files)):
+            new_name = shape_files[index].replace("speech_shape", "sampler_shape")
+            if os.path.exists(new_name):  # 
+                shape_files[index] = new_name
+                logging.info(f"Reading shape_files from {new_name}")
+
+
         batch_sampler = build_batch_sampler(
             type=iter_options.batch_type,
-            shape_files=iter_options.shape_files,
+            shape_files=shape_files,
             fold_lengths=args.fold_length,
             batch_size=iter_options.batch_size,
             batch_bins=iter_options.batch_bins,

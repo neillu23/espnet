@@ -11,6 +11,7 @@ import torch
 from torch.multiprocessing.spawn import ProcessContext
 
 from espnet2.samplers.build_batch_sampler import BATCH_TYPES
+from espnet2.tasks.asr import ASRTask
 from espnet2.tasks.spk import SpeakerTask
 from espnet2.torch_utils.set_all_random_seed import set_all_random_seed
 from espnet2.train.distributed_utils import (
@@ -77,8 +78,10 @@ def extract_embed(args):
     # 1. Set random-seed
     set_all_random_seed(args.seed)
 
+    task = SpeakerTask if not args.sv_asr_joint_task else ASRTask 
+
     # 2. define train args
-    spk_model, spk_train_args = SpeakerTask.build_model_from_file(
+    spk_model, spk_train_args = task.build_model_from_file(
         args.spk_train_config, args.spk_model_file, device
     )
 
@@ -128,6 +131,8 @@ def extract_embed(args):
             output_dir=args.output_dir,
             custom_bs=bs,
             average=args.average_embd,
+            sv_asr_joint_task=args.sv_asr_joint_task,
+            second_last_sv=args.second_last_sv,
         )
 
     if distributed_option.distributed:
@@ -179,6 +184,22 @@ def get_parser():
         default=1,
         help="The number of workers used for DataLoader",
     )
+
+
+    parser.add_argument(
+        "--sv_asr_joint_task",
+        type=str2bool,
+        default=False,
+        help="Whether we are using an SV and ASR joint model",
+    )
+
+    parser.add_argument(
+        "--second_last_sv",
+        type=str2bool,
+        default=False,
+        help="Whether we are using the second last layer of the SV model",
+    )
+
 
     group = parser.add_argument_group("Input data related")
     group.add_argument(
@@ -346,6 +367,17 @@ def get_parser():
         type=str,
         help="SPK model parameter file",
     )
+
+
+
+
+    group.add_argument(
+        "--lid_tokens",
+        type=str,
+        default="",
+        help="The token list for the language identification model",
+    )
+
     group.add_argument(
         "--model_tag",
         type=str,
