@@ -1,0 +1,176 @@
+encoder: transformer
+encoder_conf:
+    output_size: 256
+    attention_heads: 8
+    linear_units: 1024
+    num_blocks: 2
+    dropout_rate: 0.1
+    positional_dropout_rate: 0.1
+    attention_dropout_rate: 0.1
+    input_layer: conv2d2
+    normalize_before: true
+    embed_condition: true
+    embed_condition_size: 256
+    embed_condition_method: TCAC
+
+encoder_lid: resnet_enc
+encoder_lid_conf:
+  # in_feats: 1024
+  in_conv_channels: 1024
+  in_kernel_size: 5
+  in_stride: 1
+  resb_type: seres2bn
+  resb_repeats:
+    - 1
+  resb_channels:
+    - 512
+  resb_kernel_sizes:
+    - 3
+  resb_dilations:
+    - 2
+  resb_strides:
+    - 1
+  res2net_width_factor: 1
+  res2net_scale: 8
+  se_r: 8
+  multilayer: true
+  multilayer_concat: true
+  endpoint_channels: 3072
+  hid_act: swish
+  dropout_rate: 0.4
+
+
+postencoder_lid: chn_attn_stat
+# postencoder_conf:
+#   input_size: 1536  # 1.5 * ndim of encoder
+
+
+projector_lid: rawnet3
+projector_lid_conf:
+  input_size: 6144  # 2 * input_size of pooling
+  output_size: 256
+
+loss_lid: aamsoftmax
+loss_lid_conf:
+  nout: 256
+  nclasses: 146
+  margin: 0.0
+  scale: 30
+decoder: none
+
+pretrained_models:
+  lid_path: /export/c06/ylu125/espnet_shalli/egs2/ml_superb/asr1/exp2/asr_train_asr_wav2vec2_xlsr_10min_resnet_2s_multilingual_10min/valid.acc.ave.pth
+  asr_path: /export/c06/ylu125/espnet_shalli/egs2/ml_superb/asr1/exp/asr_train_asr_wav2vec2_xlsr_10min_multilingual_10min/21epoch.pth
+  
+
+model: casslr_espnet
+
+model_conf:
+    ctc_weight: 1.0
+    lid_weight: 50.0
+    lid_ave_weight: 10.0
+    lid_audio_length: 32000
+    lid_condition_feature: soft
+    lid_condition_activate: bndrop
+    droprate: 0.5
+    embed_condition_size: 256
+    separate_lid_modules: true
+    # last_condition: false
+    # fix_lid_position: true
+
+
+frontend: s3prl_casslr
+frontend_conf:
+    frontend_conf:
+        upstream: xls_r_300m # Note: If the upstream is changed, please change the input_size in the preencoder.
+        embed_condition: true
+        extra_conf:
+            embed_condition_size: 256
+            embed_condition_start: 3 # same as the first sep_layers
+            embed_condition_end: 24
+            embed_condition_method: TCAC
+            embed_condition_components: 
+            - attention 
+    download_dir: ./hub
+    asr_layer_selections: [24]
+    lid_layer_selections: [3,6,9,12,15,18,21,24]
+    
+preencoder: linear
+preencoder_conf:
+    input_size: 1024  # Note: If the upstream is changed, please change this value accordingly.
+    output_size: 80
+
+preencoder_lid: linear
+preencoder_lid_conf:
+    input_size: 1024  # Note: If the upstream is changed, please change this value accordingly.
+    output_size: 80
+
+
+unused_parameters: true
+freeze_param: [
+"frontend.upstream",
+# freeze all lid parameters
+# "frontend.lid_featurizers",
+"encoder_lid",
+# "preencoder_lid",
+"projector_lid",
+"postencoder_lid",
+"loss_lid",
+]
+
+eval_param: [
+"encoder_lid",
+"projector_lid",
+"postencoder_lid",
+]
+
+
+
+unfreeze_param: [
+    "condition_layer"]
+
+
+num_workers: 4
+batch_type: sorted
+batch_size: 16
+# accum_grad: 2
+patience: none
+init: none
+best_model_criterion:
+-   - valid
+    - cer_ctc
+    - min
+-   - valid
+    - acc_lid
+    - max
+keep_nbest_models: 5
+
+optim: adam
+optim_conf:
+    lr: 0.0001
+    weight_decay: 0.000001
+
+specaug: specaug
+specaug_conf:
+    apply_time_warp: true
+    time_warp_window: 5
+    time_warp_mode: bicubic
+    apply_freq_mask: true
+    freq_mask_width_range:
+    - 0
+    - 27
+    num_freq_mask: 2
+    apply_time_mask: true
+    time_mask_width_ratio_range:
+    - 0.
+    - 0.05
+    num_time_mask: 10
+
+preprocessor: joint_asr_lid
+preprocessor_conf:
+  # target_duration: 3.0  # seconds for SV task
+  sample_rate: 16000
+  # num_eval: 5
+
+num_iters_per_epoch: 5000 # number of iterations per epoch
+max_epoch: 35
