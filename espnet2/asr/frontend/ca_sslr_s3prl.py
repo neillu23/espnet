@@ -20,9 +20,9 @@ class S3prlCASSLRFrontend(AbsFrontend):
         fs: Union[int, str] = 16000,
         frontend_conf: Optional[dict] = get_default_kwargs(Frontend),
         download_dir: Optional[str] = None,
-        asr_layer_selections: Optional[list] = None,
-        lid_layer_selections: Optional[list] = None,
-        sv_layer_selections: Optional[list] = None,
+        asr_layer_selections: list = [],
+        lid_layer_selections: list = [],
+        spk_layer_selections: list = [],
     ):
         try:
             import s3prl
@@ -61,19 +61,25 @@ class S3prlCASSLRFrontend(AbsFrontend):
 
         self.asr_layer_selections = asr_layer_selections
         self.lid_layer_selections = lid_layer_selections
-        self.sv_layer_selections = sv_layer_selections
+        self.spk_layer_selections = spk_layer_selections
 
-        self.lid_featurizers = torch.nn.ModuleList([Featurizer(upstream, layer_selections=[i for i in range(layer + 1)]) for layer in lid_layer_selections])
+        if len(self.lid_layer_selections) > 0:
+            self.lid_featurizers = torch.nn.ModuleList([Featurizer(upstream, layer_selections=[i for i in range(layer + 1)]) for layer in lid_layer_selections])
+            featurizer = self.lid_featurizers[0]
 
-        if self.asr_layer_selections is not None:
+        if len(self.asr_layer_selections) > 0:
             self.asr_featurizers = torch.nn.ModuleList([Featurizer(upstream, layer_selections=[i for i in range(layer + 1)]) for layer in asr_layer_selections])
+            featurizer = self.asr_featurizers[0]
+
+        if len(self.spk_layer_selections) > 0:
+            self.spk_featurizers = torch.nn.ModuleList([Featurizer(upstream, layer_selections=[i for i in range(layer + 1)]) for layer in spk_layer_selections])
+            featurizer = self.spk_featurizers[0]
         
-        if self.sv_layer_selections is not None:
-            self.spk_featurizers = torch.nn.ModuleList([Featurizer(upstream, layer_selections=[i for i in range(layer + 1)]) for layer in sv_layer_selections])
+        self.hop_length = featurizer.downsample_rate
+        self.out_size = featurizer.output_size
 
         self.pretrained_params = copy.deepcopy(self.upstream.state_dict())
         self.frontend_type = "s3prl"
-        self.hop_length = self.lid_featurizers[0].downsample_rate
         self.tile_factor = frontend_conf.get("tile_factor", 1)
 
     def _tile_representations(self, feature):
@@ -95,7 +101,7 @@ class S3prlCASSLRFrontend(AbsFrontend):
         return tiled_feature
 
     def output_size(self) -> int:
-        return self.lid_featurizers[0]
+        return self.out_size
 
     def forward(
         self, input: torch.Tensor, input_lengths: torch.Tensor, 
@@ -142,6 +148,7 @@ class S3prlCASSLRFrontend(AbsFrontend):
         feats_layers: list = [],
         feats_lengths_layers: list = [],
         padding_mask: Optional[torch.Tensor]=None,
+        pos_bias: Optional[torch.Tensor]=None,
     ):
         if padding_mask is None:
             wav_padding_mask = ~torch.lt(
@@ -177,6 +184,15 @@ class S3prlCASSLRFrontend(AbsFrontend):
 
             # logging.info("padding_mask: {}".format(padding_mask))
             
+            # TODO: Modify for WavLM as well
+            # x, z, pos_bias = layer(
+            #     x,
+            #     self_attn_padding_mask=padding_mask,
+            #     need_weights=False,
+            #     self_attn_mask=streaming_mask,
+            #     pos_bias=pos_bias,
+            # )
+
             x, (z, lr, padding_mask) = self.upstream.upstream.model.encoder.layers[layer_index](
                 x, condition_features, self_attn_padding_mask=padding_mask, need_weights=False
             )

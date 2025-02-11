@@ -43,12 +43,15 @@ dumpdir=dump          # Directory to dump features.
 expdir=exp            # Directory to save experiments.
 python=python3        # Specify python to execute espnet commands.
 fold_length=120000    # fold_length for speech data during enhancement training.
+use_lid_asr=False
+use_sv_asr=False
+
 
 # Data preparation related
 local_data_opts= # The options given to local/data.sh
 
 # Speed perturbation related
-speed_perturb_factors="0.9 1.0 1.1" # perturbation factors, e.g. "0.9 1.0 1.1" (separated by space).
+speed_perturb_factors= # "0.9 1.0 1.1" # perturbation factors, e.g. "0.9 1.0 1.1" (separated by space).
 
 # Feature extraction related
 feats_type=raw      # Feature type (raw, raw_copy, fbank_pitch, or extracted).
@@ -435,6 +438,16 @@ if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
         _opts+="--config ${spk_config} "
     fi
 
+
+    #For Conditional ASR
+    if [ "${use_lid_asr}" = true ]; then
+        _opts+="--train_data_path_and_name_and_type ${_spk_train_dir}/langs_idx,langs,text "
+        _opts+="--valid_data_path_and_name_and_type ${_spk_valid_dir}/langs_idx_1,langs,text "
+        _opts+="--valid_data_path_and_name_and_type ${_spk_valid_dir}/langs_idx_2,langs2,text "
+        _opts+="--lid_tokens ${_spk_train_dir}/all_langs "
+    fi
+
+
     log "Spk training started... log: '${spk_exp}/train.log'"
     if echo "${cuda_cmd}" | grep -e queue.pl -e queue-freegpu.pl &> /dev/null; then
         # SGE can't include "/" in a job name
@@ -483,7 +496,21 @@ if [ ${stage} -le 6 ] && [ ${stop_stage} -ge 6 ]; then
         jobname="${infer_exp}/spk_embed_extraction.log"
     fi
 
-    log "Extracting speaker embeddings for inference... log: '${infer_exp}/spk_embed_extraction_test.log'"
+    _opts=""
+    #For Conditional ASR
+    if [ "${use_lid_asr}" = true ]; then
+        _opts+="--data_path_and_name_and_type ${_inference_dir}/langs_idx_1,langs,text "
+        _opts+="--data_path_and_name_and_type ${_inference_dir}/langs_idx_2,langs2,text "
+        # _opts+="--lid_tokens ${_spk_train_dir}/all_langs "
+        # _opts+="--lid_asr_joint_task ${lid_asr_joint_task} "
+        _opts+="--lid_tokens ${_inference_dir}/all_langs "
+    fi
+
+    # if [ "${use_sv_asr}" = true ]; then
+    #     _opts+="--sv_asr_joint_task ${use_sv_asr} "
+    #     _opts+="--second_last_sv ${second_last_sv} "
+    # fi
+
     ${python} -m espnet2.bin.launch \
         --cmd "${cuda_cmd} --name ${jobname}" \
         --log ${infer_exp}/spk_embed_extraction_test.log \
@@ -497,12 +524,12 @@ if [ ${stage} -le 6 ] && [ ${stop_stage} -ge 6 ]; then
             --data_path_and_name_and_type ${_inference_dir}/trial.scp,speech,sound \
             --data_path_and_name_and_type ${_inference_dir}/trial2.scp,speech2,sound \
             --data_path_and_name_and_type ${_inference_dir}/trial_label,spk_labels,text \
-            --shape_file ${spk_stats_dir}/valid/speech_shape \
+            --shape_file ${spk_stats_dir}/test/speech_shape \
             --fold_length ${fold_length} \
             --config ${inference_config} \
             --spk_train_config "${spk_exp}/config.yaml" \
             --spk_model_file "${spk_exp}"/${inference_model} \
-            ${spk_args}
+            ${spk_args} ${_opts}
 
     # extract embeddings for cohort set
     if [ "$score_norm" = true  ] || [ "$qmf_func" = true  ]; then

@@ -878,12 +878,12 @@ class ASRTask(AbsTask):
 
         # 7. SV modules
         if getattr(args, "preencoder_spk", None) is not None:
-            sv_layer_selections = args.frontend_conf.get("sv_layer_selections", None)
-            preencoder_sv_nums = len(sv_layer_selections) if sv_layer_selections is not None else 1
+            spk_layer_selections = args.frontend_conf.get("spk_layer_selections", None)
+            preencoder_spk_nums = len(spk_layer_selections) if spk_layer_selections is not None else 1
 
-            if preencoder_sv_nums > 1:
+            if preencoder_spk_nums > 1:
                 preencoder_spk_class = preencoder_choices.get_class(args.preencoder_spk)
-                preencoder_spk = torch.nn.ModuleList([preencoder_spk_class(**args.preencoder_spk_conf) for i in range(preencoder_sv_nums)])
+                preencoder_spk = torch.nn.ModuleList([preencoder_spk_class(**args.preencoder_spk_conf) for i in range(preencoder_spk_nums)])
 
                 spk_input_size = preencoder_spk[0].output_size()
             else:
@@ -898,7 +898,7 @@ class ASRTask(AbsTask):
                 spk_input_size = args.input_size
 
         if getattr(args, "encoder_spk", None) is not None:
-            if args.model_conf.get("separate_sv_modules", False):
+            if args.model_conf.get("separate_spk_modules", False):
                 encoder_spk_class = encoder_spk_choices.get_class(args.encoder_spk)
                 encoder_spk = torch.nn.ModuleList([encoder_spk_class(input_size=spk_input_size, **args.encoder_spk_conf) for i in range(2)])
                 encoder_spk_output_size = encoder_spk[0].output_size()
@@ -911,7 +911,7 @@ class ASRTask(AbsTask):
             
     
         if getattr(args, "pooling_spk", None) is not None:
-            if args.model_conf.get("separate_sv_modules", False):
+            if args.model_conf.get("separate_spk_modules", False):
                 pooling_spk_class = pooling_spk_choices.get_class(args.pooling_spk)
                 pooling_spk = torch.nn.ModuleList([pooling_spk_class(input_size=encoder_spk_output_size, **args.pooling_spk_conf) for i in range(2)])
                 pooling_spk_output_size = pooling_spk[0].output_size()
@@ -926,7 +926,7 @@ class ASRTask(AbsTask):
 
         # import pdb; pdb.set_trace()
         if getattr(args, "projector_spk", None) is not None:
-            if args.model_conf.get("separate_sv_modules", False):
+            if args.model_conf.get("separate_spk_modules", False):
                 projector_spk_class = projector_spk_choices.get_class(args.projector_spk)
                 projector_spk = torch.nn.ModuleList([projector_spk_class(input_size=pooling_spk_output_size, **args.projector_spk_conf) for i in range(2)])
                 projector_spk_output_size = projector_spk[0].output_size()
@@ -938,7 +938,7 @@ class ASRTask(AbsTask):
             projector_spk = None
 
         if getattr(args, "loss_spk", None) is not None:
-            if args.model_conf.get("separate_sv_modules", False):
+            if args.model_conf.get("separate_spk_modules", False):
                 loss_spk_class = loss_spk_choices.get_class(args.loss_spk)
                 loss_spk = torch.nn.ModuleList([loss_spk_class(nout=projector_spk_output_size, nclasses=args.spk_num, **args.loss_spk_conf) for i in range(2)])
             else:
@@ -986,10 +986,10 @@ class ASRTask(AbsTask):
                 loss_spk=loss_spk,
                 asr_layer_selections=args.frontend_conf.get("asr_layer_selections", None),
                 lid_layer_selections=args.frontend_conf.get("lid_layer_selections", None),
-                sv_layer_selections=args.frontend_conf.get("sv_layer_selections", None),
+                spk_layer_selections=args.frontend_conf.get("spk_layer_selections", None),
                 pretrained_asr_path=args.pretrained_models.get("asr_path", None),
                 pretrained_lid_path=args.pretrained_models.get("lid_path", None),
-                pretrained_sv_path=args.pretrained_models.get("sv_path", None),
+                pretrained_spk_path=args.pretrained_models.get("spk_path", None),
                 **args.model_conf,
             )
         elif model_class == ESPnetLIDModel:

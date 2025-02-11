@@ -48,32 +48,32 @@ class ESPnetCASSLRModel(ESPnetASRModel):
     @typechecked
     def __init__(
         self,
-        vocab_size: int,
-        token_list: Union[Tuple[str, ...], List[str]],
+        vocab_size: Optional[int],
+        token_list: Optional[Union[Tuple[str, ...], List[str]]],
         frontend: Optional[AbsFrontend],
         specaug: Optional[AbsSpecAug],
         normalize: Optional[AbsNormalize],
         preencoder: Optional[AbsPreEncoder],
-        encoder: AbsEncoder,
+        encoder: Optional[AbsEncoder],
         postencoder: Optional[AbsPostEncoder],
         decoder: Optional[AbsDecoder],
-        encoder_lid: Union[AbsEncoder, torch.nn.modules.container.ModuleList],
-        preencoder_lid: Union[AbsPreEncoder, torch.nn.modules.container.ModuleList],
-        postencoder_lid: Union[AbsPooling, AbsPostEncoder, torch.nn.modules.container.ModuleList],
-        projector_lid: Union[AbsProjector, torch.nn.modules.container.ModuleList],
-        loss_lid: Union[AbsLoss, torch.nn.modules.container.ModuleList],
+        encoder_lid: Optional[Union[AbsEncoder, torch.nn.modules.container.ModuleList]],
+        preencoder_lid: Optional[Union[AbsPreEncoder, torch.nn.modules.container.ModuleList]],
+        postencoder_lid: Optional[Union[AbsPooling, AbsPostEncoder, torch.nn.modules.container.ModuleList]],
+        projector_lid: Optional[Union[AbsProjector, torch.nn.modules.container.ModuleList]],
+        loss_lid: Optional[Union[AbsLoss, torch.nn.modules.container.ModuleList]],
         preencoder_spk: Optional[Union[AbsPreEncoder,torch.nn.modules.container.ModuleList]],
         encoder_spk: Optional[Union[AbsEncoder,torch.nn.modules.container.ModuleList]],
         pooling_spk: Optional[Union[AbsPooling,torch.nn.modules.container.ModuleList]],
         projector_spk: Optional[Union[AbsProjector,torch.nn.modules.container.ModuleList]],
         loss_spk: Optional[Union[AbsLoss,torch.nn.modules.container.ModuleList]],
-        ctc: CTC,
+        ctc: Optional[CTC],
         joint_network: Optional[torch.nn.Module],
-        lid_tokens: Union[Tuple[str, ...], List[str]] = None,
+        lid_tokens: Optional[Union[Tuple[str, ...], List[str]]] = None,
         langs_num: int = 0,
         embed_condition_size: int = 0,
-        lid_condition_feature: str = "soft",
-        lid_condition_activate: Optional[str] = None,
+        condition_feature_type: str = "soft",
+        condition_activate_type: Optional[str] = None,
         droprate: float = 0.3,
         aux_ctc: Optional[dict] = None,
         ctc_weight: float = 0.5,
@@ -99,60 +99,73 @@ class ESPnetCASSLRModel(ESPnetASRModel):
         sym_eos: str = "<sos/eos>",
         extract_feats_in_collect_stats: bool = True,
         lang_token_id: int = -1,
-        asr_layer_selections:  Optional[list] = None,
-        lid_layer_selections:  Optional[list] = None,
-        sv_layer_selections:  Optional[list] = None,
-        separate_lid_modules: bool = True,
-        separate_sv_modules: bool = False,
+        asr_layer_selections:  list = [],
+        lid_layer_selections:  list = [],
+        spk_layer_selections:  list = [],
+        separate_lid_modules: bool = False,
+        separate_spk_modules: bool = False,
         skip_asr: bool = False,
+        init_last: bool = True,
         twice_ssl_ablation: bool = False,
         double_condition: bool = False,
         pretrained_asr_path: Optional[str] = None,
         pretrained_lid_path: Optional[str] = None,
-        pretrained_sv_path: Optional[str] = None,
+        pretrained_spk_path: Optional[str] = None,
     ):
         assert 0.0 <= ctc_weight <= 1.0, ctc_weight
         assert 0.0 <= interctc_weight < 1.0, interctc_weight
 
-        super().__init__(
-            vocab_size=vocab_size,
-            token_list=token_list,
-            frontend=frontend,
-            specaug=specaug,
-            normalize=normalize,
-            preencoder=preencoder,
-            encoder=encoder,
-            postencoder=postencoder,
-            decoder=decoder,
-            ctc=ctc,
-            joint_network=joint_network,
-            aux_ctc=aux_ctc,
-            ctc_weight=ctc_weight,
-            interctc_weight=interctc_weight,
-            ignore_id=ignore_id,
-            lsm_weight=lsm_weight,
-            length_normalized_loss=length_normalized_loss,
-            report_cer=report_cer,
-            report_wer=report_wer,
-            sym_space=sym_space,
-            sym_blank=sym_blank,
-            transducer_multi_blank_durations=transducer_multi_blank_durations,
-            transducer_multi_blank_sigma=transducer_multi_blank_sigma,
-            sym_sos=sym_sos,
-            sym_eos=sym_eos,
-            extract_feats_in_collect_stats=extract_feats_in_collect_stats,
-            lang_token_id=lang_token_id,
+        if not skip_asr:
+            super().__init__(
+                vocab_size=vocab_size,
+                token_list=token_list,
+                frontend=frontend,
+                specaug=specaug,
+                normalize=normalize,
+                preencoder=preencoder,
+                encoder=encoder,
+                postencoder=postencoder,
+                decoder=decoder,
+                ctc=ctc,
+                joint_network=joint_network,
+                aux_ctc=aux_ctc,
+                ctc_weight=ctc_weight,
+                interctc_weight=interctc_weight,
+                ignore_id=ignore_id,
+                lsm_weight=lsm_weight,
+                length_normalized_loss=length_normalized_loss,
+                report_cer=report_cer,
+                report_wer=report_wer,
+                sym_space=sym_space,
+                sym_blank=sym_blank,
+                transducer_multi_blank_durations=transducer_multi_blank_durations,
+                transducer_multi_blank_sigma=transducer_multi_blank_sigma,
+                sym_sos=sym_sos,
+                sym_eos=sym_eos,
+                extract_feats_in_collect_stats=extract_feats_in_collect_stats,
+                lang_token_id=lang_token_id,
 
-        )
+            )
+        else:
+            torch.nn.Module.__init__(self)
+            self.frontend = frontend
+            self.specaug = specaug
+            self.normalize = normalize
+            
         self.separate_lid_modules = separate_lid_modules
-        self.separate_sv_modules = separate_sv_modules
+        self.separate_spk_modules = separate_spk_modules
         self.skip_asr = skip_asr
+        self.init_last = init_last
         self.twice_ssl_ablation = twice_ssl_ablation
         self.double_condition = double_condition
 
         if twice_ssl_ablation:
-            assert(len(lid_layer_selections) == 2)
-        
+            assert(len(lid_layer_selections) == 2 or len(spk_layer_selections) == 2)
+
+        if not double_condition:
+            assert len(lid_layer_selections) <= 1 or len(spk_layer_selections) <= 1
+
+
         self.preencoder_lid = preencoder_lid
         if not self.separate_lid_modules:
             self.encoder_lid = encoder_lid
@@ -166,7 +179,7 @@ class ESPnetCASSLRModel(ESPnetASRModel):
             self.loss_lid, self.loss_lid_last = loss_lid
 
         self.preencoder_spk = preencoder_spk
-        if not self.separate_sv_modules:
+        if not self.separate_spk_modules:
             self.encoder_spk = encoder_spk
             self.pooling_spk = pooling_spk
             self.projector_spk = projector_spk
@@ -185,35 +198,51 @@ class ESPnetCASSLRModel(ESPnetASRModel):
         self.lid_ave_weight = lid_ave_weight
         self.spk_ave_weight = spk_ave_weight
         self.lid_audio_length = lid_audio_length
-        self.lid_condition_feature = lid_condition_feature
-        self.lid_condition_activate = lid_condition_activate
+        self.condition_feature_type = condition_feature_type
+        self.condition_activate_type = condition_activate_type
         
         self.asr_layer_selections = asr_layer_selections
         self.lid_layer_selections = lid_layer_selections
-        self.sv_layer_selections = sv_layer_selections
-        
+        self.spk_layer_selections = spk_layer_selections
+
+        # the union of all layer selections from asr, lid, and spk, from the first to the last layer
+        self.all_layer_selections = list(set(asr_layer_selections + lid_layer_selections + spk_layer_selections))
+        self.all_layer_selections.sort()
+        if self.twice_ssl_ablation:
+            assert(len(self.all_layer_selections) == 1)
+            self.all_layer_selections = [self.all_layer_selections[0], self.all_layer_selections[0]]
     
         # 256, 192 are the size of the lid/speaker embeddings
         lid_cond_num = len(self.lid_layer_selections) - 1
-        self.lang_embeddings = torch.nn.ModuleList([torch.nn.Linear(256, embed_condition_size) for i in range(lid_cond_num)])
-        self.lns = torch.nn.ModuleList([LayerNorm(embed_condition_size, export=False) for i in range(lid_cond_num)])
-        self.activation_fns = torch.nn.ModuleList([torch.nn.PReLU() for i in range(lid_cond_num)])
-        self.dropouts = torch.nn.ModuleList([torch.nn.Dropout(p=droprate) for i in range(lid_cond_num)])
+        if lid_cond_num > 0:
+            self.lang_embeddings = torch.nn.ModuleList([torch.nn.Linear(256, embed_condition_size) for i in range(lid_cond_num)])
+            self.lns = torch.nn.ModuleList([LayerNorm(embed_condition_size, export=False) for i in range(lid_cond_num)])
+            self.activation_fns = torch.nn.ModuleList([torch.nn.PReLU() for i in range(lid_cond_num)])
+            self.dropouts = torch.nn.ModuleList([torch.nn.Dropout(p=droprate) for i in range(lid_cond_num)])
 
-        if self.double_condition:
-            spk_cond_num = len(self.sv_layer_selections) - 1
+        
+        spk_cond_num = len(self.spk_layer_selections) - 1
+        if spk_cond_num > 0:
             self.spk_embeddings = torch.nn.ModuleList([torch.nn.Linear(192, embed_condition_size) for i in range(spk_cond_num)])
             self.lns_spk = torch.nn.ModuleList([LayerNorm(embed_condition_size, export=False) for i in range(spk_cond_num)])
             self.activation_fns_spk = torch.nn.ModuleList([torch.nn.PReLU() for i in range(spk_cond_num)])
             self.dropouts_spk = torch.nn.ModuleList([torch.nn.Dropout(p=droprate) for i in range(spk_cond_num)])
 
-        self.load_model_parameters(pretrained_asr_path, pretrained_lid_path, pretrained_sv_path)
+        self.load_model_parameters(pretrained_asr_path, pretrained_lid_path, pretrained_spk_path)
 
 
-    def load_model_parameters(self, pretrained_asr_path, pretrained_lid_path, pretrained_sv_path):
+    def load_model_parameters(self, pretrained_asr_path, pretrained_lid_path, pretrained_spk_path):
         consistent_parameters = []
-        inconsistent_parameters = []
+        updated_parameters = []
         self = self.to("cuda")
+
+        for name, param in self.state_dict().items():
+            if "linear_scale.weight" in name:
+                self.state_dict()[name] = torch.zeros_like(param)
+            elif "linear_scale.bias" in name:
+                self.state_dict()[name] = torch.ones_like(param)
+            elif "linear_shift.weight" in name or "linear_shift.bias" in name:
+                self.state_dict()[name] = torch.zeros_like(param)
 
         if pretrained_asr_path is not None:
             asr_state_dict = torch.load(pretrained_asr_path, map_location="cuda")
@@ -224,7 +253,7 @@ class ESPnetCASSLRModel(ESPnetASRModel):
                     if torch.allclose(self.state_dict()[name], param):
                         consistent_parameters.append(name)
                     else:
-                        inconsistent_parameters.append(name)
+                        updated_parameters.append(name)
                     self.state_dict()[name].copy_(param)
                 else:
                     logging.warning(f"ASR parameter {name} not found or shape mismatch in joint model")
@@ -238,15 +267,16 @@ class ESPnetCASSLRModel(ESPnetASRModel):
                     name = name.replace("encoder.", "encoder_lid.")
                     name = name.replace("projector.", "projector_lid.")
                     name = name.replace("loss.", "loss_lid.")
+                    name = name.replace("featurizer.", "lid_featurizers")
 
                 if name in self.state_dict() and param.shape == self.state_dict()[name].shape:
                     if torch.allclose(self.state_dict()[name], param):
                         consistent_parameters.append(name)
                     else:
-                        inconsistent_parameters.append(name)
+                        updated_parameters.append(name)
                     self.state_dict()[name].copy_(param)
 
-                    if self.separate_lid_modules:
+                    if self.separate_lid_modules and self.init_last:
                         if "encoder_lid." in name or "postencoder_lid." in name or "projector_lid." in name or "loss_lid" in name:
                             new_name = name.replace("encoder_lid.", "encoder_lid_last.")
                             new_name = new_name.replace("postencoder_lid.", "postencoder_lid_last.")
@@ -255,103 +285,113 @@ class ESPnetCASSLRModel(ESPnetASRModel):
 
                             if new_name in self.state_dict() and param.shape == self.state_dict()[new_name].shape:
                                 self.state_dict()[new_name].copy_(param)
-                                inconsistent_parameters.append(new_name)
+                                updated_parameters.append(new_name)
                             else:
                                 logging.warning(f"Parameter {new_name} in LID model not found in joint model")
 
-
-
-                elif "featurizer" in name:
-                    new_name = name.replace("featurizer", f"lid_featurizers.{len(self.preencoder_lid)-1}")
-                    if new_name in self.state_dict() and param.shape == self.state_dict()[new_name].shape:
-                        if torch.allclose(self.state_dict()[new_name], param):
-                            consistent_parameters.append(new_name)
+                elif "lid_featurizers" in name:
+                    for i in range(len(self.lid_layer_selections)):
+                        new_name = name.replace("lid_featurizers", f"lid_featurizers.{i}")
+                        if new_name in self.state_dict() and param.shape == self.state_dict()[new_name].shape:
+                            updated_parameters.append(new_name)
+                            self.state_dict()[new_name].copy_(param)
                         else:
-                            inconsistent_parameters.append(new_name)
-                        self.state_dict()[new_name].copy_(param)
-                    else:
-                        logging.warning(f"Featurizer parameter {name} not found or shape mismatch in joint model")
+                            logging.warning(f"LID parameter {new_name} not found or shape mismatch in joint model")
+
                 elif "preencoder_lid" in name:
                     for i in range(len(self.preencoder_lid)):
                         new_name = name.replace("preencoder_lid", f"preencoder_lid.{i}")
                         if new_name in self.state_dict() and param.shape == self.state_dict()[new_name].shape:
-                            if torch.allclose(self.state_dict()[new_name], param):
-                                consistent_parameters.append(new_name)
-                            else:
-                                inconsistent_parameters.append(new_name)
+                            updated_parameters.append(new_name)
                             self.state_dict()[new_name].copy_(param)
                         else:
-                            logging.warning(f"Preencoder parameter {name} not found or shape mismatch in joint model")
+                            logging.warning(f"LID parameter {new_name} not found or shape mismatch in joint model")
                 else:
                     logging.warning(f"LID parameter {name} not found or shape mismatch in joint model")
 
-        if pretrained_sv_path is not None:
-            sv_state_dict = torch.load(pretrained_sv_path, map_location="cuda")
-            logging.info("loading pretrained SV model from {}".format(pretrained_sv_path))
-            for name, param in sv_state_dict.items():
-                name = name.replace("preencoder.", "preencoder_spk.")
-                name = name.replace("encoder.", "encoder_spk.")
-                name = name.replace("pooling.", "pooling_spk.")
-                name = name.replace("projector.", "projector_spk.")
-                name = name.replace("loss.", "loss_spk.")
+        if pretrained_spk_path is not None:
+            spk_state_dict = torch.load(pretrained_spk_path, map_location="cuda")
+            logging.info("loading pretrained SV model from {}".format(pretrained_spk_path))
+            for name, param in spk_state_dict.items():
+                if "frontend.upstream.upstream.model." not in name:
+                    name = name.replace("preencoder.", "preencoder_spk.")
+                    name = name.replace("encoder.", "encoder_spk.")
+                    name = name.replace("pooling.", "pooling_spk.")
+                    name = name.replace("projector.", "projector_spk.")
+                    name = name.replace("loss.", "loss_spk.")
+                    name = name.replace("featurizer.", "spk_featurizers.")
 
                 if name in self.state_dict() and param.shape == self.state_dict()[name].shape:
                     if torch.allclose(self.state_dict()[name], param):
                         consistent_parameters.append(name)
                     else:
-                        inconsistent_parameters.append(name)
+                        updated_parameters.append(name)
                     self.state_dict()[name].copy_(param)
 
-                    if self.separate_sv_modules:
+                    if self.separate_spk_modules and self.init_last:
                         if "encoder_spk." in name or "projector_spk." in name or "pooling_spk." in name or "loss_spk." in name:
                             new_name = name.replace("encoder_spk.", "encoder_spk_last.")
-                            new_name = name.replace("projector_spk.", "projector_spk_last.")
-                            new_name = name.replace("pooling_spk.", "pooling_spk_last.")
-                            new_name = name.replace("loss_spk.", "loss_spk_last.")
-                            
+                            new_name = new_name.replace("projector_spk.", "projector_spk_last.")
+                            new_name = new_name.replace("pooling_spk.", "pooling_spk_last.")
+                            new_name = new_name.replace("loss_spk.", "loss_spk_last.")
+                            # import pdb; pdb.set_trace()
                             if new_name in self.state_dict() and param.shape == self.state_dict()[new_name].shape:
                                 self.state_dict()[new_name].copy_(param)
-                                inconsistent_parameters.append(new_name)
+                                updated_parameters.append(new_name)
                             else:
                                 logging.warning(f"Parameter {new_name} in SV model not found in joint model")
                             
-
-
-                elif "spk_featurizers.0" in name:
-                    new_name = name.replace("spk_featurizers.0", f"spk_featurizers.{len(self.preencoder_spk)-1}")
-                    if new_name in self.state_dict() and param.shape == self.state_dict()[new_name].shape:
-                        if torch.allclose(self.state_dict()[new_name], param):
-                            consistent_parameters.append(new_name)
-                        else:
-                            inconsistent_parameters.append(new_name)
-                        self.state_dict()[new_name].copy_(param)
-                    else:
-                        logging.warning(f"SV parameter {name} not found or shape mismatch in joint model")
-                elif "preencoder_spk" in name:
-                    for i in range(len(self.preencoder_spk)):
-                        new_name = name.replace("preencoder_spk", f"preencoder_spk.{i}")
+                # multiple duplications
+                elif "spk_featurizers" in name:
+                    for i in range(len(self.spk_layer_selections)):
+                        new_name = name.replace("spk_featurizers", f"spk_featurizers.{i}")
                         if new_name in self.state_dict() and param.shape == self.state_dict()[new_name].shape:
-                            if torch.allclose(self.state_dict()[new_name], param):
-                                consistent_parameters.append(new_name)
-                            else:
-                                inconsistent_parameters.append(new_name)
+                            # if torch.allclose(self.state_dict()[new_name], param):
+                            #     consistent_parameters.append(new_name)
+                            # else:
+                            updated_parameters.append(new_name)
                             self.state_dict()[new_name].copy_(param)
                         else:
-                            logging.warning(f"SV parameter {name} not found or shape mismatch in joint model")
+                            logging.warning(f"SV parameter {new_name} not found or shape mismatch in joint model")
+                
+                elif "preencoder_spk" in name:
+                    for i in range(len(self.spk_layer_selections)):
+                        new_name = name.replace("preencoder_spk", f"preencoder_spk.{i}")
+                        if new_name in self.state_dict() and param.shape == self.state_dict()[new_name].shape:
+                            # if torch.allclose(self.state_dict()[new_name], param):
+                            #     consistent_parameters.append(new_name)
+                            # else:
+                            updated_parameters.append(new_name)
+                            self.state_dict()[new_name].copy_(param)
+                        else:
+                            logging.warning(f"SV parameter {new_name} not found or shape mismatch in joint model")
+                        
                 else:
                     logging.warning(f"SV parameter {name} not found or shape mismatch in joint model")
 
+        # import pdb; pdb.set_trace()
+        for name, param in self.state_dict().items():
+            if "linear_scale.weight" in name:
+                self.state_dict()[name].copy_(torch.zeros_like(param))
+                updated_parameters.append(name)
+            elif "linear_scale.bias" in name:
+                self.state_dict()[name].copy_(torch.ones_like(param))
+                updated_parameters.append(name)
+            elif "linear_shift.weight" in name or "linear_shift.bias" in name:
+                self.state_dict()[name].copy_(torch.zeros_like(param))
+                updated_parameters.append(name)
+
         logging.info("Pretrained model parameters loaded successfully.")
         logging.info(f"Consistent parameters: {consistent_parameters}")
-        logging.info(f"Inconsistent parameters: {inconsistent_parameters}")
+        logging.info(f"Updated parameters: {updated_parameters}")
 
         
     def forward(
         self,
         speech: torch.Tensor,
         speech_lengths: torch.Tensor,
-        text: torch.Tensor,
-        text_lengths: torch.Tensor,
+        text: torch.Tensor = None,
+        text_lengths: torch.Tensor = None,
         langs: torch.Tensor = None,
         spk_labels: torch.Tensor = None,
         extract_spk_embd: bool = False,
@@ -366,33 +406,43 @@ class ESPnetCASSLRModel(ESPnetASRModel):
             text_lengths: (Batch,)
             kwargs: "utt_id" is among the input.
         """
-        assert text_lengths.dim() == 1, text_lengths.shape
-        # Check that batch_size is unified
-        assert (
-            speech.shape[0]
-            == speech_lengths.shape[0]
-            == text.shape[0]
-            == text_lengths.shape[0]
-        ), (speech.shape, speech_lengths.shape, text.shape, text_lengths.shape)
+        if len(self.asr_layer_selections) > 0:
+            assert text_lengths.dim() == 1, text_lengths.shape
+            # Check that batch_size is unified
+            assert (
+                speech.shape[0]
+                == speech_lengths.shape[0]
+                == text.shape[0]
+                == text_lengths.shape[0]
+            ), (speech.shape, speech_lengths.shape, text.shape, text_lengths.shape)
+
+            text[text == -1] = self.ignore_id
+            text = text[:, : text_lengths.max()]
+
+
         batch_size = speech.shape[0]
 
-        text[text == -1] = self.ignore_id
-
         if not extract_spk_embd:
-            asr_valid_indices = [i for i, label in enumerate(text) if label[0] != -1]
-            langs_valid_indices = [i for i, label in enumerate(langs) if label[0] != -1]
-            
-            if self.sv_layer_selections is not None:
+            asr_valid_indices = []
+            lid_valid_indices = []
+            spk_valid_indices = []
+            if len(self.asr_layer_selections) > 0:
+                asr_valid_indices = [i for i, label in enumerate(text) if label[0] != -1]
+            if len(self.lid_layer_selections) > 0:
+                lid_valid_indices = [i for i, label in enumerate(langs) if label[0] != -1]
+            if len(self.spk_layer_selections) > 0:
                 spk_valid_indices = [i for i, label in enumerate(spk_labels) if label[0] != -1]
                 # logging.info("spk_valid_indices: {}".format(spk_valid_indices))
             # logging.info("asr_valid_indices: {}".format(asr_valid_indices))
-            # logging.info("langs_valid_indices: {}".format(langs_valid_indices))
+            # logging.info("lid_valid_indices: {}".format(lid_valid_indices))
 
         # for data-parallel
-            text = text[:, : text_lengths.max()]
-
         # 1. Encoder
-        encoder_out, encoder_out_lens, lid_embd_list, encoder_lid_out_lens, spk_embd_list =  self.encode(speech, speech_lengths, langs)
+        inference = False
+        if extract_spk_embd:
+            inference = True
+            
+        encoder_out, encoder_out_lens, lid_embd_list, encoder_lid_out_lens, spk_embd_list =  self.encode(speech, speech_lengths, langs, inference=inference)
         
         if extract_spk_embd:
             if len(spk_embd_list) == 1:
@@ -419,9 +469,9 @@ class ESPnetCASSLRModel(ESPnetASRModel):
             loss_lid_ave = torch.tensor(0.0)
             acc_lid_ave = torch.tensor(0.0)
 
-        if len(langs_valid_indices) > 0:
-            lid_embd_list = [lid_embd[langs_valid_indices] for lid_embd in lid_embd_list]
-            langs = langs[langs_valid_indices]
+        if len(lid_valid_indices) > 0:
+            lid_embd_list = [lid_embd[lid_valid_indices] for lid_embd in lid_embd_list]
+            langs = langs[lid_valid_indices]
 
             for i, lid_embd in enumerate(lid_embd_list):
                 if i == len(lid_embd_list) - 1 and self.separate_lid_modules:
@@ -451,9 +501,9 @@ class ESPnetCASSLRModel(ESPnetASRModel):
         stats["acc_lid_ave"] = acc_lid_ave
         
         loss_spk_list = []
-        if self.sv_layer_selections is not None:
+        if len(self.spk_layer_selections) > 0:
             loss_spk = torch.tensor(0.0)
-            if len(self.sv_layer_selections) > 1:
+            if len(self.spk_layer_selections) > 1:
                 loss_spk_ave = torch.tensor(0.0)
             else:
                 loss_spk_ave = None
@@ -464,7 +514,7 @@ class ESPnetCASSLRModel(ESPnetASRModel):
                 # loss_spk = self.loss_spk(spk_embd, spk_labels)
 
                 for i, spk_embd in enumerate(spk_embd_list):
-                    if i == len(spk_embd_list) - 1 and self.separate_sv_modules:
+                    if i == len(spk_embd_list) - 1 and self.separate_spk_modules:
                         loss_spk = self.loss_spk_last(spk_embd, spk_labels)
                         cosine = F.linear(F.normalize(spk_embd), F.normalize(self.loss_spk_last.weight))
                     else:
@@ -472,7 +522,7 @@ class ESPnetCASSLRModel(ESPnetASRModel):
                         cosine = F.linear(F.normalize(spk_embd), F.normalize(self.loss_spk.weight))
                     loss_spk_list.append(loss_spk)
 
-                if len(self.sv_layer_selections) > 1:
+                if len(self.spk_layer_selections) > 1:
                     loss_spk_ave = sum(loss_spk_list[:-1]) / (len(loss_spk_list) - 1)
                 loss_spk = loss_spk_list[-1]
             
@@ -727,7 +777,7 @@ class ESPnetCASSLRModel(ESPnetASRModel):
         return {"feats": feats, "feats_lengths": feats_lengths}
 
     def encode(
-        self, speech: torch.Tensor, speech_lengths: torch.Tensor, langs: torch.Tensor = None, extract_spk_embd: bool = False, inference: bool = False
+        self, speech: torch.Tensor, speech_lengths: torch.Tensor, langs: torch.Tensor = None, extract_spk_embd: bool = False, inference: bool = False, extract_sslr_feats: bool = False
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Frontend + Encoder. Note that this method is used by asr_inference.py
 
@@ -737,26 +787,29 @@ class ESPnetCASSLRModel(ESPnetASRModel):
         """
 
 
-        def my_hook_asr(module, input, output):
+        def my_hook_full(module, input, output):
             # This will be executed upon the forward pass of the hooked layer.
             # 'module' is the layer the hook is attached to,
             # 'input' is the input to the layer,
             # 'output' is the output of the layer.
             # Here you can do things with the output, for instance:
-            x, (attn, layer_result, self_attn_padding_mask) = output  # Storing it in the instance for later use
+            # layer_result
+            x, (attn, pos_bias, self_attn_padding_mask) = output  # Storing it in the instance for later use
             self.intermediate_outputs_asr = x
             self.mask_asr = self_attn_padding_mask
+            self.pos_bias_asr = pos_bias
 
 
-        def my_hook_lid(module, input, output):
+        def my_hook_chunk(module, input, output):
             # This will be executed upon the forward pass of the hooked layer.
             # 'module' is the layer the hook is attached to,
             # 'input' is the input to the layer,
             # 'output' is the output of the layer.
             # Here you can do things with the output, for instance:
-            x, (attn, layer_result, self_attn_padding_mask) = output  # Storing it in the instance for later use
-            self.intermediate_outputs_lid = x
+            x, (attn, pos_bias, self_attn_padding_mask) = output  # Storing it in the instance for later use
+            self.intermediate_outputs_chunk = x
             self.mask_lid = self_attn_padding_mask
+            self.pos_bias_lid = pos_bias
 
         
         speech = speech[:, : speech_lengths.max()]
@@ -767,10 +820,14 @@ class ESPnetCASSLRModel(ESPnetASRModel):
         condition_features = None
         condition_features_lid = None
         condition_features_spk = None
+        encoder_lid_out_lens = None
 
+        # Chunk Features is for LID and SV
+        # Full Features is for ASR
         chunk_features = not inference and self.lid_audio_length > 0 and speech_lengths.min() > self.lid_audio_length
         full_features = ((not self.skip_asr) and (not extract_spk_embd)) or not chunk_features
         
+
         if chunk_features:
             # logging.info("chunking")
             chunk_start = torch.randint(0, speech_lengths.min() - self.lid_audio_length + 1, (1,)).item()
@@ -779,104 +836,117 @@ class ESPnetCASSLRModel(ESPnetASRModel):
         # if full_features:
         #     logging.info("full feature")
 
-        for index in range(len(self.lid_layer_selections)):
+        for index in range(len(self.all_layer_selections)):
             if index == 0 or self.twice_ssl_ablation:
                 if full_features:
-                    hook_handle = self.frontend.upstream.upstream.model.encoder.layers[self.lid_layer_selections[0]-1].register_forward_hook(my_hook_asr)
+                    hook_handle = self.frontend.upstream.upstream.model.encoder.layers[self.all_layer_selections[0]-1].register_forward_hook(my_hook_full)
                     feats_layers, feats_lengths_layers = self.frontend(
                                                             speech, speech_lengths, 
                                                             condition_features=condition_features, 
-                                                            layer=self.lid_layer_selections[index]
+                                                            layer=self.all_layer_selections[index]
                                                             )
                     hook_handle.remove()
                 
                 if chunk_features:
-                    hook_handle = self.frontend.upstream.upstream.model.encoder.layers[self.lid_layer_selections[0]-1].register_forward_hook(my_hook_lid)
+                    hook_handle = self.frontend.upstream.upstream.model.encoder.layers[self.all_layer_selections[0]-1].register_forward_hook(my_hook_chunk)
                     feats_layers_chunk, feats_lengths_layers_chunk = self.frontend(
                                                             speech_chunk, speech_chunk_lengths, 
                                                             condition_features=condition_features, 
-                                                            layer=self.lid_layer_selections[index]
+                                                            layer=self.all_layer_selections[index]
                                                             )
                     hook_handle.remove()
 
             else:
                 if full_features:
-                    self.intermediate_outputs_asr, feats_layers, feats_lengths_layers = self.frontend.encode_layers(
+                    self.intermediate_outputs_full, feats_layers, feats_lengths_layers = self.frontend.encode_layers(
                                                             speech, speech_lengths, 
                                                             condition_features=condition_features,
-                                                            last_layer_result=self.intermediate_outputs_asr, 
-                                                            layers=(self.lid_layer_selections[index-1], self.lid_layer_selections[index]),
+                                                            last_layer_result=self.intermediate_outputs_full, 
+                                                            layers=(self.all_layer_selections[index-1], self.all_layer_selections[index]),
                                                             feats_layers=feats_layers,
                                                             feats_lengths_layers=feats_lengths_layers,
-                                                            padding_mask=self.mask_asr
+                                                            padding_mask=self.mask_asr,
+                                                            pos_bias=self.pos_bias_asr,
                                                             )
                 if chunk_features:
-                    self.intermediate_outputs_lid, feats_layers_chunk, feats_lengths_layers_chunk = self.frontend.encode_layers(
+                    self.intermediate_outputs_chunk, feats_layers_chunk, feats_lengths_layers_chunk = self.frontend.encode_layers(
                                                             speech_chunk, speech_chunk_lengths, 
                                                             condition_features=condition_features,
-                                                            last_layer_result=self.intermediate_outputs_lid, 
-                                                            layers=(self.lid_layer_selections[index-1], self.lid_layer_selections[index]),
+                                                            last_layer_result=self.intermediate_outputs_chunk, 
+                                                            layers=(self.all_layer_selections[index-1], self.all_layer_selections[index]),
                                                             feats_layers=feats_layers_chunk,
                                                             feats_lengths_layers=feats_lengths_layers_chunk,
-                                                            padding_mask=self.mask_lid
+                                                            padding_mask=self.mask_lid,
+                                                            pos_bias=self.pos_bias_lid,
                                                             )
 
             if not chunk_features:
                 feats_layers_chunk = feats_layers
                 feats_lengths_layers_chunk = feats_lengths_layers
 
-            feats_lid, feats_lid_lengths = self.frontend.lid_featurizers[index](feats_layers_chunk, feats_lengths_layers_chunk)
+            if self.all_layer_selections[index] in self.lid_layer_selections:
+                # get index in lid
+                if self.twice_ssl_ablation:
+                    lid_index = index
+                else:
+                    lid_index = self.lid_layer_selections.index(self.all_layer_selections[index])
+                feats_lid, feats_lid_lengths = self.frontend.lid_featurizers[lid_index](feats_layers_chunk, feats_lengths_layers_chunk)
 
-            # 2. Data augmentation
-            if self.specaug is not None and self.training:
-                feats_lid, feats_lid_lengths = self.specaug(feats_lid, feats_lid_lengths)
+                # 2. Data augmentation
+                if self.specaug is not None and self.training:
+                    feats_lid, feats_lid_lengths = self.specaug(feats_lid, feats_lid_lengths)
 
-            # 3. Normalization for feature: e.g. Global-CMVN, Utterance-CMVN
-            if self.normalize is not None:
-                feats_lid, feats_lid_lengths = self.normalize(feats_lid, feats_lid_lengths)
+                # 3. Normalization for feature: e.g. Global-CMVN, Utterance-CMVN
+                if self.normalize is not None:
+                    feats_lid, feats_lid_lengths = self.normalize(feats_lid, feats_lid_lengths)
 
-            # 4. Forward encoder for LID
-            if len(self.lid_layer_selections) > 1:
-                feats_lid, feats_lid_lengths = self.preencoder_lid[index](feats_lid, feats_lid_lengths)
-            else:
-                feats_lid, feats_lid_lengths = self.preencoder_lid(feats_lid, feats_lid_lengths)
+                # 4. Forward encoder for LID
+                if self.preencoder_lid is not None:
+                    if len(self.lid_layer_selections) > 1:
+                        feats_lid, feats_lid_lengths = self.preencoder_lid[lid_index](feats_lid, feats_lid_lengths)
+                    else:
+                        feats_lid, feats_lid_lengths = self.preencoder_lid(feats_lid, feats_lid_lengths)
 
-            if not self.separate_lid_modules or index < (len(self.lid_layer_selections) - 1):
-                encoder_lid_out, encoder_lid_out_lens, _ = self.encoder_lid(feats_lid, feats_lid_lengths)
+                if not self.separate_lid_modules or lid_index < (len(self.lid_layer_selections) - 1):
+                    encoder_lid_out, encoder_lid_out_lens, _ = self.encoder_lid(feats_lid, feats_lid_lengths)
 
-                if self.postencoder_lid is not None:
-                    encoder_lid_out = self.postencoder_lid(
-                        encoder_lid_out
-                    )
+                    if self.postencoder_lid is not None:
+                        encoder_lid_out = self.postencoder_lid(
+                            encoder_lid_out
+                        )
 
-                lid_embd = self.project_lid_embd(encoder_lid_out)
-            else:
-                encoder_lid_out, encoder_lid_out_lens, _ = self.encoder_lid_last(feats_lid, feats_lid_lengths)
+                    lid_embd = self.project_lid_embd(encoder_lid_out)
+                else:
+                    encoder_lid_out, encoder_lid_out_lens, _ = self.encoder_lid_last(feats_lid, feats_lid_lengths)
 
-                if self.postencoder_lid_last is not None:
-                    encoder_lid_out = self.postencoder_lid_last(
-                        encoder_lid_out
-                    )
+                    if self.postencoder_lid_last is not None:
+                        encoder_lid_out = self.postencoder_lid_last(
+                            encoder_lid_out
+                        )
 
-                lid_embd = self.project_lid_embd_last(encoder_lid_out)
-                
-            lid_embd_list.append(lid_embd)
+                    lid_embd = self.project_lid_embd_last(encoder_lid_out)
+                    
+                lid_embd_list.append(lid_embd)
 
 
-            if self.sv_layer_selections is not None and self.lid_layer_selections[index] in self.sv_layer_selections:
-                # get index in sv
-                sv_index = self.sv_layer_selections.index(self.lid_layer_selections[index])
+            if self.all_layer_selections[index] in self.spk_layer_selections:
+                # get index in spk
+                if self.twice_ssl_ablation:
+                    spk_index = index
+                else:
+                    spk_index = self.spk_layer_selections.index(self.all_layer_selections[index])
                 task_tokens = None
                 batch_size = speech.shape[0]
 
-                feats_spk, feats_spk_lengths = self.frontend.spk_featurizers[sv_index](feats_layers_chunk, feats_lengths_layers_chunk)
+                feats_spk, feats_spk_lengths = self.frontend.spk_featurizers[spk_index](feats_layers_chunk, feats_lengths_layers_chunk)
 
-                if len(self.sv_layer_selections) > 1:
-                    feats_spk, feats_spk_lengths = self.preencoder_spk[sv_index](feats_spk, feats_spk_lengths)
-                else:
-                    feats_spk, feats_spk_lengths = self.preencoder_spk(feats_spk, feats_spk_lengths)
-
-                if not self.separate_sv_modules or sv_index < (len(self.sv_layer_selections) - 1):
+                if self.preencoder_spk is not None:
+                    if len(self.spk_layer_selections) > 1:
+                        feats_spk, feats_spk_lengths = self.preencoder_spk[spk_index](feats_spk, feats_spk_lengths)
+                    else:
+                        feats_spk, feats_spk_lengths = self.preencoder_spk(feats_spk, feats_spk_lengths)
+                # sanity check
+                if not self.separate_spk_modules or spk_index < (len(self.spk_layer_selections) - 1):
                     frame_level_feats = self.encoder_spk(feats_spk)
                     utt_level_feat = self.pooling_spk(frame_level_feats, task_tokens)
                     spk_embd = self.project_spk_embd(utt_level_feat)
@@ -884,17 +954,23 @@ class ESPnetCASSLRModel(ESPnetASRModel):
                     frame_level_feats = self.encoder_spk_last(feats_spk)
                     utt_level_feat = self.pooling_spk_last(frame_level_feats, task_tokens)
                     spk_embd = self.project_spk_embd_last(utt_level_feat)
+
+                # frame_level_feats = self.encoder_spk_last(feats_spk)
+                # utt_level_feat = self.pooling_spk_last(frame_level_feats, task_tokens)
+                # spk_embd = self.project_spk_embd_last(utt_level_feat)
                     
                 spk_embd_list.append(spk_embd)
 
             # does not need to generate condition features from the last layer
-            if index == len(self.lid_layer_selections) - 1: # not self.last_condition and 
+            # logging.info("index: {}".format(index))
+            if index == len(self.all_layer_selections) - 1: # not self.last_condition and 
                 break
 
             # 5. generate lid condition features
-            if self.lid_condition_feature == "hard":
+            if self.condition_feature_type == "hard":
+                # only implement for LID yet
                 # Compute cosine similarity
-                if not self.separate_lid_modules or index < (len(self.lid_layer_selections) - 1):
+                if not self.separate_lid_modules or index < (len(self.all_layer_selections) - 1):
                     cosine = F.linear(F.normalize(lid_embd), F.normalize(self.loss_lid.weight))
                 else:
                     cosine = F.linear(F.normalize(lid_embd), F.normalize(self.loss_lid_last.weight))
@@ -904,37 +980,40 @@ class ESPnetCASSLRModel(ESPnetASRModel):
                 langs_token = torch.argmax(cosine, dim=1)
                 condition_features = self.lang_embedding(langs_token).unsqueeze(1)
 
-            elif self.lid_condition_feature == "GT":
+            elif self.condition_feature_type == "GT":
+                # only implement for LID yet
                 condition_features = self.lang_embedding(langs)
 
-            elif self.lid_condition_feature == "soft":
-                if not self.double_condition:
-                    condition_features = self.lang_embeddings[index](lid_embd)
-                    condition_features = self.lns[index](condition_features)
-                    condition_features = condition_features.unsqueeze(1)
-                    condition_features = self.activation_fns[index](condition_features)
-                    condition_features = self.dropouts[index](condition_features)
-                else:
-                    condition_features_lid = self.lang_embeddings[index](lid_embd)
-                    condition_features_lid = self.lns[index](condition_features_lid)
+            elif self.condition_feature_type == "soft":
+                condition_features_lid = None
+                condition_features_spk = None
+                if self.all_layer_selections[index] in self.lid_layer_selections:
+                    condition_features_lid = self.lang_embeddings[lid_index](lid_embd)
+                    condition_features_lid = self.lns[lid_index](condition_features_lid)
                     condition_features_lid = condition_features_lid.unsqueeze(1)
-                    condition_features_lid = self.activation_fns[index](condition_features_lid)
-                    condition_features_lid = self.dropouts[index](condition_features_lid)
+                    condition_features_lid = self.activation_fns[lid_index](condition_features_lid)
+                    condition_features_lid = self.dropouts[lid_index](condition_features_lid)
 
-                    if self.lid_layer_selections[index] in self.sv_layer_selections:
-                        condition_features_spk = self.spk_embeddings[sv_index](spk_embd)
-                        condition_features_spk = self.lns_spk[sv_index](condition_features_spk)
-                        condition_features_spk = condition_features_spk.unsqueeze(1)
-                        condition_features_spk = self.activation_fns_spk[sv_index](condition_features_spk)
-                        condition_features_spk = self.dropouts_spk[sv_index](condition_features_spk)
+                if self.all_layer_selections[index] in self.spk_layer_selections:
+                    # import pdb; pdb.set_trace()
+                    condition_features_spk = self.spk_embeddings[spk_index](spk_embd)
+                    condition_features_spk = self.lns_spk[spk_index](condition_features_spk)
+                    condition_features_spk = condition_features_spk.unsqueeze(1)
+                    condition_features_spk = self.activation_fns_spk[spk_index](condition_features_spk)
+                    condition_features_spk = self.dropouts_spk[spk_index](condition_features_spk)
 
+                if self.double_condition:
                     condition_features = [condition_features_lid, condition_features_spk]
+                else:
+                    assert(condition_features_lid is None or condition_features_spk is None)
+                    condition_features = condition_features_lid if condition_features_lid is not None else condition_features_spk
+                    
                     
             # # for sanity check
             # condition_features = None
 
         # # 7. Forward encoder for SV
-        # if self.sv_layer_selections is not None:
+        # if self.spk_layer_selections is not None:
         #     task_tokens = None
         #     batch_size = speech.shape[0]
 
@@ -947,8 +1026,12 @@ class ESPnetCASSLRModel(ESPnetASRModel):
         # else:
         #     spk_embd = None
 
+        if extract_sslr_feats:
+            return feats_layers_chunk
+            
+
         if self.skip_asr or extract_spk_embd:
-            return _, _, lid_embd_list, encoder_lid_out_lens, spk_embd_list
+            return None, None, lid_embd_list, encoder_lid_out_lens, spk_embd_list
 
 
         # 6. Forward encoder for ASR

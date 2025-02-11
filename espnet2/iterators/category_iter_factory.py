@@ -1,6 +1,6 @@
 import random
 from functools import partial
-from typing import Any, Sequence, Union
+from typing import Any, Sequence, Union, Optional
 
 import numpy as np
 import torch
@@ -49,7 +49,7 @@ class CategoryIterFactory(AbsIterFactory):
         self,
         dataset,
         batches: Union[AbsSampler, Sequence[Sequence[Any]]],
-        num_iters_per_epoch: int = None,
+        num_iters_per_epoch: Optional[int] = None,
         seed: int = 0,
         sampler_args: dict = None,
         shuffle: bool = False,

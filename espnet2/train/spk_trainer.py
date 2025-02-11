@@ -20,10 +20,12 @@ from espnet2.train.distributed_utils import DistributedOption
 from espnet2.train.reporter import SubReporter
 from espnet2.train.trainer import Trainer, TrainerOptions
 from espnet2.utils.eer import ComputeErrorRates, ComputeMinDcf, tuneThresholdfromScore
+from espnet2.asr.ca_sslr_espnet_model import ESPnetCASSLRModel
 
 if torch.distributed.is_available():
     from torch.distributed import ReduceOp
 
+import logging
 
 class SpkTrainer(Trainer):
     """Trainer designed for speaker recognition.
@@ -50,6 +52,14 @@ class SpkTrainer(Trainer):
         distributed = distributed_option.distributed
 
         model.eval()
+
+        # embed_condition = False
+        # if hasattr(model, "embed_condition"):
+        #     embed_condition = model.embed_condition
+        # else:
+        #     embed_condition = model.module.embed_condition
+        logging.info(f"Start Validation")
+        
 
         scores = []
         labels = []
@@ -101,12 +111,27 @@ class SpkTrainer(Trainer):
                 task_tokens = to_device(
                     task_token.repeat(_speechs.size(0)), "cuda" if ngpu > 0 else "cpu"
                 ).unsqueeze(1)
-            spk_embds = model(
-                speech=_speechs,
-                spk_labels=None,
-                extract_embd=True,
-                task_tokens=task_tokens,
-            )
+            if isinstance(model, ESPnetCASSLRModel):
+                spk_embds = model(
+                    speech=_speechs,
+                    speech_lengths=torch.tensor([sp.size(0) for sp in _speechs]).to("cuda" if ngpu > 0 else "cpu"),
+                    spk_labels=None,
+                    extract_spk_embd=True,
+                    task_tokens=task_tokens,
+                )
+            else:
+                spk_embds = model(
+                    speech=_speechs,
+                    spk_labels=None,
+                    extract_embd=True,
+                    task_tokens=task_tokens,
+                )
+
+            if isinstance(spk_embds, tuple):
+                spk_embds = spk_embds[-1]
+            if isinstance(spk_embds, list):
+                spk_embds = spk_embds[-1]
+
             spk_embds = F.normalize(spk_embds, p=2, dim=1)
             spk_embds = spk_embds.view(org_shape[0], org_shape[1], -1)
 
@@ -142,6 +167,7 @@ class SpkTrainer(Trainer):
 
         scores = torch.cat(scores).type(torch.float32)
         labels = torch.cat(labels).type(torch.int32).flatten()
+        logging.info(f"Validation: {len(scores)} trials")
 
         if distributed:
             # get the number of trials assigned on each GPU
@@ -214,6 +240,7 @@ class SpkTrainer(Trainer):
             )
         )
 
+
         # added to reduce GRAM usage. May have minor speed boost when
         # this line is commented in case GRAM is not fully used.
         torch.cuda.empty_cache()
@@ -231,6 +258,7 @@ class SpkTrainer(Trainer):
         output_dir: str,
         custom_bs: int,
         average: bool = False,
+        second_last_sv: bool = False,
     ) -> None:
         ngpu = options.ngpu
         distributed = distributed_option.distributed
@@ -283,12 +311,34 @@ class SpkTrainer(Trainer):
                                 task_token.repeat(speech_list.size(0)),
                                 "cuda" if ngpu > 0 else "cpu",
                             ).unsqueeze(1)
-                        spk_embds = model(
-                            speech=speech_list,
-                            spk_labels=None,
-                            extract_embd=True,
-                            task_tokens=task_tokens,
-                        )
+
+                        if isinstance(model, ESPnetCASSLRModel):
+                            spk_embds = model(
+                                speech=speech_list,
+                                speech_lengths=torch.tensor([sp.size(0) for sp in speech_list]).to("cuda" if ngpu > 0 else "cpu"),
+                                spk_labels=None,
+                                extract_spk_embd=True,
+                                task_tokens=task_tokens,
+                            )
+                        else:
+                            spk_embds = model(
+                                speech=speech_list,
+                                spk_labels=None,
+                                extract_embd=True,
+                                task_tokens=task_tokens,
+                            )
+
+                        if isinstance(spk_embds, list):
+                            if second_last_sv:
+                                spk_embds = spk_embds[-2]
+                            else:
+                                spk_embds = spk_embds[-1]
+                        # spk_embds = model(
+                        #     speech=speech_list,
+                        #     spk_labels=None,
+                        #     extract_embd=True,
+                        #     task_tokens=task_tokens,
+                        # )
                         # removed to be use magnitude in qmf
                         # spk_embds = F.normalize(spk_embds, p=2, dim=1)
                         spk_embds = spk_embds.view(org_shape[0], org_shape[1], -1)
@@ -325,12 +375,34 @@ class SpkTrainer(Trainer):
                                 task_token.repeat(speech_list.size(0)),
                                 "cuda" if ngpu > 0 else "cpu",
                             ).unsqueeze(1)
-                        spk_embds = model(
-                            speech=speech_list,
-                            spk_labels=None,
-                            extract_embd=True,
-                            task_tokens=task_tokens,
-                        )
+
+                        if isinstance(model, ESPnetCASSLRModel):
+                            spk_embds = model(
+                                speech=speech_list,
+                                speech_lengths=torch.tensor([sp.size(0) for sp in speech_list]).to("cuda" if ngpu > 0 else "cpu"),
+                                spk_labels=None,
+                                extract_spk_embd=True,
+                                task_tokens=task_tokens,
+                            )
+                        else:
+                            spk_embds = model(
+                                speech=speech_list,
+                                spk_labels=None,
+                                extract_embd=True,
+                                task_tokens=task_tokens,
+                            )
+                    
+                        if isinstance(spk_embds, list):
+                            if second_last_sv:
+                                spk_embds = spk_embds[-2]
+                            else:
+                                spk_embds = spk_embds[-1]
+                        # spk_embds = model(
+                        #     speech=speech_list,
+                        #     spk_labels=None,
+                        #     extract_embd=True,
+                        #     task_tokens=task_tokens,
+                        # )
                         # removed to be use magnitude in qmf
                         # spk_embds = F.normalize(spk_embds, p=2, dim=1)
                         spk_embds = spk_embds.view(org_shape[0], org_shape[1], -1)
@@ -360,12 +432,35 @@ class SpkTrainer(Trainer):
                     task_token.repeat(speech_list.size(0)),
                     "cuda" if ngpu > 0 else "cpu",
                 ).unsqueeze(1)
-            spk_embds = model(
-                speech=speech_list,
-                spk_labels=None,
-                extract_embd=True,
-                task_tokens=task_tokens,
-            )
+            # spk_embds = model(
+            #     speech=speech_list,
+            #     spk_labels=None,
+            #     extract_embd=True,
+            #     task_tokens=task_tokens,
+            # )
+
+            if isinstance(model, ESPnetCASSLRModel):
+                spk_embds = model(
+                    speech=speech_list,
+                    speech_lengths=torch.tensor([sp.size(0) for sp in speech_list]).to("cuda" if ngpu > 0 else "cpu"),
+                    spk_labels=None,
+                    extract_spk_embd=True,
+                    task_tokens=task_tokens,
+                )
+            else:
+                spk_embds = model(
+                    speech=speech_list,
+                    spk_labels=None,
+                    extract_embd=True,
+                    task_tokens=task_tokens,
+                )
+        
+            if isinstance(spk_embds, list):
+                if second_last_sv:
+                    spk_embds = spk_embds[-2]
+                else:
+                    spk_embds = spk_embds[-1]
+
             spk_embds = F.normalize(spk_embds, p=2, dim=1)
             spk_embds = spk_embds.view(org_shape[0], org_shape[1], -1)
 
